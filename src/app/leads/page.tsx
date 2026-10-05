@@ -23,7 +23,7 @@ interface Lead {
 
 export default function LeadsCRM() {
   const [leads, setLeads] = useState<Lead[]>([]);
-  const [viewMode, setViewMode] = useState<"kanban" | "table">("kanban");
+  const [viewMode, setViewMode] = useState<"kanban" | "table" | "esteira">("kanban");
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
