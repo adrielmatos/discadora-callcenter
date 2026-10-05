@@ -29,6 +29,7 @@ export default function DialerWorkspace() {
   const [duration, setDuration] = useState(0);
   const [scriptsList, setScriptsList] = useState<any[]>([]);
   const [selectedScriptProduct, setSelectedScriptProduct] = useState("");
+  const [productFilter, setProductFilter] = useState("all");
   
   // Power Dialing Auto-Next countdown
   const [autoNextCountdown, setAutoNextCountdown] = useState<number | null>(null);
@@ -45,15 +46,32 @@ export default function DialerWorkspace() {
 
   const activeLead = leadsList[currentLeadIndex];
 
-  // Carrega fila de leads
-  const fetchQueue = async () => {
-    const { data } = await supabase
+  // Carrega fila de leads com filtro de produto
+  const fetchQueue = async (filter = productFilter) => {
+    let query = supabase
       .from("leads")
       .select("*")
       .eq("status", "pendente")
-      .order("id", { ascending: true })
-      .limit(100);
-    if (data) setLeadsList(data);
+      .order("id", { ascending: true });
+
+    if (filter === "fgts") {
+      query = query.ilike("produto", "%fgts%");
+    } else if (filter === "inss") {
+      query = query.or("produto.ilike.%inss%,produto.ilike.%bpc%,produto.ilike.%loas%");
+    } else if (filter === "consignado") {
+      query = query.ilike("produto", "%consignado%");
+    }
+
+    const { data } = await query.limit(150);
+    if (data) {
+      setLeadsList(data);
+      setCurrentLeadIndex(0);
+    }
+  };
+
+  const handleFilterChange = (newFilter: string) => {
+    setProductFilter(newFilter);
+    fetchQueue(newFilter);
   };
 
   // Carrega scripts
@@ -63,32 +81,54 @@ export default function DialerWorkspace() {
   };
 
   useEffect(() => {
-    fetchQueue();
+    fetchQueue("all");
     fetchScripts();
   }, []);
 
-  // Seleciona script automaticamente quando o lead muda
+  // Seleciona script automaticamente quando o lead muda com mapeamento inteligente
   useEffect(() => {
-    if (!activeLead) return;
+    if (!activeLead || scriptsList.length === 0) return;
     
-    const leadProduct = (activeLead.produto || "").toLowerCase();
-    const leadBank = (activeLead.banco || "").toLowerCase();
+    const leadProduct = (activeLead.produto || "").toLowerCase().trim();
+    const leadBank = (activeLead.banco || "").toLowerCase().trim();
 
-    // Procura script pelo produto do lead
-    const match = scriptsList.find(s => {
-      const sp = s.produto.toLowerCase();
-      return (leadProduct && sp.includes(leadProduct)) || 
-             (leadBank && sp.includes(leadBank)) ||
-             (leadProduct.includes("fgts") && sp.includes("fgts")) ||
-             (leadProduct.includes("inss") && sp.includes("inss"));
-    });
+    let match = null;
+    if (leadProduct.includes("bpc") || leadProduct.includes("loas")) {
+      match = scriptsList.find(s => s.produto.toLowerCase().includes("bpc") || s.produto.toLowerCase().includes("loas")) ||
+              scriptsList.find(s => s.produto.toLowerCase().includes("inss"));
+    } else if (leadProduct.includes("inss")) {
+      match = scriptsList.find(s => s.produto.toLowerCase().includes("inss"));
+    } else if (leadProduct.includes("fgts")) {
+      match = scriptsList.find(s => s.produto.toLowerCase().includes("fgts"));
+    } else if (leadProduct.includes("porta") || leadProduct.includes("portabilidade")) {
+      match = scriptsList.find(s => s.produto.toLowerCase().includes("portabilidade"));
+    } else if (leadProduct.includes("refin")) {
+      match = scriptsList.find(s => s.produto.toLowerCase().includes("refinanciamento"));
+    } else if (leadProduct.includes("siape") || leadProduct.includes("servidor")) {
+      match = scriptsList.find(s => s.produto.toLowerCase().includes("siape") || s.produto.toLowerCase().includes("servidor"));
+    } else if (leadProduct.includes("rmc") || leadProduct.includes("rcc") || leadProduct.includes("cartão")) {
+      match = scriptsList.find(s => s.produto.toLowerCase().includes("rmc") || s.produto.toLowerCase().includes("cartão"));
+    } else if (leadProduct.includes("consignado")) {
+      match = scriptsList.find(s => s.produto.toLowerCase().includes("consignado geral") || s.produto.toLowerCase().includes("consignado"));
+    }
+
+    if (!match && leadProduct) {
+      match = scriptsList.find(s => s.produto.toLowerCase().includes(leadProduct) || leadProduct.includes(s.produto.toLowerCase()));
+    }
+
+    if (!match && leadBank && leadBank !== "não informado") {
+      match = scriptsList.find(s => s.produto.toLowerCase().includes(leadBank));
+    }
 
     if (match) {
       setSelectedScriptProduct(match.produto);
     } else {
-      // Se não achar correspondência, busca o Coringa/Padrão ou o primeiro
-      const coringa = scriptsList.find(s => s.produto.toLowerCase().includes("padrão") || s.produto.toLowerCase().includes("geral"));
-      setSelectedScriptProduct(coringa ? coringa.produto : (scriptsList[0]?.produto || ""));
+      const padrao = scriptsList.find(s => 
+        s.produto.toLowerCase().includes("padrão") || 
+        s.produto.toLowerCase().includes("geral") || 
+        s.produto.toLowerCase().includes("mestre")
+      );
+      setSelectedScriptProduct(padrao ? padrao.produto : (scriptsList[0]?.produto || ""));
     }
   }, [activeLead, scriptsList]);
 
@@ -253,10 +293,36 @@ export default function DialerWorkspace() {
       {/* Sub-Header / Workspace Bar */}
       <header className="h-14 bg-white border-b border-slate-200/80 flex items-center justify-between px-6 shrink-0">
         <div className="flex items-center space-x-3">
-          <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Fila Ativa:</span>
-          <span className="bg-slate-100 text-slate-700 px-2.5 py-0.5 rounded-md text-xs font-semibold">
-            {leadsList.length - currentLeadIndex} restantes
-          </span>
+          <div className="flex items-center space-x-1.5">
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Fila:</span>
+            <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200 text-xs font-medium">
+              <button 
+                onClick={() => handleFilterChange("all")} 
+                className={`px-2.5 py-1 rounded-md transition ${productFilter === "all" ? "bg-white text-slate-900 font-bold shadow-xs" : "text-slate-600 hover:text-slate-900"}`}
+              >
+                Todos ({leadsList.length - currentLeadIndex})
+              </button>
+              <button 
+                onClick={() => handleFilterChange("inss")} 
+                className={`px-2.5 py-1 rounded-md transition ${productFilter === "inss" ? "bg-white text-blue-700 font-bold shadow-xs" : "text-slate-600 hover:text-slate-900"}`}
+              >
+                INSS & BPC
+              </button>
+              <button 
+                onClick={() => handleFilterChange("fgts")} 
+                className={`px-2.5 py-1 rounded-md transition ${productFilter === "fgts" ? "bg-white text-blue-700 font-bold shadow-xs" : "text-slate-600 hover:text-slate-900"}`}
+              >
+                FGTS
+              </button>
+              <button 
+                onClick={() => handleFilterChange("consignado")} 
+                className={`px-2.5 py-1 rounded-md transition ${productFilter === "consignado" ? "bg-white text-blue-700 font-bold shadow-xs" : "text-slate-600 hover:text-slate-900"}`}
+              >
+                Consignado
+              </button>
+            </div>
+          </div>
+
           {autoNextCountdown !== null && (
             <span className="bg-blue-50 text-blue-700 border border-blue-200 px-3 py-0.5 rounded-md text-xs font-bold animate-pulse flex items-center space-x-1">
               <span>Discando próximo em {autoNextCountdown}s...</span>
@@ -365,25 +431,34 @@ export default function DialerWorkspace() {
             )}
           </div>
 
-          {/* Roteiro Dinâmico com Visual Limpo */}
+          {/* Script de Atendimento Automático por Produto */}
           <div className="flex-1 bg-white rounded-xl border border-slate-200/80 shadow-xs flex flex-col overflow-hidden">
-            <div className="h-11 px-5 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+            <div className="h-12 px-5 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
               <div className="flex items-center space-x-2">
-                <Sparkles size={14} className="text-blue-600" />
-                <span className="text-xs font-bold text-slate-700">Roteiro Sugerido:</span>
-                <span className="text-xs font-semibold text-blue-600">{currentScript.produto}</span>
+                <span className="text-xs font-bold text-slate-800">Script de Atendimento:</span>
+                <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200 shadow-2xs">
+                  {currentScript.produto}
+                </span>
+                {activeLead?.banco && activeLead.banco !== "Não informado" && (
+                  <span className="hidden sm:inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-600 border border-slate-200">
+                    {activeLead.banco}
+                  </span>
+                )}
               </div>
 
               {/* Seletor Manual opcional */}
-              <select 
-                value={selectedScriptProduct} 
-                onChange={e => setSelectedScriptProduct(e.target.value)}
-                className="text-[11px] font-semibold text-slate-600 border border-slate-200 bg-white rounded-md px-2 py-0.5 outline-none"
-              >
-                {scriptsList.map(s => (
-                  <option key={s.id} value={s.produto}>{s.produto}</option>
-                ))}
-              </select>
+              <div className="flex items-center space-x-1.5">
+                <span className="text-[10px] text-slate-400 font-semibold hidden md:inline">Trocar:</span>
+                <select 
+                  value={selectedScriptProduct} 
+                  onChange={e => setSelectedScriptProduct(e.target.value)}
+                  className="text-[11px] font-semibold text-slate-700 border border-slate-200 bg-white rounded-md px-2 py-1 outline-none shadow-xs"
+                >
+                  {scriptsList.map(s => (
+                    <option key={s.id} value={s.produto}>{s.produto}</option>
+                  ))}
+                </select>
+              </div>
             </div>
 
             <div className="p-6 overflow-y-auto space-y-4 text-xs leading-relaxed text-slate-700">
