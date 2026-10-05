@@ -1,45 +1,51 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { 
-  PhoneCall, PhoneOff, Check, X, Calendar, MessageCircle, 
-  ListOrdered, Play, FastForward, User, AlertCircle, Calculator,
-  Clock, ShieldAlert, Sparkles
+  PhoneCall, PhoneOff, Check, X, Calendar, MessageSquare, 
+  Play, FastForward, User, AlertCircle, Calculator,
+  Clock, ShieldAlert, Sparkles, Building2, Tag, ChevronDown, CheckCircle2
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
 interface Lead {
-  id?: number;
+  id: number;
   nome: string;
   telefone: string;
   cpf?: string;
   margem_disponivel?: string;
   banco?: string;
+  produto?: string;
+  cidade?: string;
+  uf?: string;
   status?: string;
 }
 
 export default function DialerWorkspace() {
   const [leadsList, setLeadsList] = useState<Lead[]>([]);
   const [currentLeadIndex, setCurrentLeadIndex] = useState(0);
-  const [isAutoDialing, setIsAutoDialing] = useState(false);
+  const [isPowerDialing, setIsPowerDialing] = useState(false);
   const [callStatus, setCallStatus] = useState<"idle" | "calling" | "talking" | "wrapup">("idle");
   const [duration, setDuration] = useState(0);
-  const [selectedProduct, setSelectedProduct] = useState("Saque FGTS");
-  const [scriptsMap, setScriptsMap] = useState<Record<string, any>>({});
+  const [scriptsList, setScriptsList] = useState<any[]>([]);
+  const [selectedScriptProduct, setSelectedScriptProduct] = useState("");
   
-  // Modal de Agendamento de Retorno
+  // Power Dialing Auto-Next countdown
+  const [autoNextCountdown, setAutoNextCountdown] = useState<number | null>(null);
+
+  // Modal Agendamento Retorno
   const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [scheduleDate, setScheduleDate] = useState("");
   const [scheduleTime, setScheduleTime] = useState("");
   const [scheduleNotes, setScheduleNotes] = useState("");
 
-  // Calculadora Rápida
+  // Calculadora
   const [showCalc, setShowCalc] = useState(false);
-  const [calcSaldo, setCalcSaldo] = useState(1000);
+  const [calcSaldo, setCalcSaldo] = useState(2500);
 
   const activeLead = leadsList[currentLeadIndex];
 
-  // Carrega leads com ordenação inteligente
+  // Carrega fila de leads
   const fetchQueue = async () => {
     const { data } = await supabase
       .from("leads")
@@ -50,14 +56,10 @@ export default function DialerWorkspace() {
     if (data) setLeadsList(data);
   };
 
-  // Carrega scripts do banco
+  // Carrega scripts
   const fetchScripts = async () => {
-    const { data } = await supabase.from("scripts_ligacao").select("*");
-    if (data) {
-      const map: Record<string, any> = {};
-      data.forEach(s => { map[s.produto] = s; });
-      setScriptsMap(map);
-    }
+    const { data } = await supabase.from("scripts_ligacao").select("*").order("id", { ascending: true });
+    if (data) setScriptsList(data);
   };
 
   useEffect(() => {
@@ -65,7 +67,32 @@ export default function DialerWorkspace() {
     fetchScripts();
   }, []);
 
-  // Timer da ligação
+  // Seleciona script automaticamente quando o lead muda
+  useEffect(() => {
+    if (!activeLead) return;
+    
+    const leadProduct = (activeLead.produto || "").toLowerCase();
+    const leadBank = (activeLead.banco || "").toLowerCase();
+
+    // Procura script pelo produto do lead
+    const match = scriptsList.find(s => {
+      const sp = s.produto.toLowerCase();
+      return (leadProduct && sp.includes(leadProduct)) || 
+             (leadBank && sp.includes(leadBank)) ||
+             (leadProduct.includes("fgts") && sp.includes("fgts")) ||
+             (leadProduct.includes("inss") && sp.includes("inss"));
+    });
+
+    if (match) {
+      setSelectedScriptProduct(match.produto);
+    } else {
+      // Se não achar correspondência, busca o Coringa/Padrão ou o primeiro
+      const coringa = scriptsList.find(s => s.produto.toLowerCase().includes("padrão") || s.produto.toLowerCase().includes("geral"));
+      setSelectedScriptProduct(coringa ? coringa.produto : (scriptsList[0]?.produto || ""));
+    }
+  }, [activeLead, scriptsList]);
+
+  // Timer de chamada
   useEffect(() => {
     let interval: any;
     if (callStatus === "talking") {
@@ -76,18 +103,35 @@ export default function DialerWorkspace() {
     return () => clearInterval(interval);
   }, [callStatus]);
 
+  // Contagem regressiva do Power Dialer
+  useEffect(() => {
+    if (autoNextCountdown === null) return;
+    if (autoNextCountdown > 0) {
+      const t = setTimeout(() => setAutoNextCountdown(c => (c !== null ? c - 1 : null)), 1000);
+      return () => clearTimeout(t);
+    } else {
+      setAutoNextCountdown(null);
+      triggerCall();
+    }
+  }, [autoNextCountdown]);
+
   const formatTime = (secs: number) => {
     const m = Math.floor(secs / 60).toString().padStart(2, '0');
     const s = (secs % 60).toString().padStart(2, '0');
     return `${m}:${s}`;
   };
 
-  const handleStartCall = () => {
+  const triggerCall = () => {
     if (!activeLead) return;
     const cleanNumber = activeLead.telefone.replace(/\D/g, "");
     window.location.href = `tel:+55${cleanNumber}`;
     setCallStatus("calling");
     setTimeout(() => setCallStatus("talking"), 2000);
+  };
+
+  const handleStartCall = () => {
+    setAutoNextCountdown(null);
+    triggerCall();
   };
 
   const handleEndCall = () => {
@@ -114,17 +158,28 @@ export default function DialerWorkspace() {
       duracao_segundos: duration
     });
 
+    // Mapeamento para o CRM Pipeline
+    let etapaCrm = "finalizado";
+    if (status === "Contrato") etapaCrm = "contrato";
+    else if (status === "Proposta") etapaCrm = "proposta";
+    else if (status === "Simulação") etapaCrm = "simulacao";
+    else if (status === "Interessado") etapaCrm = "contato";
+
     await supabase.from("leads").update({ 
-      status: "finalizado", 
-      ultima_tabulacao: status 
+      status: "finalizado",
+      etapa_crm: etapaCrm,
+      ultima_tabulacao: status,
+      tentativas: 1
     }).eq("id", activeLead.id);
 
     setCallStatus("idle");
 
+    // Avança para o próximo lead
     if (currentLeadIndex + 1 < leadsList.length) {
       setCurrentLeadIndex(curr => curr + 1);
-      if (isAutoDialing) {
-        setTimeout(() => handleStartCall(), 1800);
+      if (isPowerDialing) {
+        // Dispara contagem de 2 segundos para próxima chamada
+        setAutoNextCountdown(2);
       }
     } else {
       fetchQueue();
@@ -146,6 +201,8 @@ export default function DialerWorkspace() {
       concluido: false
     });
 
+    await supabase.from("leads").update({ etapa_crm: "retorno" }).eq("id", activeLead.id);
+
     setShowScheduleModal(false);
     await saveCallRecord("Retorno", scheduleNotes);
     setScheduleNotes("");
@@ -155,35 +212,36 @@ export default function DialerWorkspace() {
     if (!activeLead) return;
     const cleanPhone = activeLead.telefone.replace(/\D/g, "");
     const text = encodeURIComponent(
-      `Olá ${activeLead.nome}, aqui é o Adriel da A&K Soluções Financeiras! Conforme conversamos, segue sua simulação com margem de ${activeLead.margem_disponivel || "valores liberados"} pelo banco ${activeLead.banco || "conveniado"}. Ficou com alguma dúvida?`
+      `Olá, ${activeLead.nome}! Sou o Adriel da A&K, correspondente autorizado BRS Promotora. Conforme conversamos, segue a simulação referente ao seu limite de ${activeLead.margem_disponivel || "crédito liberado"} pelo banco ${activeLead.banco || "parceiro"}. Ficou com alguma dúvida nas condições?`
     );
     window.open(`https://wa.me/55${cleanPhone}?text=${text}`, "_blank");
   };
 
-  const activeScript = scriptsMap[selectedProduct] || {
-    abertura: "Olá, [NOME], tudo bem? Aqui é o Adriel da A&K Soluções Financeiras.",
-    motivo: "Identificamos uma margem disponível para liberação no [BANCO].",
-    qualificacao: "Gostaria de verificar as condições?",
-    fechamento: "Posso enviar a simulação detalhada de [VALOR] no seu WhatsApp?"
+  // Encontra script ativo
+  const currentScript = scriptsList.find(s => s.produto === selectedScriptProduct) || scriptsList[0] || {
+    abertura: "Olá, [NOME], tudo bem? Aqui é da A&K, correspondente BRS Promotora.",
+    motivo: "Estou em contato sobre as condições aprovadas no [BANCO].",
+    qualificacao: "Gostaria de conhecer os valores?",
+    fechamento: "Posso enviar a simulação de [VALOR] pelo WhatsApp?"
   };
 
-  const renderScriptText = (template: string) => {
-    if (!template) return "";
-    return template
+  const renderScriptText = (text: string) => {
+    if (!text) return "";
+    return text
       .replaceAll("[NOME]", activeLead?.nome || "cliente")
-      .replaceAll("[BANCO]", activeLead?.banco || "seu banco")
+      .replaceAll("[BANCO]", activeLead?.banco || "banco parceiro")
       .replaceAll("[VALOR]", activeLead?.margem_disponivel || "valores liberados");
   };
 
   if (!activeLead && leadsList.length === 0) {
     return (
-      <div className="flex-1 flex items-center justify-center bg-white">
-        <div className="text-center">
-          <ListOrdered size={48} className="mx-auto text-slate-300 mb-4" />
-          <h2 className="text-2xl font-bold text-slate-700">Fila Vazia</h2>
-          <p className="text-slate-500 mt-2">Nenhum lead pendente na fila. Importe uma nova planilha no menu CRM & Leads.</p>
-          <button onClick={fetchQueue} className="mt-6 bg-blue-600 text-white px-6 py-2 rounded-lg font-medium hover:bg-blue-700">
-            Atualizar Fila
+      <div className="flex-1 flex items-center justify-center bg-slate-50">
+        <div className="text-center bg-white p-10 rounded-2xl border border-slate-200 shadow-sm max-w-sm">
+          <CheckCircle2 size={44} className="mx-auto text-emerald-500 mb-3" />
+          <h2 className="text-lg font-bold text-slate-800">Fila Finalizada!</h2>
+          <p className="text-xs text-slate-500 mt-1 mb-6">Todos os leads pendentes foram tabulados.</p>
+          <button onClick={fetchQueue} className="w-full bg-blue-600 text-white py-2.5 rounded-lg text-xs font-bold hover:bg-blue-700 transition">
+            Recarregar Fila
           </button>
         </div>
       </div>
@@ -191,309 +249,302 @@ export default function DialerWorkspace() {
   }
 
   return (
-    <div className="flex-1 flex flex-col h-full bg-[#f4f7f6]">
-      {/* Top Action Bar */}
-      <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-6 shrink-0">
-        <div className="flex items-center space-x-4">
-          <h1 className="text-xl font-bold text-slate-800">Workspace de Agente</h1>
-          <span className="bg-blue-50 text-blue-700 border border-blue-200 px-3 py-1 rounded-full text-xs font-semibold">
-            {leadsList.length - currentLeadIndex} Leads Restantes
+    <div className="flex-1 flex flex-col h-full bg-[#f8fafc] text-slate-900 overflow-hidden font-sans">
+      {/* Sub-Header / Workspace Bar */}
+      <header className="h-14 bg-white border-b border-slate-200/80 flex items-center justify-between px-6 shrink-0">
+        <div className="flex items-center space-x-3">
+          <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Fila Ativa:</span>
+          <span className="bg-slate-100 text-slate-700 px-2.5 py-0.5 rounded-md text-xs font-semibold">
+            {leadsList.length - currentLeadIndex} restantes
           </span>
+          {autoNextCountdown !== null && (
+            <span className="bg-blue-50 text-blue-700 border border-blue-200 px-3 py-0.5 rounded-md text-xs font-bold animate-pulse flex items-center space-x-1">
+              <span>Discando próximo em {autoNextCountdown}s...</span>
+            </span>
+          )}
         </div>
-        
-        {/* Dialer Controls & Tools */}
+
+        {/* Dialing Modes & Tools */}
         <div className="flex items-center space-x-3">
           <button 
             onClick={() => setShowCalc(!showCalc)}
-            className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg border border-slate-200 text-slate-700 text-xs font-bold hover:bg-slate-50 transition"
+            className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition border ${
+              showCalc ? "bg-blue-50 border-blue-200 text-blue-700" : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
+            }`}
           >
-            <Calculator size={14} className="text-blue-600" />
-            <span>Calculadora Rápida</span>
+            <Calculator size={14} />
+            <span>Simulador Rápido</span>
           </button>
 
-          <div className="flex items-center bg-slate-100 p-1 rounded-lg border border-slate-200">
+          <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200 text-xs">
             <button 
-              onClick={() => setIsAutoDialing(false)}
-              className={`px-3 py-1 rounded-md text-xs font-semibold transition ${!isAutoDialing ? 'bg-white shadow-sm text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
+              onClick={() => { setIsPowerDialing(false); setAutoNextCountdown(null); }}
+              className={`px-3 py-1 rounded-md font-semibold transition ${!isPowerDialing ? "bg-white shadow-xs text-blue-600" : "text-slate-500 hover:text-slate-800"}`}
             >
-              Manual (Preview)
+              Manual
             </button>
             <button 
-              onClick={() => setIsAutoDialing(true)}
-              className={`flex items-center space-x-1 px-3 py-1 rounded-md text-xs font-semibold transition ${isAutoDialing ? 'bg-white shadow-sm text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
+              onClick={() => setIsPowerDialing(true)}
+              className={`flex items-center space-x-1 px-3 py-1 rounded-md font-semibold transition ${isPowerDialing ? "bg-white shadow-xs text-blue-600" : "text-slate-500 hover:text-slate-800"}`}
             >
-              <Play size={12} />
-              <span>Power Dialer (Auto)</span>
+              <Play size={10} />
+              <span>Auto-Pular (Power)</span>
             </button>
           </div>
         </div>
       </header>
 
-      {/* Main Workspace Area */}
+      {/* Main Container */}
       <div className="flex-1 flex overflow-hidden">
         
-        {/* Left/Center Panel: CRM & Script */}
-        <div className="flex-1 flex flex-col p-6 overflow-y-auto">
-          {/* Customer 360 Card */}
-          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
-            <div className="flex justify-between items-start">
-              <div className="flex items-center space-x-4">
-                <div className="w-14 h-14 bg-gradient-to-tr from-blue-600 to-blue-400 text-white rounded-full flex items-center justify-center font-bold text-xl shadow-md">
+        {/* Left / Center: Lead Profile + Dynamic Script */}
+        <div className="flex-1 flex flex-col p-6 overflow-y-auto space-y-5">
+          
+          {/* Ficha Minimalista do Cliente */}
+          <div className="bg-white rounded-xl border border-slate-200/80 p-5 shadow-xs">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+              <div className="flex items-center space-x-3.5">
+                <div className="w-12 h-12 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center font-bold text-base border border-slate-200/60">
                   {activeLead?.nome.charAt(0)}
                 </div>
                 <div>
-                  <h2 className="text-2xl font-bold text-slate-800">{activeLead?.nome}</h2>
-                  <div className="flex items-center space-x-3 mt-1 text-slate-500 text-sm">
-                    <span className="font-mono bg-slate-100 px-2 py-0.5 rounded text-xs">{activeLead?.cpf || 'CPF não informado'}</span>
+                  <div className="flex items-center space-x-2">
+                    <h2 className="text-lg font-bold text-slate-900">{activeLead?.nome}</h2>
+                    <span className="bg-blue-50 text-blue-700 border border-blue-200/60 text-[10px] font-bold px-2 py-0.5 rounded-md flex items-center space-x-1">
+                      <Tag size={10} className="mr-0.5" />
+                      <span>{activeLead?.produto || "Saque FGTS"}</span>
+                    </span>
+                  </div>
+                  <div className="flex items-center space-x-3 mt-1 text-xs text-slate-500">
+                    <span className="font-mono">{activeLead?.cpf || "CPF Indisponível"}</span>
+                    <span>•</span>
+                    <span className="flex items-center space-x-1">
+                      <Building2 size={12} className="text-slate-400" />
+                      <span>{activeLead?.banco || "Banco não informado"}</span>
+                    </span>
                     <span>•</span>
                     <button 
                       onClick={handleWhatsApp}
-                      className="flex items-center text-emerald-600 hover:text-emerald-700 font-semibold text-xs bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200 transition"
+                      className="text-emerald-700 hover:text-emerald-800 font-bold flex items-center space-x-1 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200"
                     >
-                      <MessageCircle size={13} className="mr-1" /> WhatsApp Simulação
+                      <MessageSquare size={11} />
+                      <span>Enviar WhatsApp</span>
                     </button>
                   </div>
                 </div>
               </div>
-              <div className="text-right">
-                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Margem / Limite Estimado</p>
-                <p className="text-3xl font-extrabold text-emerald-600">{activeLead?.margem_disponivel || 'R$ 0,00'}</p>
-                <p className="text-xs font-semibold text-slate-600 mt-1">Banco: {activeLead?.banco || 'Não informado'}</p>
+
+              <div className="text-left md:text-right bg-slate-50 px-4 py-2.5 rounded-lg border border-slate-200/60 min-w-[160px]">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Margem / Limite</span>
+                <span className="text-2xl font-extrabold text-slate-900 tracking-tight">{activeLead?.margem_disponivel || "R$ 0,00"}</span>
               </div>
             </div>
 
-            {/* Mini Calculadora Integrada (Toggle) */}
+            {/* Simulador Expansível */}
             {showCalc && (
-              <div className="mt-4 pt-4 border-t border-slate-100 bg-blue-50/50 p-4 rounded-lg">
-                <div className="flex justify-between items-center mb-2">
-                  <span className="text-xs font-bold text-blue-900">Simulador de Antecipação FGTS (Estimativa 60%)</span>
-                  <button onClick={() => setShowCalc(false)} className="text-slate-400 hover:text-slate-600 text-xs">Fechar</button>
+              <div className="mt-4 pt-4 border-t border-slate-100 bg-slate-50 p-3.5 rounded-lg text-xs">
+                <div className="flex justify-between items-center mb-1.5 font-bold text-slate-700">
+                  <span>Estimativa de Liberação FGTS (60% a 70% com juros)</span>
+                  <span className="font-mono text-blue-600">Saldo: R$ {calcSaldo.toLocaleString('pt-BR')}</span>
                 </div>
-                <div className="flex items-center space-x-4">
-                  <input 
-                    type="range" 
-                    min="500" 
-                    max="20000" 
-                    step="500" 
-                    value={calcSaldo} 
-                    onChange={e => setCalcSaldo(Number(e.target.value))}
-                    className="flex-1"
-                  />
-                  <div className="text-right">
-                    <p className="text-xs text-slate-500">Saldo FGTS: R$ {calcSaldo.toLocaleString('pt-BR')}</p>
-                    <p className="text-sm font-bold text-emerald-700">Libera aprox: R$ {(calcSaldo * 0.65).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
-                  </div>
+                <input 
+                  type="range" 
+                  min="500" 
+                  max="30000" 
+                  step="500" 
+                  value={calcSaldo} 
+                  onChange={e => setCalcSaldo(Number(e.target.value))}
+                  className="w-full accent-blue-600"
+                />
+                <div className="flex justify-between text-slate-500 mt-1">
+                  <span>R$ 500</span>
+                  <span className="font-bold text-emerald-600 text-sm">Valor Estimado Liberado: R$ {(calcSaldo * 0.65).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                  <span>R$ 30.000</span>
                 </div>
               </div>
             )}
           </div>
 
-          {/* Dynamic Script Card */}
-          <div className="flex-1 bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
-            <div className="bg-slate-50 border-b border-slate-200 px-6 py-3 flex justify-between items-center">
-              <h3 className="font-bold text-slate-700 flex items-center space-x-2 text-sm">
-                <Sparkles size={16} className="text-blue-500" />
-                <span>Roteiro Operacional</span>
-              </h3>
-              
-              {/* Product Selector */}
+          {/* Roteiro Dinâmico com Visual Limpo */}
+          <div className="flex-1 bg-white rounded-xl border border-slate-200/80 shadow-xs flex flex-col overflow-hidden">
+            <div className="h-11 px-5 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
               <div className="flex items-center space-x-2">
-                <label className="text-xs text-slate-500 font-medium">Produto:</label>
-                <select 
-                  value={selectedProduct} 
-                  onChange={e => setSelectedProduct(e.target.value)}
-                  className="bg-white border border-slate-200 text-xs font-bold text-slate-700 rounded-md px-2 py-1 outline-none"
-                >
-                  <option value="Saque FGTS">Saque FGTS</option>
-                  <option value="INSS / Portabilidade">INSS / Portabilidade</option>
-                  <option value="Consignado Público / SIAPE">Consignado Público / SIAPE</option>
-                </select>
+                <Sparkles size={14} className="text-blue-600" />
+                <span className="text-xs font-bold text-slate-700">Roteiro Sugerido:</span>
+                <span className="text-xs font-semibold text-blue-600">{currentScript.produto}</span>
               </div>
+
+              {/* Seletor Manual opcional */}
+              <select 
+                value={selectedScriptProduct} 
+                onChange={e => setSelectedScriptProduct(e.target.value)}
+                className="text-[11px] font-semibold text-slate-600 border border-slate-200 bg-white rounded-md px-2 py-0.5 outline-none"
+              >
+                {scriptsList.map(s => (
+                  <option key={s.id} value={s.produto}>{s.produto}</option>
+                ))}
+              </select>
             </div>
 
-            <div className="p-6 overflow-y-auto space-y-5">
-              <div>
-                <span className="inline-block bg-blue-100 text-blue-800 text-[11px] font-extrabold px-2.5 py-0.5 rounded-full mb-2">1. ABERTURA</span>
-                <p className="text-slate-800 text-base leading-relaxed">
-                  "{renderScriptText(activeScript.abertura)}"
-                </p>
-              </div>
-              
-              <div className="border-l-2 border-slate-200 pl-4">
-                <span className="inline-block bg-purple-100 text-purple-800 text-[11px] font-extrabold px-2.5 py-0.5 rounded-full mb-2">2. MOTIVO</span>
-                <p className="text-slate-700 text-sm leading-relaxed">
-                  "{renderScriptText(activeScript.motivo)}"
-                </p>
+            <div className="p-6 overflow-y-auto space-y-4 text-xs leading-relaxed text-slate-700">
+              <div className="bg-slate-50/80 p-3.5 rounded-lg border border-slate-100">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-blue-600 block mb-1">1. Abertura</span>
+                <p className="text-sm font-medium text-slate-800">"{renderScriptText(currentScript.abertura)}"</p>
               </div>
 
-              {activeScript.qualificacao && (
-                <div className="border-l-2 border-slate-200 pl-4">
-                  <span className="inline-block bg-amber-100 text-amber-800 text-[11px] font-extrabold px-2.5 py-0.5 rounded-full mb-2">3. QUALIFICAÇÃO</span>
-                  <p className="text-slate-700 text-sm leading-relaxed">
-                    "{renderScriptText(activeScript.qualificacao)}"
-                  </p>
+              <div className="bg-slate-50/80 p-3.5 rounded-lg border border-slate-100">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block mb-1">2. Motivo da Ligação</span>
+                <p className="text-sm font-medium text-slate-800">"{renderScriptText(currentScript.motivo)}"</p>
+              </div>
+
+              {currentScript.qualificacao && (
+                <div className="bg-slate-50/80 p-3.5 rounded-lg border border-slate-100">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block mb-1">3. Qualificação</span>
+                  <p className="text-sm font-medium text-slate-800">"{renderScriptText(currentScript.qualificacao)}"</p>
                 </div>
               )}
 
-              <div className="border-l-2 border-emerald-300 pl-4 bg-emerald-50/40 p-3 rounded-r-lg">
-                <span className="inline-block bg-emerald-100 text-emerald-800 text-[11px] font-extrabold px-2.5 py-0.5 rounded-full mb-1">4. FECHAMENTO & SIMULAÇÃO</span>
-                <p className="text-emerald-950 text-sm font-medium leading-relaxed">
-                  "{renderScriptText(activeScript.fechamento)}"
-                </p>
+              <div className="bg-blue-50/40 p-3.5 rounded-lg border border-blue-100">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-blue-700 block mb-1">4. Fechamento & Envio de Proposta</span>
+                <p className="text-sm font-semibold text-blue-900">"{renderScriptText(currentScript.fechamento)}"</p>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Right Panel: Softphone & Dispositions */}
-        <div className="w-80 bg-white border-l border-slate-200 flex flex-col shadow-sm">
-          <div className="p-6 flex-1 flex flex-col justify-between">
-            
-            {/* Phone Number Display */}
-            <div className="text-center">
-              <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Telefone do Lead</p>
-              <h2 className="text-2xl font-mono font-extrabold text-slate-800">{activeLead?.telefone}</h2>
-            </div>
+        {/* Right Panel: Dialing & Dispositions */}
+        <div className="w-80 bg-white border-l border-slate-200/80 flex flex-col justify-between p-6 shrink-0 shadow-xs">
+          
+          <div className="text-center">
+            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Número</span>
+            <p className="text-2xl font-mono font-bold text-slate-900">{activeLead?.telefone}</p>
+          </div>
 
-            {/* Dialer State Machine */}
-            <div className="flex-1 flex flex-col justify-center items-center my-6">
-              {callStatus === "idle" && (
-                <button 
-                  onClick={handleStartCall}
-                  className="w-36 h-36 bg-blue-600 rounded-full flex flex-col items-center justify-center text-white shadow-xl hover:bg-blue-700 hover:scale-105 transition-all group"
-                >
-                  <PhoneCall size={40} className="mb-1 group-hover:animate-bounce" />
-                  <span className="font-extrabold text-base tracking-wide">DISCAR</span>
-                </button>
-              )}
-
-              {callStatus === "calling" && (
-                <div className="text-center animate-pulse">
-                  <div className="w-28 h-28 mx-auto border-4 border-blue-400 border-t-blue-600 rounded-full animate-spin mb-3"></div>
-                  <p className="text-base font-bold text-blue-600">Discando no chip...</p>
-                </div>
-              )}
-
-              {callStatus === "talking" && (
-                <div className="text-center w-full">
-                  <div className="w-28 h-28 mx-auto bg-emerald-100 rounded-full flex flex-col items-center justify-center text-emerald-600 mb-6 shadow-inner border border-emerald-200">
-                    <span className="text-2xl font-bold font-mono">{formatTime(duration)}</span>
-                    <span className="text-[10px] font-semibold uppercase tracking-wider text-emerald-700">Em linha</span>
-                  </div>
-                  <button 
-                    onClick={handleEndCall}
-                    className="w-full bg-rose-600 hover:bg-rose-700 text-white py-3.5 rounded-xl font-bold text-base flex items-center justify-center space-x-2 shadow-lg transition"
-                  >
-                    <PhoneOff size={20} />
-                    <span>ENCERRAR</span>
-                  </button>
-                </div>
-              )}
-
-              {callStatus === "wrapup" && (
-                <div className="w-full flex-1 flex flex-col">
-                  <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 text-center">Classificar Ligação</h3>
-                  <div className="flex-1 overflow-y-auto space-y-1.5 pr-1 max-h-[360px]">
-                    <button onClick={() => handleDisposition("Contrato")} className="w-full bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 p-2.5 rounded-lg font-bold text-xs flex items-center justify-between transition">
-                      <span>Contrato Fechado</span> <Check size={16} />
-                    </button>
-                    <button onClick={() => handleDisposition("Proposta")} className="w-full bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 p-2.5 rounded-lg font-bold text-xs flex items-center justify-between transition">
-                      <span>Proposta Enviada</span> <Check size={16} />
-                    </button>
-                    <button onClick={() => handleDisposition("Simulação")} className="w-full bg-cyan-50 hover:bg-cyan-100 text-cyan-800 border border-cyan-200 p-2.5 rounded-lg font-bold text-xs flex items-center justify-between transition">
-                      <span>Simulação Feita</span> <MessageCircle size={16} />
-                    </button>
-                    <button onClick={() => handleDisposition("Interessado")} className="w-full bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-200 p-2.5 rounded-lg font-bold text-xs flex items-center justify-between transition">
-                      <span>Interessado</span> <User size={16} />
-                    </button>
-                    <button onClick={() => handleDisposition("Retorno")} className="w-full bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 p-2.5 rounded-lg font-bold text-xs flex items-center justify-between transition">
-                      <span>Agendar Retorno</span> <Calendar size={16} />
-                    </button>
-                    <button onClick={() => handleDisposition("Não atendeu")} className="w-full bg-orange-50 hover:bg-orange-100 text-orange-800 border border-orange-200 p-2.5 rounded-lg font-bold text-xs flex items-center justify-between transition">
-                      <span>Não Atendeu</span> <PhoneOff size={16} />
-                    </button>
-                    <button onClick={() => handleDisposition("Não interessado")} className="w-full bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-200 p-2.5 rounded-lg font-bold text-xs flex items-center justify-between transition">
-                      <span>Não Tem Interesse</span> <X size={16} />
-                    </button>
-                    <button onClick={() => handleDisposition("Número inválido")} className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 p-2.5 rounded-lg font-bold text-xs flex items-center justify-between transition">
-                      <span>Número Inválido</span> <AlertCircle size={16} />
-                    </button>
-                    <button onClick={() => handleDisposition("Sem perfil")} className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 p-2.5 rounded-lg font-bold text-xs flex items-center justify-between transition">
-                      <span>Sem Perfil</span> <ShieldAlert size={16} />
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Skip Button */}
+          {/* Call Status Actions */}
+          <div className="flex-1 flex flex-col justify-center items-center my-6">
             {callStatus === "idle" && (
               <button 
-                onClick={() => saveCallRecord("Pulado")}
-                className="w-full py-2.5 text-slate-500 hover:bg-slate-100 rounded-lg text-xs font-semibold flex items-center justify-center space-x-1.5 transition"
+                onClick={handleStartCall}
+                className="w-32 h-32 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white flex flex-col items-center justify-center font-bold shadow-md shadow-blue-500/10 hover:scale-102 transition-all"
               >
-                <span>Pular para o Próximo</span>
-                <FastForward size={14} />
+                <PhoneCall size={36} className="mb-1" />
+                <span className="text-xs uppercase tracking-wider">Chamar</span>
               </button>
             )}
 
+            {callStatus === "calling" && (
+              <div className="text-center">
+                <div className="w-24 h-24 rounded-2xl border-2 border-blue-500 border-t-transparent animate-spin mx-auto mb-3"></div>
+                <p className="text-xs font-bold text-blue-600">Disparando para o smartphone...</p>
+              </div>
+            )}
+
+            {callStatus === "talking" && (
+              <div className="w-full text-center space-y-4">
+                <div className="bg-slate-50 border border-slate-200 p-4 rounded-xl">
+                  <span className="text-[10px] font-bold uppercase text-slate-400">Duração</span>
+                  <p className="text-3xl font-mono font-extrabold text-slate-800">{formatTime(duration)}</p>
+                </div>
+                <button 
+                  onClick={handleEndCall}
+                  className="w-full bg-rose-600 hover:bg-rose-700 text-white py-3 rounded-lg text-xs font-bold flex items-center justify-center space-x-2 transition"
+                >
+                  <PhoneOff size={16} />
+                  <span>Encerrar Chamada</span>
+                </button>
+              </div>
+            )}
+
+            {callStatus === "wrapup" && (
+              <div className="w-full space-y-2">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 text-center block mb-2">Classificar Resultado</span>
+                <div className="grid grid-cols-1 gap-1.5 max-h-[340px] overflow-y-auto pr-1">
+                  <button onClick={() => handleDisposition("Contrato")} className="w-full text-left px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-md font-bold text-xs flex justify-between items-center transition">
+                    <span>Contrato Fechado</span> <Check size={14} />
+                  </button>
+                  <button onClick={() => handleDisposition("Proposta")} className="w-full text-left px-3 py-2 bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-md font-semibold text-xs flex justify-between items-center transition">
+                    <span>Proposta Enviada</span> <Check size={14} />
+                  </button>
+                  <button onClick={() => handleDisposition("Simulação")} className="w-full text-left px-3 py-2 bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-md font-semibold text-xs flex justify-between items-center transition">
+                    <span>Simulação Feita</span> <MessageSquare size={14} />
+                  </button>
+                  <button onClick={() => handleDisposition("Retorno")} className="w-full text-left px-3 py-2 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-md font-bold text-xs flex justify-between items-center transition">
+                    <span>Agendar Retorno</span> <Calendar size={14} />
+                  </button>
+                  <button onClick={() => handleDisposition("Interessado")} className="w-full text-left px-3 py-2 bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-200 rounded-md font-semibold text-xs flex justify-between items-center transition">
+                    <span>Interessado</span> <User size={14} />
+                  </button>
+                  <button onClick={() => handleDisposition("Não atendeu")} className="w-full text-left px-3 py-2 bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200 rounded-md font-medium text-xs flex justify-between items-center transition">
+                    <span>Não Atendeu</span> <PhoneOff size={14} />
+                  </button>
+                  <button onClick={() => handleDisposition("Não interessado")} className="w-full text-left px-3 py-2 bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200 rounded-md font-medium text-xs flex justify-between items-center transition">
+                    <span>Não Tem Interesse</span> <X size={14} />
+                  </button>
+                  <button onClick={() => handleDisposition("Sem perfil")} className="w-full text-left px-3 py-2 bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200 rounded-md font-medium text-xs flex justify-between items-center transition">
+                    <span>Sem Perfil / Saldo</span> <AlertCircle size={14} />
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
+
+          {callStatus === "idle" && (
+            <button 
+              onClick={() => saveCallRecord("Pulado")}
+              className="w-full py-2 text-slate-400 hover:text-slate-600 text-xs font-semibold flex items-center justify-center space-x-1.5 transition"
+            >
+              <span>Pular Lead</span>
+              <FastForward size={12} />
+            </button>
+          )}
+
         </div>
       </div>
 
-      {/* Modal de Agendamento de Retorno */}
+      {/* Modal Retorno */}
       {showScheduleModal && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl p-6 max-w-md w-full shadow-2xl space-y-4">
-            <h3 className="text-lg font-bold text-slate-800 flex items-center space-x-2">
-              <Clock className="text-amber-500" size={20} />
-              <span>Agendar Retorno com {activeLead?.nome}</span>
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl p-6 max-w-sm w-full shadow-xl border border-slate-200 space-y-4">
+            <h3 className="text-sm font-bold text-slate-800 flex items-center space-x-2">
+              <Calendar className="text-amber-500" size={16} />
+              <span>Agendar Retorno</span>
             </h3>
-            
-            <div className="grid grid-cols-2 gap-3">
+
+            <div className="space-y-3">
               <div>
-                <label className="text-xs font-bold text-slate-600 block mb-1">Data:</label>
+                <label className="text-[11px] font-bold text-slate-600 block mb-1">Data:</label>
                 <input 
                   type="date" 
                   value={scheduleDate} 
                   onChange={e => setScheduleDate(e.target.value)}
-                  className="w-full border border-slate-200 p-2 rounded-lg text-sm"
+                  className="w-full border border-slate-200 p-2 rounded-lg text-xs outline-none"
                 />
               </div>
+
               <div>
-                <label className="text-xs font-bold text-slate-600 block mb-1">Horário:</label>
+                <label className="text-[11px] font-bold text-slate-600 block mb-1">Horário:</label>
                 <input 
                   type="time" 
                   value={scheduleTime} 
                   onChange={e => setScheduleTime(e.target.value)}
-                  className="w-full border border-slate-200 p-2 rounded-lg text-sm"
+                  className="w-full border border-slate-200 p-2 rounded-lg text-xs outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="text-[11px] font-bold text-slate-600 block mb-1">Anotações:</label>
+                <textarea 
+                  placeholder="Ex: Ligar após as 14h, quer fechar com margem de R$ 500" 
+                  value={scheduleNotes}
+                  onChange={e => setScheduleNotes(e.target.value)}
+                  className="w-full border border-slate-200 p-2 rounded-lg text-xs h-16 outline-none"
                 />
               </div>
             </div>
 
-            <div>
-              <label className="text-xs font-bold text-slate-600 block mb-1">Observações do Lead:</label>
-              <textarea 
-                placeholder="Ex: Pediu para ligar após as 14h, tem interesse em liberar R$ 1.500"
-                value={scheduleNotes}
-                onChange={e => setScheduleNotes(e.target.value)}
-                className="w-full border border-slate-200 p-2.5 rounded-lg text-sm h-20 outline-none"
-              />
-            </div>
-
-            <div className="flex space-x-3 pt-2">
-              <button 
-                onClick={() => setShowScheduleModal(false)}
-                className="flex-1 py-2 text-slate-600 border border-slate-200 rounded-lg text-sm font-semibold hover:bg-slate-50"
-              >
-                Cancelar
-              </button>
-              <button 
-                onClick={confirmScheduleReturn}
-                className="flex-1 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-sm font-bold shadow-sm"
-              >
-                Salvar Retorno
-              </button>
+            <div className="flex space-x-2 pt-2">
+              <button onClick={() => setShowScheduleModal(false)} className="flex-1 py-2 text-xs font-semibold text-slate-600 border border-slate-200 rounded-lg">Cancelar</button>
+              <button onClick={confirmScheduleReturn} className="flex-1 py-2 text-xs font-bold text-white bg-amber-500 hover:bg-amber-600 rounded-lg shadow-xs">Salvar</button>
             </div>
           </div>
         </div>

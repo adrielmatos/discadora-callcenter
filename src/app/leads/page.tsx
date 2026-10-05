@@ -1,32 +1,36 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
-import { Upload, Users, Search, Download, Trash2, RefreshCw, FileSpreadsheet } from "lucide-react";
+import { 
+  Upload, Search, Download, RefreshCw, Kanban, Table, 
+  Building2, Phone, ArrowRight, Tag, CheckCircle2
+} from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import * as XLSX from "xlsx";
 
 interface Lead {
-  id?: string | number;
+  id: number;
   nome: string;
   telefone: string;
   cpf?: string;
   margem_disponivel?: string;
   banco?: string;
+  produto?: string;
   status?: string;
+  etapa_crm?: string;
   ultima_tabulacao?: string;
-  created_at?: string;
 }
 
 export default function LeadsCRM() {
   const [leads, setLeads] = useState<Lead[]>([]);
+  const [viewMode, setViewMode] = useState<"kanban" | "table">("kanban");
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState("todos");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const fetchLeads = async () => {
     setLoading(true);
-    const { data } = await supabase.from("leads").select("*").order("id", { ascending: false }).limit(300);
+    const { data } = await supabase.from("leads").select("*").order("id", { ascending: false }).limit(250);
     if (data) setLeads(data);
     setLoading(false);
   };
@@ -48,14 +52,19 @@ export default function LeadsCRM() {
         const ws = wb.Sheets[wsname];
         const data = XLSX.utils.sheet_to_json(ws) as any[];
 
-        const formattedLeads = data.map((row) => ({
-          nome: row["Nome"] || row["NOME"] || row["cliente"] || row["Cliente"] || "Sem Nome",
-          telefone: String(row["Telefone"] || row["TELEFONE"] || row["Celular"] || row["celular"] || "").replace(/\D/g, ""),
-          cpf: String(row["CPF"] || row["cpf"] || ""),
-          margem_disponivel: String(row["Margem"] || row["margem"] || row["Valor"] || "R$ 0,00"),
-          banco: String(row["Banco"] || row["banco"] || "Não informado"),
-          status: "pendente",
-        })).filter(l => l.telefone.length >= 8);
+        const formattedLeads = data.map((row) => {
+          const rawProduto = String(row["Produto"] || row["PRODUTO"] || row["produto"] || "Saque FGTS");
+          return {
+            nome: row["Nome"] || row["NOME"] || row["cliente"] || row["Cliente"] || "Sem Nome",
+            telefone: String(row["Telefone"] || row["TELEFONE"] || row["Celular"] || row["celular"] || "").replace(/\D/g, ""),
+            cpf: String(row["CPF"] || row["cpf"] || ""),
+            margem_disponivel: String(row["Margem"] || row["margem"] || row["Valor"] || "R$ 0,00"),
+            banco: String(row["Banco"] || row["banco"] || "Não informado"),
+            produto: rawProduto,
+            status: "pendente",
+            etapa_crm: "fila"
+          };
+        }).filter(l => l.telefone.length >= 8);
 
         if (formattedLeads.length === 0) {
           alert("Nenhum lead com telefone válido encontrado.");
@@ -80,154 +89,193 @@ export default function LeadsCRM() {
   };
 
   const handleExport = () => {
-    const filteredToExport = leads.filter(l => {
-      if (statusFilter === "contratos") return l.ultima_tabulacao === "Contrato";
-      if (statusFilter === "pendente") return l.status === "pendente";
-      if (statusFilter === "finalizado") return l.status === "finalizado";
-      return true;
-    });
-
-    if (filteredToExport.length === 0) {
-      alert("Nenhum lead para exportar com o filtro atual.");
-      return;
-    }
-
-    const ws = XLSX.utils.json_to_sheet(filteredToExport);
+    const ws = XLSX.utils.json_to_sheet(leads);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Leads");
-    XLSX.writeFile(wb, `leads_export_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    XLSX.utils.book_append_sheet(wb, ws, "CRM Leads");
+    XLSX.writeFile(wb, `leads_crm_${new Date().toISOString().slice(0, 10)}.xlsx`);
   };
 
-  const filteredLeads = leads.filter(l => {
-    const matchesSearch = l.nome.toLowerCase().includes(searchTerm.toLowerCase()) || l.telefone.includes(searchTerm) || (l.cpf && l.cpf.includes(searchTerm));
-    if (statusFilter === "contratos") return matchesSearch && l.ultima_tabulacao === "Contrato";
-    if (statusFilter === "pendente") return matchesSearch && l.status === "pendente";
-    if (statusFilter === "finalizado") return matchesSearch && l.status === "finalizado";
-    return matchesSearch;
-  });
+  const changeEtapa = async (leadId: number, nextEtapa: string) => {
+    await supabase.from("leads").update({ etapa_crm: nextEtapa }).eq("id", leadId);
+    setLeads(prev => prev.map(l => l.id === leadId ? { ...l, etapa_crm: nextEtapa } : l));
+  };
+
+  const filteredLeads = leads.filter(l => 
+    l.nome.toLowerCase().includes(searchTerm.toLowerCase()) || 
+    l.telefone.includes(searchTerm) || 
+    (l.cpf && l.cpf.includes(searchTerm))
+  );
+
+  const stages = [
+    { id: "fila", label: "Fila de Espera", color: "border-slate-300", bg: "bg-slate-100/60" },
+    { id: "contato", label: "Em Atendimento", color: "border-blue-400", bg: "bg-blue-50/50" },
+    { id: "simulacao", label: "Simulação Enviada", color: "border-teal-400", bg: "bg-teal-50/50" },
+    { id: "proposta", label: "Proposta Emitida", color: "border-amber-400", bg: "bg-amber-50/50" },
+    { id: "contrato", label: "Contrato Fechado", color: "border-emerald-500", bg: "bg-emerald-50/50" }
+  ];
 
   return (
-    <div className="flex-1 flex flex-col h-full bg-[#f4f7f6]">
-      <header className="bg-white border-b border-slate-200 px-8 py-6 flex justify-between items-center shrink-0">
+    <div className="flex-1 flex flex-col h-full bg-[#f8fafc] text-slate-900">
+      {/* Header */}
+      <header className="h-16 bg-white border-b border-slate-200/80 px-8 flex justify-between items-center shrink-0">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">CRM & Gestão de Leads</h1>
-          <p className="text-slate-500 text-sm mt-1">Importe novas bases, pesquise contatos e exporte os fechamentos.</p>
+          <h1 className="text-xl font-bold text-slate-900">CRM & Funil de Vendas</h1>
+          <p className="text-slate-500 text-xs mt-0.5">Gestão de oportunidades e pipeline de crédito BRS Promotora.</p>
         </div>
-        <div className="flex space-x-3">
+
+        <div className="flex items-center space-x-3">
+          {/* View Mode Toggle */}
+          <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200 text-xs">
+            <button 
+              onClick={() => setViewMode("kanban")}
+              className={`flex items-center space-x-1 px-3 py-1 rounded-md font-semibold transition ${viewMode === "kanban" ? "bg-white shadow-xs text-blue-600" : "text-slate-500"}`}
+            >
+              <Kanban size={13} />
+              <span>Funil (Pipeline)</span>
+            </button>
+            <button 
+              onClick={() => setViewMode("table")}
+              className={`flex items-center space-x-1 px-3 py-1 rounded-md font-semibold transition ${viewMode === "table" ? "bg-white shadow-xs text-blue-600" : "text-slate-500"}`}
+            >
+              <Table size={13} />
+              <span>Lista</span>
+            </button>
+          </div>
+
           <button 
-            onClick={fetchLeads} 
-            className="p-2 border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 transition" 
+            onClick={fetchLeads}
+            className="p-1.5 border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 transition"
             title="Recarregar"
           >
-            <RefreshCw size={18} className={loading ? "animate-spin" : ""} />
+            <RefreshCw size={15} className={loading ? "animate-spin" : ""} />
           </button>
-          
+
           <button 
             onClick={handleExport}
-            className="flex items-center space-x-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg font-bold text-sm shadow-sm transition"
+            className="flex items-center space-x-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 px-3 py-1.5 rounded-lg font-semibold text-xs transition"
           >
-            <Download size={16} />
-            <span>Exportar Excel</span>
+            <Download size={13} />
+            <span>Exportar</span>
           </button>
 
           <button 
             onClick={() => fileInputRef.current?.click()}
-            className="flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-bold text-sm shadow-sm transition"
+            className="flex items-center space-x-1.5 bg-blue-600 hover:bg-blue-700 text-white px-3.5 py-1.5 rounded-lg font-semibold text-xs shadow-xs transition"
           >
-            <Upload size={16} />
+            <Upload size={13} />
             <span>Importar Planilha</span>
           </button>
           <input type="file" ref={fileInputRef} onChange={handleFileUpload} accept=".xlsx, .xls, .csv" className="hidden" />
         </div>
       </header>
 
-      <div className="flex-1 p-8 overflow-hidden flex flex-col">
-        <div className="bg-white border border-slate-200 rounded-xl shadow-sm flex flex-col flex-1 overflow-hidden">
-          
-          <div className="p-4 border-b border-slate-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-3 bg-slate-50">
-            <div className="relative w-full md:w-96">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-              <input 
-                type="text" 
-                placeholder="Buscar por nome, telefone ou CPF..." 
-                className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-lg text-xs outline-none focus:border-blue-500"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-            </div>
-
-            <div className="flex items-center space-x-3 w-full md:w-auto justify-between md:justify-end">
-              <select 
-                value={statusFilter} 
-                onChange={e => setStatusFilter(e.target.value)}
-                className="bg-white border border-slate-200 text-xs font-semibold text-slate-700 rounded-lg px-3 py-2 outline-none"
-              >
-                <option value="todos">Todos os Leads</option>
-                <option value="pendente">Apenas Pendentes (Na Fila)</option>
-                <option value="contratos">Apenas Contratos Fechados</option>
-                <option value="finalizado">Todos os Finalizados</option>
-              </select>
-
-              <span className="text-xs text-slate-500 font-bold bg-slate-200/60 px-2.5 py-1 rounded-md">
-                {filteredLeads.length} leads
-              </span>
-            </div>
-          </div>
-
-          <div className="flex-1 overflow-auto">
-            <table className="w-full text-left text-sm text-slate-600">
-              <thead className="bg-white sticky top-0 border-b border-slate-200 text-slate-400 uppercase text-[11px] font-bold shadow-sm">
-                <tr>
-                  <th className="px-6 py-3.5">Nome do Lead</th>
-                  <th className="px-6 py-3.5">Telefone</th>
-                  <th className="px-6 py-3.5">CPF</th>
-                  <th className="px-6 py-3.5">Margem / Limite</th>
-                  <th className="px-6 py-3.5">Banco</th>
-                  <th className="px-6 py-3.5">Status Fila</th>
-                  <th className="px-6 py-3.5">Última Tabulação</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {filteredLeads.map((lead, idx) => (
-                  <tr key={lead.id || idx} className="hover:bg-slate-50/80 transition">
-                    <td className="px-6 py-3.5 font-bold text-slate-800">{lead.nome}</td>
-                    <td className="px-6 py-3.5 font-mono text-xs text-slate-700">{lead.telefone}</td>
-                    <td className="px-6 py-3.5 font-mono text-xs">{lead.cpf || "-"}</td>
-                    <td className="px-6 py-3.5 text-emerald-600 font-extrabold">{lead.margem_disponivel || "-"}</td>
-                    <td className="px-6 py-3.5 text-xs text-slate-600 font-semibold">{lead.banco || "-"}</td>
-                    <td className="px-6 py-3.5">
-                      <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider ${
-                        lead.status === "pendente" ? "bg-blue-50 text-blue-700 border border-blue-200" :
-                        "bg-slate-100 text-slate-600"
-                      }`}>
-                        {lead.status || "pendente"}
-                      </span>
-                    </td>
-                    <td className="px-6 py-3.5 text-xs font-bold text-slate-800">
-                      {lead.ultima_tabulacao ? (
-                        <span className={`px-2.5 py-0.5 rounded-full ${
-                          lead.ultima_tabulacao === "Contrato" ? "bg-emerald-100 text-emerald-800" :
-                          lead.ultima_tabulacao === "Retorno" ? "bg-amber-100 text-amber-800" :
-                          "bg-slate-100 text-slate-700"
-                        }`}>
-                          {lead.ultima_tabulacao}
-                        </span>
-                      ) : "-"}
-                    </td>
-                  </tr>
-                ))}
-                {filteredLeads.length === 0 && (
-                  <tr>
-                    <td colSpan={7} className="px-6 py-12 text-center text-slate-400">
-                      Nenhum lead encontrado com os filtros atuais.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-
+      {/* Search Bar */}
+      <div className="px-8 py-3 bg-white border-b border-slate-100 flex items-center justify-between">
+        <div className="relative w-80">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
+          <input 
+            type="text" 
+            placeholder="Buscar por cliente, telefone ou CPF..."
+            value={searchTerm}
+            onChange={e => setSearchTerm(e.target.value)}
+            className="w-full pl-8 pr-3 py-1.5 border border-slate-200 rounded-lg text-xs outline-none focus:border-blue-500"
+          />
         </div>
+
+        <span className="text-xs text-slate-500 font-medium">
+          {filteredLeads.length} leads no pipeline
+        </span>
+      </div>
+
+      {/* Main Content Area */}
+      <div className="flex-1 p-6 overflow-hidden flex flex-col">
+        {viewMode === "kanban" ? (
+          /* Visual Pipeline Kanban */
+          <div className="flex-1 flex space-x-4 overflow-x-auto pb-4 custom-scrollbar">
+            {stages.map(st => {
+              const stageLeads = filteredLeads.filter(l => (l.etapa_crm || "fila") === st.id);
+              return (
+                <div key={st.id} className="w-72 flex flex-col rounded-xl bg-slate-100/70 border border-slate-200 shrink-0 overflow-hidden">
+                  <div className={`p-3 border-b border-slate-200/80 bg-white flex justify-between items-center ${st.color} border-t-2`}>
+                    <span className="text-xs font-bold text-slate-800">{st.label}</span>
+                    <span className="text-[11px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">
+                      {stageLeads.length}
+                    </span>
+                  </div>
+
+                  <div className="flex-1 p-2.5 overflow-y-auto space-y-2.5 custom-scrollbar">
+                    {stageLeads.map(lead => (
+                      <div key={lead.id} className="bg-white p-3.5 rounded-lg border border-slate-200 shadow-xs space-y-2 hover:border-slate-300 transition">
+                        <div className="flex justify-between items-start">
+                          <p className="font-bold text-xs text-slate-900 leading-snug">{lead.nome}</p>
+                          <span className="text-[10px] font-mono text-slate-400">#{lead.id}</span>
+                        </div>
+
+                        <div className="flex items-center justify-between text-[11px] text-slate-500">
+                          <span className="font-mono">{lead.telefone}</span>
+                          <span className="text-emerald-700 font-extrabold">{lead.margem_disponivel || "R$ 0"}</span>
+                        </div>
+
+                        <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[10px] text-slate-500">
+                          <span>{lead.banco || "Banco N/I"}</span>
+                          
+                          {/* Mover Etapa */}
+                          <div className="flex space-x-1">
+                            {st.id !== "contrato" && (
+                              <button 
+                                onClick={() => {
+                                  const nextIdx = stages.findIndex(s => s.id === st.id) + 1;
+                                  if (nextIdx < stages.length) changeEtapa(lead.id, stages[nextIdx].id);
+                                }}
+                                className="text-blue-600 hover:text-blue-700 font-semibold p-1 hover:bg-blue-50 rounded"
+                                title="Avançar etapa"
+                              >
+                                <ArrowRight size={12} />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                    {stageLeads.length === 0 && (
+                      <div className="py-8 text-center text-slate-400 text-xs">Vazio</div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          /* Table View */
+          <div className="bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden flex-1 flex flex-col">
+            <div className="flex-1 overflow-auto">
+              <table className="w-full text-left text-xs text-slate-600">
+                <thead className="bg-slate-50 border-b border-slate-200 text-slate-400 uppercase text-[10px] font-bold sticky top-0">
+                  <tr>
+                    <th className="px-6 py-3">Nome</th>
+                    <th className="px-6 py-3">Telefone</th>
+                    <th className="px-6 py-3">Produto</th>
+                    <th className="px-6 py-3">Margem</th>
+                    <th className="px-6 py-3">Banco</th>
+                    <th className="px-6 py-3">Etapa no Funil</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {filteredLeads.map(l => (
+                    <tr key={l.id} className="hover:bg-slate-50">
+                      <td className="px-6 py-3 font-semibold text-slate-800">{l.nome}</td>
+                      <td className="px-6 py-3 font-mono">{l.telefone}</td>
+                      <td className="px-6 py-3">{l.produto || "Saque FGTS"}</td>
+                      <td className="px-6 py-3 text-emerald-600 font-bold">{l.margem_disponivel || "-"}</td>
+                      <td className="px-6 py-3">{l.banco || "-"}</td>
+                      <td className="px-6 py-3 font-medium capitalize">{l.etapa_crm || "Fila"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

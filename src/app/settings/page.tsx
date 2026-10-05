@@ -1,138 +1,237 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { Settings, Building, Phone, Shield, Save, CheckCircle } from "lucide-react";
+import { Settings, Building, Users, Target, Save, CheckCircle2, Plus, Trash2 } from "lucide-react";
+import { supabase } from "@/lib/supabase";
 
 export default function SettingsPage() {
   const [empresaNome, setEmpresaNome] = useState("A&K Soluções Financeiras");
-  const [operadorNome, setOperadorNome] = useState("Adriel");
-  const [dddPadrao, setDddPadrao] = useState("85");
-  const [autoNext, setAutoNext] = useState(true);
+  const [promotora, setPromotora] = useState("BRS Promotora");
+  const [metaLigacoes, setMetaLigacoes] = useState("100");
+  const [metaContratos, setMetaContratos] = useState("5");
+  
+  // Operadores
+  const [operadores, setOperadores] = useState<any[]>([]);
+  const [novoNome, setNovoNome] = useState("");
+  const [novoEmail, setNovoEmail] = useState("");
+  const [novoPerfil, setNovoPerfil] = useState("operador");
+  
   const [saved, setSaved] = useState(false);
 
+  const fetchOperadores = async () => {
+    const { data } = await supabase.from("operadores_app").select("*").order("id", { ascending: true });
+    if (data) setOperadores(data);
+  };
+
   useEffect(() => {
-    const savedConfig = localStorage.getItem("ak_settings");
+    fetchOperadores();
+    const savedConfig = localStorage.getItem("ak_settings_full");
     if (savedConfig) {
       try {
-        const parsed = JSON.parse(savedConfig);
-        if (parsed.empresaNome) setEmpresaNome(parsed.empresaNome);
-        if (parsed.operadorNome) setOperadorNome(parsed.operadorNome);
-        if (parsed.dddPadrao) setDddPadrao(parsed.dddPadrao);
-        if (parsed.autoNext !== undefined) setAutoNext(parsed.autoNext);
+        const c = JSON.parse(savedConfig);
+        if (c.empresaNome) setEmpresaNome(c.empresaNome);
+        if (c.promotora) setPromotora(c.promotora);
+        if (c.metaLigacoes) setMetaLigacoes(c.metaLigacoes);
+        if (c.metaContratos) setMetaContratos(c.metaContratos);
       } catch (e) {}
     }
   }, []);
 
-  const handleSave = () => {
-    localStorage.setItem("ak_settings", JSON.stringify({
+  const handleSaveConfig = () => {
+    localStorage.setItem("ak_settings_full", JSON.stringify({
       empresaNome,
-      operadorNome,
-      dddPadrao,
-      autoNext
+      promotora,
+      metaLigacoes,
+      metaContratos
     }));
     setSaved(true);
-    setTimeout(() => setSaved(false), 3000);
+    setTimeout(() => setSaved(false), 2500);
+  };
+
+  const handleAddOperador = async () => {
+    if (!novoNome.trim()) {
+      alert("Informe o nome do operador.");
+      return;
+    }
+
+    await supabase.from("operadores_app").insert({
+      nome: novoNome.trim(),
+      email: novoEmail.trim() || null,
+      perfil: novoPerfil,
+      ativo: true
+    });
+
+    setNovoNome("");
+    setNovoEmail("");
+    fetchOperadores();
+  };
+
+  const handleDeleteOperador = async (id: number) => {
+    if (!confirm("Remover este operador?")) return;
+    await supabase.from("operadores_app").delete().eq("id", id);
+    fetchOperadores();
   };
 
   return (
-    <div className="flex-1 flex flex-col h-full bg-[#f4f7f6]">
-      <header className="bg-white border-b border-slate-200 px-8 py-6 flex justify-between items-center shrink-0">
+    <div className="flex-1 flex flex-col h-full bg-[#f8fafc] text-slate-900">
+      <header className="h-16 bg-white border-b border-slate-200/80 px-8 flex justify-between items-center shrink-0">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">Configurações do Sistema</h1>
-          <p className="text-slate-500 text-sm mt-1">Parâmetros operacionais, dados da empresa e preferências do discador.</p>
+          <h1 className="text-xl font-bold text-slate-900">Configurações Gerais</h1>
+          <p className="text-slate-500 text-xs mt-0.5">Gestão de equipe, metas operacionais e parâmetros da empresa.</p>
         </div>
         <button 
-          onClick={handleSave}
-          className="flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg font-bold text-sm shadow-sm transition"
+          onClick={handleSaveConfig}
+          className="flex items-center space-x-1.5 bg-blue-600 hover:bg-blue-700 text-white px-4 py-1.5 rounded-lg font-bold text-xs shadow-xs transition"
         >
-          <Save size={16} />
-          <span>Salvar Configurações</span>
+          <Save size={14} />
+          <span>Salvar Parâmetros</span>
         </button>
       </header>
 
-      <div className="flex-1 p-8 overflow-y-auto">
+      <div className="flex-1 p-8 overflow-y-auto space-y-6">
         <div className="max-w-4xl mx-auto space-y-6">
           {saved && (
-            <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 p-4 rounded-xl flex items-center space-x-2 text-sm font-semibold">
-              <CheckCircle size={18} className="text-emerald-600" />
-              <span>Configurações salvas e aplicadas com sucesso!</span>
+            <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 p-3 rounded-xl flex items-center space-x-2 text-xs font-semibold">
+              <CheckCircle2 size={16} className="text-emerald-600" />
+              <span>Parâmetros da operação salvos com sucesso!</span>
             </div>
           )}
 
-          {/* Dados da Empresa */}
-          <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm space-y-4">
-            <h3 className="text-base font-bold text-slate-800 flex items-center space-x-2">
-              <Building className="text-blue-600" size={18} />
-              <span>Identificação da Operação / Empresa</span>
+          {/* Dados da Empresa e Promotora */}
+          <div className="bg-white border border-slate-200/80 rounded-xl p-6 shadow-xs space-y-4">
+            <h3 className="text-sm font-bold text-slate-900 flex items-center space-x-2">
+              <Building className="text-blue-600" size={16} />
+              <span>Identificação da Empresa & Promotora</span>
             </h3>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="text-xs font-bold text-slate-700 block mb-1">Nome Fantasia da Empresa:</label>
+                <label className="text-[11px] font-bold text-slate-600 block mb-1">Nome da Empresa / Correspondente:</label>
                 <input 
                   type="text" 
                   value={empresaNome}
                   onChange={e => setEmpresaNome(e.target.value)}
-                  className="w-full border border-slate-200 p-2.5 rounded-lg text-sm outline-none focus:border-blue-500 font-semibold text-slate-800"
+                  className="w-full border border-slate-200 p-2.5 rounded-lg text-xs outline-none focus:border-blue-500 font-semibold"
                 />
               </div>
 
               <div>
-                <label className="text-xs font-bold text-slate-700 block mb-1">Nome do Operador Principal:</label>
+                <label className="text-[11px] font-bold text-slate-600 block mb-1">Promotora Vinculada:</label>
                 <input 
                   type="text" 
-                  value={operadorNome}
-                  onChange={e => setOperadorNome(e.target.value)}
-                  className="w-full border border-slate-200 p-2.5 rounded-lg text-sm outline-none focus:border-blue-500 font-semibold text-slate-800"
+                  value={promotora}
+                  onChange={e => setPromotora(e.target.value)}
+                  className="w-full border border-slate-200 p-2.5 rounded-lg text-xs outline-none focus:border-blue-500 font-semibold text-blue-700"
                 />
               </div>
             </div>
           </div>
 
-          {/* Preferências do Discador */}
-          <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm space-y-4">
-            <h3 className="text-base font-bold text-slate-800 flex items-center space-x-2">
-              <Phone className="text-emerald-600" size={18} />
-              <span>Regras de Discagem e Telefonia</span>
+          {/* Metas da Operação */}
+          <div className="bg-white border border-slate-200/80 rounded-xl p-6 shadow-xs space-y-4">
+            <h3 className="text-sm font-bold text-slate-900 flex items-center space-x-2">
+              <Target className="text-emerald-600" size={16} />
+              <span>Metas Diárias de Produção</span>
             </h3>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="text-xs font-bold text-slate-700 block mb-1">DDD Local Padrão:</label>
+                <label className="text-[11px] font-bold text-slate-600 block mb-1">Meta de Ligações / Dia:</label>
                 <input 
-                  type="text" 
-                  value={dddPadrao}
-                  onChange={e => setDddPadrao(e.target.value)}
-                  className="w-full border border-slate-200 p-2.5 rounded-lg text-sm outline-none focus:border-blue-500 font-mono"
+                  type="number" 
+                  value={metaLigacoes}
+                  onChange={e => setMetaLigacoes(e.target.value)}
+                  className="w-full border border-slate-200 p-2.5 rounded-lg text-xs outline-none focus:border-blue-500 font-mono font-bold"
                 />
-                <p className="text-[11px] text-slate-400 mt-1">Usado caso o número importado não tenha DDD preenchido.</p>
               </div>
 
-              <div className="flex items-center space-x-3 pt-6">
+              <div>
+                <label className="text-[11px] font-bold text-slate-600 block mb-1">Meta de Contratos Fechados / Dia:</label>
                 <input 
-                  type="checkbox" 
-                  id="autonext"
-                  checked={autoNext}
-                  onChange={e => setAutoNext(e.target.checked)}
-                  className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500"
+                  type="number" 
+                  value={metaContratos}
+                  onChange={e => setMetaContratos(e.target.value)}
+                  className="w-full border border-slate-200 p-2.5 rounded-lg text-xs outline-none focus:border-blue-500 font-mono font-bold text-emerald-700"
                 />
-                <label htmlFor="autonext" className="text-sm font-semibold text-slate-700 cursor-pointer">
-                  Avançar para o próximo lead automaticamente após tabular
-                </label>
               </div>
             </div>
           </div>
 
-          {/* SaaS & Versão */}
-          <div className="bg-slate-50 border border-slate-200 rounded-xl p-6 flex justify-between items-center text-xs text-slate-500">
-            <div>
-              <p className="font-bold text-slate-700">AK Cloud Talk • Enterprise Dialer</p>
-              <p className="mt-0.5">Versão 3.1.0 • Pronto para expansão Multi-Tenant</p>
+          {/* Gestão de Equipe e Operadores */}
+          <div className="bg-white border border-slate-200/80 rounded-xl p-6 shadow-xs space-y-4">
+            <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+              <h3 className="text-sm font-bold text-slate-900 flex items-center space-x-2">
+                <Users className="text-purple-600" size={16} />
+                <span>Equipe de Atendimento & Operadores ({operadores.length})</span>
+              </h3>
             </div>
-            <div className="bg-white border border-slate-200 px-3 py-1.5 rounded-lg font-mono font-bold text-slate-600">
-              Banco: Supabase (Conectado)
+
+            {/* Adicionar Operador */}
+            <div className="bg-slate-50 p-3.5 rounded-lg border border-slate-200/60 grid grid-cols-1 md:grid-cols-4 gap-2.5">
+              <input 
+                type="text" 
+                placeholder="Nome do Atendente"
+                value={novoNome}
+                onChange={e => setNovoNome(e.target.value)}
+                className="bg-white border border-slate-200 p-2 rounded-lg text-xs outline-none"
+              />
+              <input 
+                type="email" 
+                placeholder="E-mail (opcional)"
+                value={novoEmail}
+                onChange={e => setNovoEmail(e.target.value)}
+                className="bg-white border border-slate-200 p-2 rounded-lg text-xs outline-none"
+              />
+              <select 
+                value={novoPerfil}
+                onChange={e => setNovoPerfil(e.target.value)}
+                className="bg-white border border-slate-200 p-2 rounded-lg text-xs outline-none font-semibold text-slate-700"
+              >
+                <option value="operador">Operador (Apenas Discador)</option>
+                <option value="admin">Administrador (Total)</option>
+              </select>
+              <button 
+                onClick={handleAddOperador}
+                className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs py-2 rounded-lg transition"
+              >
+                + Adicionar Atendente
+              </button>
+            </div>
+
+            {/* Lista de Operadores */}
+            <div className="space-y-2 pt-2">
+              {operadores.map(op => (
+                <div key={op.id} className="flex justify-between items-center p-3 rounded-lg border border-slate-100 bg-white hover:bg-slate-50">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center font-bold text-xs text-slate-600">
+                      {op.nome.charAt(0)}
+                    </div>
+                    <div>
+                      <p className="font-bold text-xs text-slate-800">{op.nome}</p>
+                      <p className="text-[10px] text-slate-400">{op.email || "Sem e-mail"}</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center space-x-3">
+                    <span className="text-[10px] font-bold uppercase tracking-wider bg-slate-100 px-2 py-0.5 rounded text-slate-600">
+                      {op.perfil}
+                    </span>
+                    <button 
+                      onClick={() => handleDeleteOperador(op.id)}
+                      className="text-slate-300 hover:text-rose-600 transition"
+                      title="Remover operador"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+              {operadores.length === 0 && (
+                <p className="text-center py-4 text-xs text-slate-400">Nenhum operador cadastrado ainda além de você.</p>
+              )}
             </div>
           </div>
+
         </div>
       </div>
     </div>

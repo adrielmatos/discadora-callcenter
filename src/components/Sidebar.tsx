@@ -3,9 +3,9 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { 
-  LayoutDashboard, PhoneCall, Users, FileText, 
-  Settings, PhoneOff, HeadphonesIcon, Calendar,
-  BarChart2, Target, Phone, MessageCircle
+  LayoutDashboard, PhoneCall, Kanban, FileText, 
+  Settings, PhoneOff, Calendar,
+  BarChart3, Target, Phone, MessageSquare
 } from "lucide-react";
 
 export default function Sidebar() {
@@ -13,71 +13,77 @@ export default function Sidebar() {
 
   const menu = [
     { name: "Visão Geral", path: "/", icon: LayoutDashboard },
-    { name: "Discador Automático", path: "/dialer", icon: HeadphonesIcon },
-    { name: "CRM & Leads", path: "/leads", icon: Users },
-    { name: "Resultados (Relatórios)", path: "/resultados", icon: BarChart2 },
-    { name: "Campanhas Ativas", path: "/campanhas", icon: Target },
+    { name: "Discador de Chamadas", path: "/dialer", icon: PhoneCall },
+    { name: "CRM Pipeline", path: "/leads", icon: Kanban },
+    { name: "Resultados & Métricas", path: "/resultados", icon: BarChart3 },
+    { name: "Campanhas", path: "/campanhas", icon: Target },
     { name: "Agenda de Retornos", path: "/retornos", icon: Calendar },
-    { name: "Telefonia (VoIP/PABX)", path: "/telefonia", icon: Phone },
-    { name: "Omnichannel (WhatsApp)", path: "/omnichannel", icon: MessageCircle },
+    { name: "Telefonia", path: "/telefonia", icon: Phone },
+    { name: "Omnichannel", path: "/omnichannel", icon: MessageSquare },
     { name: "Não Perturbe (DND)", path: "/dnd", icon: PhoneOff },
-    { name: "Scripts de Ligação", path: "/scripts", icon: FileText },
+    { name: "Scripts de Atendimento", path: "/scripts", icon: FileText },
     { name: "Configurações", path: "/settings", icon: Settings },
   ];
 
   return (
-    <aside className="w-64 bg-[#0a0f1c] border-r border-slate-800 flex flex-col h-screen text-slate-300">
-      {/* Logo */}
-      <div className="h-16 flex items-center px-6 border-b border-slate-800 shrink-0">
-        <div className="flex items-center space-x-2">
-          <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-            <HeadphonesIcon size={18} className="text-white" />
+    <aside className="w-64 bg-[#0a0e17] border-r border-slate-800/80 flex flex-col h-screen text-slate-400 select-none">
+      {/* Brand Header */}
+      <div className="h-16 flex items-center px-6 border-b border-slate-800/60 shrink-0">
+        <div className="flex items-center space-x-3">
+          <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white font-bold text-sm tracking-wider shadow-sm">
+            AK
           </div>
-          <span className="text-white font-bold text-lg tracking-wide">AK<span className="text-blue-500">Cloud</span></span>
+          <div>
+            <h1 className="text-white font-bold text-sm tracking-tight leading-tight">A&K Soluções</h1>
+            <p className="text-[10px] text-blue-400 font-semibold tracking-wider uppercase">BRS Promotora</p>
+          </div>
         </div>
       </div>
 
-      {/* User Profile */}
-      <div className="p-4 border-b border-slate-800 shrink-0">
-        <div className="flex items-center space-x-3 bg-slate-800/50 p-3 rounded-xl border border-slate-700">
-          <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-blue-600 to-blue-400 flex items-center justify-center text-white font-bold shadow-lg">
+      {/* User Status Card */}
+      <div className="px-4 py-3 border-b border-slate-800/40 shrink-0">
+        <div className="flex items-center space-x-3 bg-slate-900/60 px-3 py-2 rounded-lg border border-slate-800/60">
+          <div className="w-8 h-8 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-white font-semibold text-xs">
             A
           </div>
           <div className="flex-1 overflow-hidden">
-            <p className="text-white font-semibold text-sm truncate">Adriel</p>
-            <p className="text-xs text-green-400 flex items-center space-x-1">
-              <span className="w-1.5 h-1.5 bg-green-400 rounded-full"></span>
-              <span>Online (Proprietário)</span>
+            <p className="text-slate-200 font-semibold text-xs truncate">Adriel</p>
+            <p className="text-[10px] text-emerald-400 flex items-center space-x-1.5 font-medium">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+              <span>Online • Correspondente</span>
             </p>
           </div>
         </div>
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-1 custom-scrollbar">
-        <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 px-3">Menu Principal</div>
+      <nav className="flex-1 overflow-y-auto py-3 px-3 space-y-0.5 custom-scrollbar">
+        <div className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider px-3 mb-1.5">
+          Operação
+        </div>
         {menu.map((item) => {
           const isActive = pathname === item.path;
           return (
             <Link 
               key={item.path} 
               href={item.path}
-              className={`flex items-center space-x-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
+              className={`flex items-center space-x-3 px-3 py-2 rounded-lg text-xs font-semibold transition-all ${
                 isActive 
-                  ? "bg-blue-600 text-white shadow-md shadow-blue-900/20" 
-                  : "text-slate-400 hover:bg-slate-800/80 hover:text-slate-200"
+                  ? "bg-blue-600 text-white shadow-sm" 
+                  : "text-slate-400 hover:bg-slate-800/50 hover:text-slate-100"
               }`}
             >
-              <item.icon size={18} className={isActive ? "text-white" : "text-slate-500"} />
+              <item.icon size={16} className={isActive ? "text-white" : "text-slate-400"} />
               <span>{item.name}</span>
             </Link>
           );
         })}
       </nav>
 
-      <div className="p-4 border-t border-slate-800 text-center shrink-0">
-        <p className="text-xs text-slate-500">A&K Soluções Financeiras</p>
-        <p className="text-[10px] text-slate-600 mt-1">Enterprise Dialer v3.0</p>
+      {/* Footer */}
+      <div className="p-4 border-t border-slate-800/60 text-center shrink-0">
+        <p className="text-[11px] font-semibold text-slate-400">Plataforma de Crédito v3.2</p>
+        <p className="text-[10px] text-slate-500">Correspondente Autorizado BRS</p>
       </div>
     </aside>
   );
