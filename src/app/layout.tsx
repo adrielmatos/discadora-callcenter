@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import Sidebar from "@/components/Sidebar";
 
 export const metadata: Metadata = {
-  title: "Discadora Call Center SaaS",
-  description: "Sistema de discagem progressiva e gestão de leads",
+  title: "AK Cloud Talk - Enterprise Dialer",
+  description: "Plataforma avançada de call center e CRM",
 };
 
 export default function RootLayout({
@@ -13,8 +14,11 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="pt-BR">
-      <body className="antialiased bg-gray-50 text-gray-900">
-        {children}
+      <body className="antialiased bg-[#f8fafc] text-slate-900 flex h-screen overflow-hidden">
+        <Sidebar />
+        <div className="flex-1 flex flex-col h-screen overflow-hidden relative">
+          {children}
+        </div>
       </body>
     </html>
   );
