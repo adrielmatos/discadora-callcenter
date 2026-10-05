@@ -212,14 +212,14 @@ export default function DialerWorkspace() {
     if (!activeLead) return;
     const cleanPhone = activeLead.telefone.replace(/\D/g, "");
     const text = encodeURIComponent(
-      `Olá, ${activeLead.nome}! Sou o Adriel da A&K, correspondente autorizado BRS Promotora. Conforme conversamos, segue a simulação referente ao seu limite de ${activeLead.margem_disponivel || "crédito liberado"} pelo banco ${activeLead.banco || "parceiro"}. Ficou com alguma dúvida nas condições?`
+      `Olá, ${activeLead.nome}! Sou o Adriel da A&K Soluções Financeiras. Conforme conversamos, segue a simulação referente ao seu limite de ${activeLead.margem_disponivel || "crédito liberado"} pelo banco ${activeLead.banco || "parceiro"}. Ficou com alguma dúvida nas condições?`
     );
     window.open(`https://wa.me/55${cleanPhone}?text=${text}`, "_blank");
   };
 
   // Encontra script ativo
   const currentScript = scriptsList.find(s => s.produto === selectedScriptProduct) || scriptsList[0] || {
-    abertura: "Olá, [NOME], tudo bem? Aqui é da A&K, correspondente BRS Promotora.",
+    abertura: "Olá, [NOME], tudo bem? Aqui é o Adriel da A&K Soluções Financeiras.",
     motivo: "Estou em contato sobre as condições aprovadas no [BANCO].",
     qualificacao: "Gostaria de conhecer os valores?",
     fechamento: "Posso enviar a simulação de [VALOR] pelo WhatsApp?"

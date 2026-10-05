@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { FileText, Save, CheckCircle2, Plus, Trash2, Sparkles } from "lucide-react";
+import { FileText, Save, CheckCircle2, Plus, Trash2, Sparkles, Copy, Layers } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
 export default function ScriptsPage() {
@@ -56,6 +56,22 @@ export default function ScriptsPage() {
     fetchScripts();
   };
 
+  // Propagar Script Mestre para todos os outros produtos
+  const handlePropagateMaster = async () => {
+    if (!confirm("Deseja aplicar a Abertura e o Fechamento deste Script Mestre para todos os outros produtos? Os motivos específicos de cada produto serão preservados.")) return;
+
+    const updates = scripts.filter(s => s.id !== selectedScript.id).map(s => 
+      supabase.from("scripts_ligacao").update({
+        abertura,
+        fechamento
+      }).eq("id", s.id)
+    );
+
+    await Promise.all(updates);
+    alert("Script Mestre propagado com sucesso para todos os produtos da central!");
+    fetchScripts();
+  };
+
   const handleCreateNew = async () => {
     if (!newProduto.trim()) {
       alert("Informe o nome do produto.");
@@ -64,10 +80,10 @@ export default function ScriptsPage() {
 
     const { data, error } = await supabase.from("scripts_ligacao").insert({
       produto: newProduto.trim(),
-      abertura: `Olá, [NOME], tudo bem? Aqui é da A&K, correspondente autorizado BRS Promotora.`,
-      motivo: `Estou em contato a respeito da liberação de ${newProduto} no [BANCO].`,
-      qualificacao: `Você gostaria de conhecer os prazos e taxas especiais disponíveis para você?`,
-      fechamento: `Posso enviar o cálculo de [VALOR] no seu WhatsApp para você analisar?`
+      abertura: `Olá, [NOME], tudo bem? Aqui é o Adriel da A&K Soluções Financeiras.`,
+      motivo: `Estou entrando em contato referente à liberação de ${newProduto} pelo [BANCO].`,
+      qualificacao: `Gostaria de conhecer os prazos e condições disponíveis?`,
+      fechamento: `Posso formatar a proposta de [VALOR] e te enviar pelo WhatsApp para analisar?`
     }).select().single();
 
     if (error) {
@@ -83,22 +99,24 @@ export default function ScriptsPage() {
 
   const handleDelete = async (id: number) => {
     if (scripts.length <= 1) {
-      alert("É necessário manter ao menos um roteiro padrão no sistema.");
+      alert("É necessário manter ao menos um roteiro no sistema.");
       return;
     }
-    if (!confirm("Tem certeza que deseja excluir este roteiro?")) return;
+    if (!confirm("Tem certeza que deseja excluir este roteiro de produto?")) return;
 
     await supabase.from("scripts_ligacao").delete().eq("id", id);
     setSelectedScript(null);
     fetchScripts();
   };
 
+  const isMaster = selectedScript?.produto?.toLowerCase().includes("mestre") || selectedScript?.produto?.toLowerCase().includes("geral");
+
   return (
     <div className="flex-1 flex flex-col h-full bg-[#f8fafc] text-slate-900">
       <header className="h-16 bg-white border-b border-slate-200/80 px-8 flex justify-between items-center shrink-0">
         <div>
-          <h1 className="text-xl font-bold text-slate-900">Scripts & Roteiros de Vendas</h1>
-          <p className="text-slate-500 text-xs mt-0.5">Roteiros operacionais BRS Promotora vinculados automaticamente aos produtos.</p>
+          <h1 className="text-xl font-bold text-slate-900">Catálogo de Roteiros & Scripts</h1>
+          <p className="text-slate-500 text-xs mt-0.5">Roteiros operacionais de crédito consignado, cartões, FGTS e garantias.</p>
         </div>
         <button 
           onClick={() => setShowNewModal(true)}
@@ -111,10 +129,13 @@ export default function ScriptsPage() {
 
       <div className="flex-1 flex overflow-hidden">
         {/* Sidebar de Roteiros */}
-        <div className="w-64 bg-white border-r border-slate-200/80 overflow-y-auto p-3 space-y-1 shrink-0">
-          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-2 block mb-2">Roteiros Cadastrados</span>
+        <div className="w-72 bg-white border-r border-slate-200/80 overflow-y-auto p-3 space-y-1 shrink-0">
+          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-2 block mb-2">
+            Produtos Cadastrados ({scripts.length})
+          </span>
           {scripts.map(s => {
             const isSelected = selectedScript?.id === s.id;
+            const isItemMaster = s.produto?.toLowerCase().includes("mestre");
             return (
               <div 
                 key={s.id}
@@ -122,20 +143,22 @@ export default function ScriptsPage() {
                 className={`w-full text-left px-3 py-2.5 rounded-lg text-xs font-semibold cursor-pointer transition flex items-center justify-between group ${
                   isSelected 
                     ? "bg-blue-50 text-blue-700 border border-blue-200 font-bold" 
-                    : "text-slate-700 hover:bg-slate-50 border border-transparent"
+                    : isItemMaster ? "bg-amber-50/50 text-amber-900 border border-amber-200/60" : "text-slate-700 hover:bg-slate-50 border border-transparent"
                 }`}
               >
                 <div className="flex items-center space-x-2 truncate">
-                  <FileText size={14} className={isSelected ? "text-blue-600" : "text-slate-400"} />
+                  {isItemMaster ? <Sparkles size={14} className="text-amber-500 shrink-0" /> : <FileText size={14} className={isSelected ? "text-blue-600" : "text-slate-400"} />}
                   <span className="truncate">{s.produto}</span>
                 </div>
-                <button 
-                  onClick={(e) => { e.stopPropagation(); handleDelete(s.id); }}
-                  className="text-slate-300 hover:text-rose-600 opacity-0 group-hover:opacity-100 p-0.5 transition"
-                  title="Excluir roteiro"
-                >
-                  <Trash2 size={12} />
-                </button>
+                {!isItemMaster && (
+                  <button 
+                    onClick={(e) => { e.stopPropagation(); handleDelete(s.id); }}
+                    className="text-slate-300 hover:text-rose-600 opacity-0 group-hover:opacity-100 p-0.5 transition"
+                    title="Excluir roteiro"
+                  >
+                    <Trash2 size={12} />
+                  </button>
+                )}
               </div>
             );
           })}
@@ -147,11 +170,24 @@ export default function ScriptsPage() {
             <div className="bg-white border border-slate-200/80 rounded-xl shadow-xs p-6 max-w-3xl space-y-5">
               <div className="flex justify-between items-center border-b border-slate-100 pb-3">
                 <div>
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-blue-600 block">Produto</span>
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-blue-600 block">
+                    {isMaster ? "Script Mestre / Global" : "Roteiro Específico"}
+                  </span>
                   <h2 className="text-base font-bold text-slate-900">{selectedScript.produto}</h2>
                 </div>
 
-                <div className="flex items-center space-x-3">
+                <div className="flex items-center space-x-2">
+                  {isMaster && (
+                    <button 
+                      onClick={handlePropagateMaster}
+                      className="flex items-center space-x-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 px-3 py-1.5 rounded-lg font-bold text-xs transition"
+                      title="Aplica a Abertura e o Fechamento deste script em todos os outros produtos"
+                    >
+                      <Layers size={13} />
+                      <span>Propagar para Todos</span>
+                    </button>
+                  )}
+
                   {savedSuccess && (
                     <span className="text-emerald-600 font-semibold text-xs flex items-center space-x-1">
                       <CheckCircle2 size={14} />
@@ -163,55 +199,55 @@ export default function ScriptsPage() {
                     className="flex items-center space-x-1.5 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-1.5 rounded-lg font-bold text-xs shadow-xs transition"
                   >
                     <Save size={13} />
-                    <span>Salvar Alterações</span>
+                    <span>Salvar</span>
                   </button>
                 </div>
               </div>
 
               <div className="bg-slate-50 border border-slate-200/60 rounded-lg p-2.5 text-[11px] text-slate-600">
-                Variáveis disponíveis: <code className="bg-white px-1.5 py-0.5 rounded border border-slate-200 font-bold">[NOME]</code>, <code className="bg-white px-1.5 py-0.5 rounded border border-slate-200 font-bold">[BANCO]</code> e <code className="bg-white px-1.5 py-0.5 rounded border border-slate-200 font-bold">[VALOR]</code>.
+                Variáveis dinâmicas: <code className="bg-white px-1.5 py-0.5 rounded border border-slate-200 font-bold">[NOME]</code>, <code className="bg-white px-1.5 py-0.5 rounded border border-slate-200 font-bold">[BANCO]</code> e <code className="bg-white px-1.5 py-0.5 rounded border border-slate-200 font-bold">[VALOR]</code>.
               </div>
 
               <div className="space-y-3.5">
                 <div>
-                  <label className="text-[11px] font-bold text-slate-600 block mb-1">1. Abertura:</label>
+                  <label className="text-[11px] font-bold text-slate-600 block mb-1">1. Abertura do Atendimento:</label>
                   <textarea 
                     value={abertura}
                     onChange={e => setAbertura(e.target.value)}
-                    className="w-full border border-slate-200 p-2.5 rounded-lg text-xs h-20 outline-none focus:border-blue-500 text-slate-800"
+                    className="w-full border border-slate-200 p-2.5 rounded-lg text-xs h-20 outline-none focus:border-blue-500 text-slate-800 leading-relaxed"
                   />
                 </div>
 
                 <div>
-                  <label className="text-[11px] font-bold text-slate-600 block mb-1">2. Motivo da Ligação:</label>
+                  <label className="text-[11px] font-bold text-slate-600 block mb-1">2. Motivo da Ligação (Apresentação do Produto):</label>
                   <textarea 
                     value={motivo}
                     onChange={e => setMotivo(e.target.value)}
-                    className="w-full border border-slate-200 p-2.5 rounded-lg text-xs h-20 outline-none focus:border-blue-500 text-slate-800"
+                    className="w-full border border-slate-200 p-2.5 rounded-lg text-xs h-20 outline-none focus:border-blue-500 text-slate-800 leading-relaxed"
                   />
                 </div>
 
                 <div>
-                  <label className="text-[11px] font-bold text-slate-600 block mb-1">3. Qualificação (opcional):</label>
+                  <label className="text-[11px] font-bold text-slate-600 block mb-1">3. Qualificação & Sondagem:</label>
                   <textarea 
                     value={qualificacao}
                     onChange={e => setQualificacao(e.target.value)}
-                    className="w-full border border-slate-200 p-2.5 rounded-lg text-xs h-16 outline-none focus:border-blue-500 text-slate-800"
+                    className="w-full border border-slate-200 p-2.5 rounded-lg text-xs h-16 outline-none focus:border-blue-500 text-slate-800 leading-relaxed"
                   />
                 </div>
 
                 <div>
-                  <label className="text-[11px] font-bold text-slate-600 block mb-1">4. Fechamento e Oferta:</label>
+                  <label className="text-[11px] font-bold text-slate-600 block mb-1">4. Fechamento e Simulação:</label>
                   <textarea 
                     value={fechamento}
                     onChange={e => setFechamento(e.target.value)}
-                    className="w-full border border-slate-200 p-2.5 rounded-lg text-xs h-20 outline-none focus:border-blue-500 text-slate-800"
+                    className="w-full border border-slate-200 p-2.5 rounded-lg text-xs h-20 outline-none focus:border-blue-500 text-slate-800 leading-relaxed"
                   />
                 </div>
               </div>
             </div>
           ) : (
-            <div className="text-center py-16 text-slate-400 text-xs">Carregando roteiros...</div>
+            <div className="text-center py-16 text-slate-400 text-xs">Carregando catálogo de roteiros...</div>
           )}
         </div>
       </div>
@@ -226,7 +262,7 @@ export default function ScriptsPage() {
               <label className="text-[11px] font-bold text-slate-600 block mb-1">Nome do Produto:</label>
               <input 
                 type="text" 
-                placeholder="Ex: Cartão Benefício, Refinanciamento..."
+                placeholder="Ex: Empréstimo com Débito em Conta"
                 value={newProduto}
                 onChange={e => setNewProduto(e.target.value)}
                 className="w-full border border-slate-200 p-2 rounded-lg text-xs outline-none focus:border-blue-500"

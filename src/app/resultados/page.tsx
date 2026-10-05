@@ -70,7 +70,7 @@ export default function ResultadosPage() {
       <header className="h-16 bg-white border-b border-slate-200/80 px-8 flex justify-between items-center shrink-0">
         <div>
           <h1 className="text-xl font-bold text-slate-900">Resultados & Métricas da Operação</h1>
-          <p className="text-slate-500 text-xs mt-0.5">Acompanhamento de conversão e produção diária BRS Promotora.</p>
+          <p className="text-slate-500 text-xs mt-0.5">Acompanhamento de conversão e produção diária • A&K Soluções Financeiras.</p>
         </div>
 
         {/* Filtro de Período */}

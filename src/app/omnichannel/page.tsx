@@ -9,7 +9,7 @@ export default function OmnichannelPage() {
   const [apiToken, setApiToken] = useState("");
   const [instanceName, setInstanceName] = useState("");
   const [defaultMessage, setDefaultMessage] = useState(
-    "Olá, [NOME]! Sou o Adriel da A&K Soluções, correspondente autorizado BRS Promotora. Conforme conversamos, segue a sua simulação de crédito aprovada com margem de [VALOR] pelo banco [BANCO]. Ficou com alguma dúvida nas condições?"
+    "Olá, [NOME]! Sou o Adriel da A&K Soluções Financeiras. Conforme conversamos, segue a sua simulação de crédito com margem de [VALOR] pelo banco [BANCO]. Ficou com alguma dúvida nas condições?"
   );
   const [saved, setSaved] = useState(false);
 
@@ -44,7 +44,7 @@ export default function OmnichannelPage() {
       <header className="h-16 bg-white border-b border-slate-200/80 px-8 flex justify-between items-center shrink-0">
         <div>
           <h1 className="text-xl font-bold text-slate-900">Omnichannel & WhatsApp</h1>
-          <p className="text-slate-500 text-xs mt-0.5">Disparo de propostas, mensagens de simulação e canais de atendimento BRS.</p>
+          <p className="text-slate-500 text-xs mt-0.5">Disparo de propostas, mensagens de simulação e canais de atendimento A&K.</p>
         </div>
         <button 
           onClick={handleSave}

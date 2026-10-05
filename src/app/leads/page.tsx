@@ -3,7 +3,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { 
   Upload, Search, Download, RefreshCw, Kanban, Table, 
-  Building2, Phone, ArrowRight, Tag, CheckCircle2
+  ArrowRight, CheckCircle2, PhoneOff, XCircle, AlertCircle, User, MessageSquare
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import * as XLSX from "xlsx";
@@ -30,7 +30,7 @@ export default function LeadsCRM() {
 
   const fetchLeads = async () => {
     setLoading(true);
-    const { data } = await supabase.from("leads").select("*").order("id", { ascending: false }).limit(250);
+    const { data } = await supabase.from("leads").select("*").order("id", { ascending: false }).limit(300);
     if (data) setLeads(data);
     setLoading(false);
   };
@@ -53,7 +53,7 @@ export default function LeadsCRM() {
         const data = XLSX.utils.sheet_to_json(ws) as any[];
 
         const formattedLeads = data.map((row) => {
-          const rawProduto = String(row["Produto"] || row["PRODUTO"] || row["produto"] || "Saque FGTS");
+          const rawProduto = String(row["Produto"] || row["PRODUTO"] || row["produto"] || row["Operação"] || row["Convênio"] || "Consignado");
           return {
             nome: row["Nome"] || row["NOME"] || row["cliente"] || row["Cliente"] || "Sem Nome",
             telefone: String(row["Telefone"] || row["TELEFONE"] || row["Celular"] || row["celular"] || "").replace(/\D/g, ""),
@@ -106,12 +106,16 @@ export default function LeadsCRM() {
     (l.cpf && l.cpf.includes(searchTerm))
   );
 
+  // Estágios do Pipeline correspondentes à Tabulação (sem Retorno que tem tela própria)
   const stages = [
-    { id: "fila", label: "Fila de Espera", color: "border-slate-300", bg: "bg-slate-100/60" },
-    { id: "contato", label: "Em Atendimento", color: "border-blue-400", bg: "bg-blue-50/50" },
-    { id: "simulacao", label: "Simulação Enviada", color: "border-teal-400", bg: "bg-teal-50/50" },
-    { id: "proposta", label: "Proposta Emitida", color: "border-amber-400", bg: "bg-amber-50/50" },
-    { id: "contrato", label: "Contrato Fechado", color: "border-emerald-500", bg: "bg-emerald-50/50" }
+    { id: "fila", label: "Fila de Espera", color: "border-slate-300" },
+    { id: "Interessado", label: "Interessado", color: "border-blue-400" },
+    { id: "Simulação", label: "Simulação", color: "border-cyan-400" },
+    { id: "Proposta", label: "Proposta", color: "border-teal-400" },
+    { id: "Contrato", label: "Contrato Fechado", color: "border-emerald-500" },
+    { id: "Não atendeu", label: "Não Atendeu", color: "border-orange-400" },
+    { id: "Não interessado", label: "Não Interessado", color: "border-rose-400" },
+    { id: "Sem perfil", label: "Sem Perfil / Inválido", color: "border-slate-400" },
   ];
 
   return (
@@ -119,12 +123,11 @@ export default function LeadsCRM() {
       {/* Header */}
       <header className="h-16 bg-white border-b border-slate-200/80 px-8 flex justify-between items-center shrink-0">
         <div>
-          <h1 className="text-xl font-bold text-slate-900">CRM & Funil de Vendas</h1>
-          <p className="text-slate-500 text-xs mt-0.5">Gestão de oportunidades e pipeline de crédito BRS Promotora.</p>
+          <h1 className="text-xl font-bold text-slate-900">CRM & Funil de Tabulações</h1>
+          <p className="text-slate-500 text-xs mt-0.5">Pipeline de negociação com todos os status de tabulação do discador.</p>
         </div>
 
         <div className="flex items-center space-x-3">
-          {/* View Mode Toggle */}
           <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200 text-xs">
             <button 
               onClick={() => setViewMode("kanban")}
@@ -138,7 +141,7 @@ export default function LeadsCRM() {
               className={`flex items-center space-x-1 px-3 py-1 rounded-md font-semibold transition ${viewMode === "table" ? "bg-white shadow-xs text-blue-600" : "text-slate-500"}`}
             >
               <Table size={13} />
-              <span>Lista</span>
+              <span>Lista Geral</span>
             </button>
           </div>
 
@@ -155,7 +158,7 @@ export default function LeadsCRM() {
             className="flex items-center space-x-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 px-3 py-1.5 rounded-lg font-semibold text-xs transition"
           >
             <Download size={13} />
-            <span>Exportar</span>
+            <span>Exportar Excel</span>
           </button>
 
           <button 
@@ -183,19 +186,24 @@ export default function LeadsCRM() {
         </div>
 
         <span className="text-xs text-slate-500 font-medium">
-          {filteredLeads.length} leads no pipeline
+          {filteredLeads.length} leads no sistema
         </span>
       </div>
 
       {/* Main Content Area */}
       <div className="flex-1 p-6 overflow-hidden flex flex-col">
         {viewMode === "kanban" ? (
-          /* Visual Pipeline Kanban */
-          <div className="flex-1 flex space-x-4 overflow-x-auto pb-4 custom-scrollbar">
+          /* Visual Pipeline Kanban com todas as tabulações */
+          <div className="flex-1 flex space-x-3.5 overflow-x-auto pb-4 custom-scrollbar">
             {stages.map(st => {
-              const stageLeads = filteredLeads.filter(l => (l.etapa_crm || "fila") === st.id);
+              const stageLeads = filteredLeads.filter(l => {
+                const currentStage = l.etapa_crm || (l.status === "pendente" ? "fila" : l.ultima_tabulacao || "fila");
+                return currentStage.toLowerCase() === st.id.toLowerCase() || 
+                       (st.id === "Sem perfil" && (currentStage === "Sem perfil" || currentStage === "Número inválido"));
+              });
+
               return (
-                <div key={st.id} className="w-72 flex flex-col rounded-xl bg-slate-100/70 border border-slate-200 shrink-0 overflow-hidden">
+                <div key={st.id} className="w-68 flex flex-col rounded-xl bg-slate-100/70 border border-slate-200 shrink-0 overflow-hidden">
                   <div className={`p-3 border-b border-slate-200/80 bg-white flex justify-between items-center ${st.color} border-t-2`}>
                     <span className="text-xs font-bold text-slate-800">{st.label}</span>
                     <span className="text-[11px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">
@@ -203,25 +211,25 @@ export default function LeadsCRM() {
                     </span>
                   </div>
 
-                  <div className="flex-1 p-2.5 overflow-y-auto space-y-2.5 custom-scrollbar">
+                  <div className="flex-1 p-2.5 overflow-y-auto space-y-2 custom-scrollbar">
                     {stageLeads.map(lead => (
-                      <div key={lead.id} className="bg-white p-3.5 rounded-lg border border-slate-200 shadow-xs space-y-2 hover:border-slate-300 transition">
+                      <div key={lead.id} className="bg-white p-3 rounded-lg border border-slate-200 shadow-xs space-y-1.5 hover:border-slate-300 transition">
                         <div className="flex justify-between items-start">
-                          <p className="font-bold text-xs text-slate-900 leading-snug">{lead.nome}</p>
+                          <p className="font-bold text-xs text-slate-900 leading-snug truncate">{lead.nome}</p>
                           <span className="text-[10px] font-mono text-slate-400">#{lead.id}</span>
                         </div>
 
                         <div className="flex items-center justify-between text-[11px] text-slate-500">
                           <span className="font-mono">{lead.telefone}</span>
-                          <span className="text-emerald-700 font-extrabold">{lead.margem_disponivel || "R$ 0"}</span>
+                          <span className="text-emerald-700 font-extrabold">{lead.margem_disponivel || "-"}</span>
                         </div>
 
                         <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[10px] text-slate-500">
-                          <span>{lead.banco || "Banco N/I"}</span>
+                          <span className="truncate max-w-[120px]">{lead.banco || "Banco N/I"}</span>
                           
                           {/* Mover Etapa */}
                           <div className="flex space-x-1">
-                            {st.id !== "contrato" && (
+                            {st.id !== "Contrato" && (
                               <button 
                                 onClick={() => {
                                   const nextIdx = stages.findIndex(s => s.id === st.id) + 1;
@@ -257,7 +265,7 @@ export default function LeadsCRM() {
                     <th className="px-6 py-3">Produto</th>
                     <th className="px-6 py-3">Margem</th>
                     <th className="px-6 py-3">Banco</th>
-                    <th className="px-6 py-3">Etapa no Funil</th>
+                    <th className="px-6 py-3">Status / Tabulação</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -265,10 +273,14 @@ export default function LeadsCRM() {
                     <tr key={l.id} className="hover:bg-slate-50">
                       <td className="px-6 py-3 font-semibold text-slate-800">{l.nome}</td>
                       <td className="px-6 py-3 font-mono">{l.telefone}</td>
-                      <td className="px-6 py-3">{l.produto || "Saque FGTS"}</td>
+                      <td className="px-6 py-3">{l.produto || "Consignado"}</td>
                       <td className="px-6 py-3 text-emerald-600 font-bold">{l.margem_disponivel || "-"}</td>
                       <td className="px-6 py-3">{l.banco || "-"}</td>
-                      <td className="px-6 py-3 font-medium capitalize">{l.etapa_crm || "Fila"}</td>
+                      <td className="px-6 py-3 font-medium">
+                        <span className="bg-slate-100 px-2 py-0.5 rounded text-[11px] font-semibold text-slate-700">
+                          {l.etapa_crm || (l.status === "pendente" ? "Fila" : l.ultima_tabulacao || "Finalizado")}
+                        </span>
+                      </td>
                     </tr>
                   ))}
                 </tbody>

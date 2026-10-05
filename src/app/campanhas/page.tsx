@@ -66,7 +66,7 @@ export default function CampanhasPage() {
       <header className="h-16 bg-white border-b border-slate-200/80 px-8 flex justify-between items-center shrink-0">
         <div>
           <h1 className="text-xl font-bold text-slate-900">Campanhas de Discagem</h1>
-          <p className="text-slate-500 text-xs mt-0.5">Segmentação por produto, convênio e período de atuação BRS Promotora.</p>
+          <p className="text-slate-500 text-xs mt-0.5">Segmentação por produto, convênio e período de atuação • A&K Soluções Financeiras.</p>
         </div>
         <button 
           onClick={() => setShowModal(true)}
@@ -153,7 +153,7 @@ export default function CampanhasPage() {
       {showModal && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-xl p-6 max-w-sm w-full shadow-xl border border-slate-200 space-y-4">
-            <h3 className="text-sm font-bold text-slate-800">Nova Campanha BRS Promotora</h3>
+            <h3 className="text-sm font-bold text-slate-800">Nova Campanha de Discagem</h3>
 
             <div className="space-y-3">
               <div>

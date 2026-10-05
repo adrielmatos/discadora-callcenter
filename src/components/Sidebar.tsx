@@ -35,7 +35,7 @@ export default function Sidebar() {
           </div>
           <div>
             <h1 className="text-white font-bold text-sm tracking-tight leading-tight">A&K Soluções</h1>
-            <p className="text-[10px] text-blue-400 font-semibold tracking-wider uppercase">BRS Promotora</p>
+            <p className="text-[10px] text-blue-400 font-semibold tracking-wider uppercase">Call Center Pro</p>
           </div>
         </div>
       </div>
@@ -50,7 +50,7 @@ export default function Sidebar() {
             <p className="text-slate-200 font-semibold text-xs truncate">Adriel</p>
             <p className="text-[10px] text-emerald-400 flex items-center space-x-1.5 font-medium">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-              <span>Online • Correspondente</span>
+              <span>Administrador • Online</span>
             </p>
           </div>
         </div>
@@ -83,7 +83,7 @@ export default function Sidebar() {
       {/* Footer */}
       <div className="p-4 border-t border-slate-800/60 text-center shrink-0">
         <p className="text-[11px] font-semibold text-slate-400">Plataforma de Crédito v3.2</p>
-        <p className="text-[10px] text-slate-500">Correspondente Autorizado BRS</p>
+        <p className="text-[10px] text-slate-500">A&K Soluções Financeiras</p>
       </div>
     </aside>
   );

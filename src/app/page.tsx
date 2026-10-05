@@ -56,7 +56,7 @@ export default function Dashboard() {
       <header className="h-16 bg-white border-b border-slate-200/80 px-8 flex justify-between items-center shrink-0">
         <div>
           <h1 className="text-xl font-bold text-slate-900">Visão Geral da Operação</h1>
-          <p className="text-slate-500 text-xs mt-0.5">Central de controle e acompanhamento em tempo real • BRS Promotora</p>
+          <p className="text-slate-500 text-xs mt-0.5">Central de controle e acompanhamento em tempo real • A&K Soluções Financeiras</p>
         </div>
         <Link 
           href="/dialer" 
