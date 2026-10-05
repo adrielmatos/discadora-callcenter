@@ -280,7 +280,7 @@ export default function DialerWorkspace() {
           <CheckCircle2 size={44} className="mx-auto text-emerald-500 mb-3" />
           <h2 className="text-lg font-bold text-slate-800">Fila Finalizada!</h2>
           <p className="text-xs text-slate-500 mt-1 mb-6">Todos os leads pendentes foram tabulados.</p>
-          <button onClick={fetchQueue} className="w-full bg-blue-600 text-white py-2.5 rounded-lg text-xs font-bold hover:bg-blue-700 transition">
+          <button onClick={() => fetchQueue("all")} className="w-full bg-blue-600 text-white py-2.5 rounded-lg text-xs font-bold hover:bg-blue-700 transition">
             Recarregar Fila
           </button>
         </div>

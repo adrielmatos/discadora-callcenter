@@ -30,8 +30,8 @@ export default function Dashboard() {
 
         const leads = leadsRes.data || [];
         const calls = callsRes.data || [];
-        const pendentes = leads.filter(l => l.status === "pendente").length;
-        const contratos = calls.filter(c => c.tabulacao === "Contrato").length;
+        const pendentes = leads.filter((l: any) => l.status === "pendente").length;
+        const contratos = calls.filter((c: any) => c.tabulacao === "Contrato").length;
 
         setStats({
           totalLeads: leads.length,
