@@ -227,14 +227,21 @@ export default function LeadsCRM() {
           <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200 text-xs">
             <button 
               onClick={() => setViewMode("kanban")}
-              className={`flex items-center space-x-1 px-3 py-1 rounded-md font-semibold transition ${viewMode === "kanban" ? "bg-white shadow-xs text-blue-600" : "text-slate-500"}`}
+              className={`flex items-center space-x-1 px-3 py-1 rounded-md font-semibold transition cursor-pointer ${viewMode === "kanban" ? "bg-white shadow-xs text-blue-600" : "text-slate-500"}`}
             >
               <Kanban size={13} />
-              <span>Funil (Pipeline)</span>
+              <span>Funil de Tabulações</span>
+            </button>
+            <button 
+              onClick={() => setViewMode("esteira")}
+              className={`flex items-center space-x-1 px-3 py-1 rounded-md font-semibold transition cursor-pointer ${viewMode === "esteira" ? "bg-white shadow-xs text-emerald-600 font-bold" : "text-slate-500"}`}
+            >
+              <CheckCircle2 size={13} className={viewMode === "esteira" ? "text-emerald-600" : "text-slate-400"} />
+              <span>Esteira de Contratos (Promosys)</span>
             </button>
             <button 
               onClick={() => setViewMode("table")}
-              className={`flex items-center space-x-1 px-3 py-1 rounded-md font-semibold transition ${viewMode === "table" ? "bg-white shadow-xs text-blue-600" : "text-slate-500"}`}
+              className={`flex items-center space-x-1 px-3 py-1 rounded-md font-semibold transition cursor-pointer ${viewMode === "table" ? "bg-white shadow-xs text-blue-600" : "text-slate-500"}`}
             >
               <Table size={13} />
               <span>Lista Geral</span>
@@ -288,7 +295,173 @@ export default function LeadsCRM() {
 
       {/* Main Content Area */}
       <div className="flex-1 p-6 overflow-hidden flex flex-col">
-        {viewMode === "kanban" ? (
+        {viewMode === "esteira" ? (
+          /* Esteira Operacional de Contratos & Comissões (Promosys Style) */
+          <div className="flex-1 flex flex-col overflow-hidden space-y-4">
+            {/* Cards de Resumo Financeiro da Esteira */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-3.5 shrink-0">
+              <div className="bg-white p-3.5 rounded-xl border border-slate-200/80 shadow-xs flex items-center justify-between">
+                <div>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Contratos na Esteira</span>
+                  <span className="text-xl font-bold text-slate-900 mt-0.5 block">
+                    {filteredLeads.filter(l => (l.etapa_crm || "").includes("esteira_") || l.etapa_crm === "Contrato" || l.etapa_crm === "Proposta").length}
+                  </span>
+                </div>
+                <div className="w-9 h-9 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
+                  <Kanban size={18} />
+                </div>
+              </div>
+
+              <div className="bg-white p-3.5 rounded-xl border border-slate-200/80 shadow-xs flex items-center justify-between">
+                <div>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Volume Bruto em Esteira</span>
+                  <span className="text-xl font-bold text-blue-600 mt-0.5 block">
+                    R$ {(filteredLeads.filter(l => (l.etapa_crm || "").includes("esteira_") || l.etapa_crm === "Contrato").length * 4500).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+                <div className="w-9 h-9 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold">
+                  R$
+                </div>
+              </div>
+
+              <div className="bg-white p-3.5 rounded-xl border border-slate-200/80 shadow-xs flex items-center justify-between">
+                <div>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Contratos Pagos / Averbados</span>
+                  <span className="text-xl font-bold text-emerald-600 mt-0.5 block">
+                    {filteredLeads.filter(l => l.etapa_crm === "esteira_pago" || l.etapa_crm === "esteira_comissao").length}
+                  </span>
+                </div>
+                <div className="w-9 h-9 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
+                  <CheckCircle2 size={18} />
+                </div>
+              </div>
+
+              <div className="bg-white p-3.5 rounded-xl border border-slate-200/80 shadow-xs flex items-center justify-between">
+                <div>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Comissão Estimada A&K (11%)</span>
+                  <span className="text-xl font-bold text-teal-600 mt-0.5 block">
+                    R$ {(filteredLeads.filter(l => (l.etapa_crm || "").includes("esteira_") || l.etapa_crm === "Contrato").length * 4500 * 0.11).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+                <div className="w-9 h-9 rounded-lg bg-teal-50 text-teal-600 flex items-center justify-center font-bold">
+                  %
+                </div>
+              </div>
+            </div>
+
+            {/* Kanban da Esteira com Etapas Reais de Promotora */}
+            <div className="flex-1 flex space-x-3.5 overflow-x-auto pb-4 custom-scrollbar">
+              {[
+                { id: "esteira_docs", label: "1. Coleta de Documentos", desc: "RG/CNH e dados bancários", color: "border-amber-400" },
+                { id: "esteira_digitado", label: "2. Digitado no Banco", desc: "Cadastrado na esteira bancária", color: "border-blue-500" },
+                { id: "esteira_biometria", label: "3. Aguardando CCB & Biometria", desc: "Link formalização no celular", color: "border-purple-500" },
+                { id: "esteira_pago", label: "4. Averbado & Pago", desc: "Liberado na conta do cliente", color: "border-emerald-500" },
+                { id: "esteira_comissao", label: "5. Comissão Faturada", desc: "Comissão recebida pela A&K", color: "border-teal-500" },
+                { id: "esteira_pendencia", label: "6. Pendência Bancária", desc: "Exigência ou divergência", color: "border-rose-400" },
+              ].map(st => {
+                const stageLeads = filteredLeads.filter(l => {
+                  if (st.id === "esteira_docs") {
+                    return l.etapa_crm === "esteira_docs" || l.etapa_crm === "Contrato" || l.etapa_crm === "Proposta";
+                  }
+                  return l.etapa_crm === st.id;
+                });
+
+                return (
+                  <div key={st.id} className="w-72 flex flex-col rounded-xl bg-slate-100/70 border border-slate-200 shrink-0 overflow-hidden">
+                    <div className={`p-3 border-b border-slate-200/80 bg-white flex justify-between items-center ${st.color} border-t-2`}>
+                      <div>
+                        <span className="text-xs font-bold text-slate-800 block">{st.label}</span>
+                        <span className="text-[10px] text-slate-400">{st.desc}</span>
+                      </div>
+                      <span className="text-[11px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full ml-2 shrink-0">
+                        {stageLeads.length}
+                      </span>
+                    </div>
+
+                    <div className="flex-1 p-2.5 overflow-y-auto space-y-2 custom-scrollbar">
+                      {stageLeads.map(lead => (
+                        <div key={lead.id} className="bg-white p-3 rounded-lg border border-slate-200 shadow-xs space-y-2 hover:border-slate-300 transition">
+                          <div className="flex justify-between items-start">
+                            <p className="font-bold text-xs text-slate-900 leading-snug truncate">{lead.nome}</p>
+                            <span className="text-[10px] font-mono text-slate-400">#{lead.id}</span>
+                          </div>
+
+                          <div className="flex items-center justify-between text-[11px] text-slate-500">
+                            <span className="font-mono">{lead.telefone}</span>
+                            <span className="font-bold text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded text-[10px]">
+                              {lead.banco || "Banco Parceiro"}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center justify-between text-[11px]">
+                            <span className="text-slate-500 text-[10px]">{lead.produto || "Consignado"}</span>
+                            <span className="text-emerald-700 font-extrabold">{lead.margem_disponivel || "R$ 0,00"}</span>
+                          </div>
+
+                          {/* Ações Rápidas de Esteira */}
+                          <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[10px]">
+                            {/* Botão de WhatsApp de Cobrança / Formalização */}
+                            <a
+                              href={`https://wa.me/55${lead.telefone.replace(/\D/g, "")}?text=${encodeURIComponent(
+                                st.id === "esteira_docs" 
+                                  ? `Olá, ${lead.nome}! Sou o Adriel da A&K Soluções. Para liberarmos sua proposta do ${lead.banco || "banco parceiro"}, falta apenas o envio do seu documento (RG ou CNH). Pode me mandar por aqui?`
+                                  : st.id === "esteira_biometria"
+                                  ? `Olá, ${lead.nome}! Seu contrato no ${lead.banco || "banco"} foi aprovado! Acabamos de te enviar o link de assinatura digital por SMS. Conseguiria confirmar a biometria para liberarmos o pagamento?`
+                                  : `Olá, ${lead.nome}! Sou o Adriel da A&K Soluções. Estou acompanhando sua proposta no ${lead.banco || "banco"}. Podemos falar rapidinho?`
+                              )}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-emerald-700 hover:text-emerald-800 font-bold flex items-center space-x-1 bg-emerald-50 px-2 py-1 rounded border border-emerald-200"
+                            >
+                              <MessageSquare size={11} />
+                              <span>WhatsApp</span>
+                            </a>
+
+                            {/* Mover Etapa na Esteira */}
+                            <div className="flex items-center space-x-1">
+                              {st.id !== "esteira_pendencia" && (
+                                <button
+                                  type="button"
+                                  onClick={() => changeEtapa(lead.id, "esteira_pendencia")}
+                                  className="text-rose-600 hover:text-rose-800 p-1 hover:bg-rose-50 rounded text-[10px] font-semibold"
+                                  title="Marcar pendência"
+                                >
+                                  Pendente
+                                </button>
+                              )}
+                              {st.id !== "esteira_comissao" && (
+                                <button 
+                                  onClick={() => {
+                                    const nextStages: Record<string, string> = {
+                                      esteira_docs: "esteira_digitado",
+                                      esteira_digitado: "esteira_biometria",
+                                      esteira_biometria: "esteira_pago",
+                                      esteira_pago: "esteira_comissao",
+                                      esteira_pendencia: "esteira_docs"
+                                    };
+                                    changeEtapa(lead.id, nextStages[st.id] || "esteira_docs");
+                                  }}
+                                  className="text-blue-600 hover:text-blue-700 font-semibold p-1 hover:bg-blue-50 rounded flex items-center space-x-0.5"
+                                  title="Avançar etapa"
+                                >
+                                  <span>Avançar</span>
+                                  <ArrowRight size={11} />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                      {stageLeads.length === 0 && (
+                        <div className="py-8 text-center text-slate-400 text-xs">Nenhum contrato</div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ) : viewMode === "kanban" ? (
           /* Visual Pipeline Kanban com todas as tabulações */
           <div className="flex-1 flex space-x-3.5 overflow-x-auto pb-4 custom-scrollbar">
             {stages.map(st => {

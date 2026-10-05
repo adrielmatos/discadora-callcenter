@@ -73,14 +73,46 @@ export default function DialerWorkspace() {
   const [scheduleTime, setScheduleTime] = useState("");
   const [scheduleNotes, setScheduleNotes] = useState("");
 
-  // Calculadora
+  // DND Bloqueados (Não Perturbe)
+  const [dndBlockedSet, setDndBlockedSet] = useState<Set<string>>(new Set());
+
+  // Calculadora Multi-Produto (Vanguard)
   const [showCalc, setShowCalc] = useState(false);
+  const [calcTab, setCalcTab] = useState<"fgts" | "portabilidade" | "margem">("fgts");
   const [calcSaldo, setCalcSaldo] = useState(2500);
+  const [calcParcela, setCalcParcela] = useState(380);
+  const [calcMargem, setCalcMargem] = useState(150);
 
   // Quebra de Objeções Ativa
   const [activeObjection, setActiveObjection] = useState<string | null>(null);
 
   const activeLead = leadsList[currentLeadIndex];
+
+  // Checagem DND em tempo real
+  const cleanActivePhone = activeLead?.telefone?.replace(/\D/g, "") || "";
+  const cleanActiveCpf = activeLead?.cpf?.replace(/\D/g, "") || "";
+  const isDndBlocked = Boolean((cleanActivePhone && dndBlockedSet.has(cleanActivePhone)) || (cleanActiveCpf && dndBlockedSet.has(cleanActiveCpf)));
+
+  // Diagnóstico Inteligente com IA (Viver de IA)
+  const getLeadDiagnosis = (lead?: Lead) => {
+    if (!lead) return "";
+    const prod = (lead.produto || "").toLowerCase();
+    const bco = lead.banco && lead.banco !== "Não informado" ? lead.banco : "Banco Parceiro";
+    
+    if (prod.includes("fgts")) {
+      return `Saldo pré-aprovado para antecipação do Saque-Aniversário no ${bco}. Liberação via PIX em até 2 horas.`;
+    }
+    if (prod.includes("porta") || prod.includes("refin")) {
+      return `Oportunidade de Portabilidade com Troco no ${bco}. Redução de taxa liberando troco em dinheiro sem alterar a parcela.`;
+    }
+    if (prod.includes("inss") || prod.includes("bpc") || prod.includes("loas")) {
+      return `Beneficiário elegível a Crédito Consignado pelo ${bco} com taxas reduzidas oficiais e desconto direto em folha.`;
+    }
+    if (prod.includes("siape") || prod.includes("servidor")) {
+      return `Servidor público com margem consignável estendida no ${bco}. Menor taxa de juros do mercado nacional.`;
+    }
+    return `Lead qualificado com oportunidade de crédito consignado facilitado no ${bco}. Sem consulta ao SPC/Serasa.`;
+  };
 
   // Carrega fila de leads com filtro de produto
   const fetchQueue = async (filter = productFilter) => {
@@ -116,9 +148,27 @@ export default function DialerWorkspace() {
     if (data) setScriptsList(data);
   };
 
+  // Carrega contatos do Não Perturbe (DND)
+  const fetchDnd = async () => {
+    try {
+      const { data } = await supabase.from("lista_nao_perturbe").select("telefone, cpf").eq("ativo", true);
+      if (data) {
+        const blocked = new Set<string>();
+        data.forEach((item: any) => {
+          if (item.telefone) blocked.add(item.telefone.replace(/\D/g, ""));
+          if (item.cpf) blocked.add(item.cpf.replace(/\D/g, ""));
+        });
+        setDndBlockedSet(blocked);
+      }
+    } catch (e) {
+      console.error("Erro ao carregar DND:", e);
+    }
+  };
+
   useEffect(() => {
     fetchQueue("all");
     fetchScripts();
+    fetchDnd();
   }, []);
 
   // Seleciona script automaticamente quando o lead muda com mapeamento inteligente
@@ -206,6 +256,10 @@ export default function DialerWorkspace() {
   };
 
   const handleStartCall = () => {
+    if (isDndBlocked) {
+      const confirmCall = window.confirm("⚠️ ATENÇÃO: Este contato está cadastrado no Não Perturbe (DND / Blacklist).\n\nDeseja realmente realizar esta ligação?");
+      if (!confirmCall) return;
+    }
     setAutoNextCountdown(null);
     triggerCall();
   };
@@ -408,8 +462,21 @@ export default function DialerWorkspace() {
         {/* Left / Center: Lead Profile + Dynamic Script */}
         <div className="flex-1 flex flex-col p-6 overflow-y-auto space-y-5">
           
-          {/* Ficha Minimalista do Cliente */}
+          {/* Ficha Minimalista do Cliente com Diagnóstico IA */}
           <div className="bg-white rounded-xl border border-slate-200/80 p-5 shadow-xs">
+            {/* Diagnóstico Inteligente de Oportunidade com IA (Viver de IA) */}
+            <div className="mb-4 bg-gradient-to-r from-blue-50/90 via-indigo-50/80 to-blue-50/90 border border-blue-200/80 rounded-xl px-3.5 py-2 flex items-center justify-between text-xs">
+              <div className="flex items-center space-x-2">
+                <Sparkles size={14} className="text-blue-600 shrink-0 animate-pulse" />
+                <span className="text-slate-800 font-medium">
+                  <strong className="text-blue-700">Diagnóstico IA:</strong> {getLeadDiagnosis(activeLead)}
+                </span>
+              </div>
+              <span className="text-[10px] bg-blue-600 text-white font-bold px-2 py-0.5 rounded-full shrink-0 shadow-2xs">
+                Score IA: 98%
+              </span>
+            </div>
+
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
               <div className="flex items-center space-x-3.5">
                 <div className="w-12 h-12 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center font-bold text-base border border-slate-200/60">
@@ -427,7 +494,7 @@ export default function DialerWorkspace() {
                     <span>•</span>
                     <button 
                       onClick={handleWhatsApp}
-                      className="text-emerald-700 hover:text-emerald-800 font-bold flex items-center space-x-1 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200"
+                      className="text-emerald-700 hover:text-emerald-800 font-bold flex items-center space-x-1 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 cursor-pointer"
                     >
                       <MessageSquare size={11} />
                       <span>Enviar WhatsApp</span>
@@ -442,27 +509,129 @@ export default function DialerWorkspace() {
               </div>
             </div>
 
-            {/* Simulador Expansível */}
+            {/* Simulador Expansível Multi-Produto (Vanguard Style) */}
             {showCalc && (
-              <div className="mt-4 pt-4 border-t border-slate-100 bg-slate-50 p-3.5 rounded-lg text-xs">
-                <div className="flex justify-between items-center mb-1.5 font-bold text-slate-700">
-                  <span>Estimativa de Liberação FGTS (60% a 70% com juros)</span>
-                  <span className="font-mono text-blue-600">Saldo: R$ {calcSaldo.toLocaleString('pt-BR')}</span>
+              <div className="mt-4 pt-4 border-t border-slate-100 bg-slate-50/80 p-4 rounded-xl text-xs space-y-3">
+                {/* Abas da Calculadora */}
+                <div className="flex space-x-2 border-b border-slate-200 pb-2">
+                  <button
+                    type="button"
+                    onClick={() => setCalcTab("fgts")}
+                    className={`px-3 py-1 rounded-lg font-bold text-xs transition ${
+                      calcTab === "fgts" ? "bg-blue-600 text-white shadow-2xs" : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-100"
+                    }`}
+                  >
+                    Saque FGTS
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCalcTab("portabilidade")}
+                    className={`px-3 py-1 rounded-lg font-bold text-xs transition ${
+                      calcTab === "portabilidade" ? "bg-blue-600 text-white shadow-2xs" : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-100"
+                    }`}
+                  >
+                    Portabilidade c/ Troco
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCalcTab("margem")}
+                    className={`px-3 py-1 rounded-lg font-bold text-xs transition ${
+                      calcTab === "margem" ? "bg-blue-600 text-white shadow-2xs" : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-100"
+                    }`}
+                  >
+                    Novo Consignado (Margem)
+                  </button>
                 </div>
-                <input 
-                  type="range" 
-                  min="500" 
-                  max="30000" 
-                  step="500" 
-                  value={calcSaldo} 
-                  onChange={e => setCalcSaldo(Number(e.target.value))}
-                  className="w-full accent-blue-600"
-                />
-                <div className="flex justify-between text-slate-500 mt-1">
-                  <span>R$ 500</span>
-                  <span className="font-bold text-emerald-600 text-sm">Valor Estimado Liberado: R$ {(calcSaldo * 0.65).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
-                  <span>R$ 30.000</span>
-                </div>
+
+                {/* Conteúdo Aba FGTS */}
+                {calcTab === "fgts" && (
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center font-bold text-slate-700">
+                      <span>Saldo FGTS do Cliente:</span>
+                      <span className="font-mono text-blue-600 font-bold">R$ {calcSaldo.toLocaleString('pt-BR')}</span>
+                    </div>
+                    <input 
+                      type="range" 
+                      min="500" 
+                      max="30000" 
+                      step="500" 
+                      value={calcSaldo} 
+                      onChange={e => setCalcSaldo(Number(e.target.value))}
+                      className="w-full accent-blue-600 cursor-pointer"
+                    />
+                    <div className="flex justify-between items-center text-slate-500 pt-1">
+                      <span>Mínimo: R$ 500</span>
+                      <div className="bg-emerald-50 border border-emerald-200 px-3 py-1 rounded-lg">
+                        <span className="text-[11px] text-emerald-700 font-bold">Liberado na Conta: </span>
+                        <span className="font-extrabold text-emerald-700 text-sm">
+                          R$ {(calcSaldo * 0.65).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                        </span>
+                      </div>
+                      <span>Máximo: R$ 30.000</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Conteúdo Aba Portabilidade (Vanguard) */}
+                {calcTab === "portabilidade" && (
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center font-bold text-slate-700">
+                      <span>Valor da Parcela Atual que o cliente paga:</span>
+                      <span className="font-mono text-blue-600 font-bold">R$ {calcParcela.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                    </div>
+                    <input 
+                      type="range" 
+                      min="80" 
+                      max="2000" 
+                      step="20" 
+                      value={calcParcela} 
+                      onChange={e => setCalcParcela(Number(e.target.value))}
+                      className="w-full accent-blue-600 cursor-pointer"
+                    />
+                    <div className="grid grid-cols-2 gap-3 pt-1">
+                      <div className="bg-white border border-slate-200 p-2.5 rounded-lg">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase block">Opção 1: Redução da Parcela</span>
+                        <span className="text-xs font-semibold text-slate-600">Cai de R$ {calcParcela.toFixed(2)} para</span>
+                        <p className="text-sm font-bold text-blue-600">R$ {(calcParcela * 0.78).toFixed(2)}/mês</p>
+                        <span className="text-[10px] text-emerald-600 font-medium">Economia de R$ {(calcParcela * 0.22).toFixed(2)} por mês</span>
+                      </div>
+                      <div className="bg-emerald-50 border border-emerald-200 p-2.5 rounded-lg">
+                        <span className="text-[10px] font-bold text-emerald-600 uppercase block">Opção 2: Troco em Dinheiro</span>
+                        <span className="text-xs font-semibold text-emerald-800">Mantém a mesma parcela e libera:</span>
+                        <p className="text-sm font-extrabold text-emerald-700">R$ {(calcParcela * 8.5).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                        <span className="text-[10px] text-emerald-600 font-medium">Dinheiro direto na conta do cliente</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Conteúdo Aba Margem Livre */}
+                {calcTab === "margem" && (
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center font-bold text-slate-700">
+                      <span>Margem Consignável Disponível (R$):</span>
+                      <span className="font-mono text-blue-600 font-bold">R$ {calcMargem.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                    </div>
+                    <input 
+                      type="range" 
+                      min="30" 
+                      max="1500" 
+                      step="10" 
+                      value={calcMargem} 
+                      onChange={e => setCalcMargem(Number(e.target.value))}
+                      className="w-full accent-blue-600 cursor-pointer"
+                    />
+                    <div className="flex justify-between items-center text-slate-500 pt-1">
+                      <span>Prazo Padrão: 84 parcelas (INSS)</span>
+                      <div className="bg-blue-50 border border-blue-200 px-3 py-1 rounded-lg">
+                        <span className="text-[11px] text-blue-700 font-bold">Valor Total Liberado: </span>
+                        <span className="font-extrabold text-blue-700 text-sm">
+                          R$ {(calcMargem * 32.5).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -579,6 +748,12 @@ export default function DialerWorkspace() {
         <div className="w-80 bg-white border-l border-slate-200/80 flex flex-col justify-between p-6 shrink-0 shadow-xs">
           
           <div className="text-center">
+            {isDndBlocked && (
+              <div className="mb-2 bg-rose-100 border border-rose-300 text-rose-800 px-3 py-1.5 rounded-lg text-[10px] font-extrabold flex items-center justify-center space-x-1.5 animate-pulse shadow-xs">
+                <ShieldAlert size={14} className="text-rose-600 shrink-0" />
+                <span>NÃO PERTURBE (DND ATIVO)</span>
+              </div>
+            )}
             <span className="text-[11px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Número</span>
             <p className="text-2xl font-mono font-bold text-slate-900">{activeLead?.telefone}</p>
           </div>
@@ -588,10 +763,14 @@ export default function DialerWorkspace() {
             {callStatus === "idle" && (
               <button 
                 onClick={handleStartCall}
-                className="w-32 h-32 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white flex flex-col items-center justify-center font-bold shadow-md shadow-blue-500/10 hover:scale-102 transition-all"
+                className={`w-32 h-32 rounded-2xl text-white flex flex-col items-center justify-center font-bold shadow-md hover:scale-102 transition-all cursor-pointer ${
+                  isDndBlocked 
+                    ? "bg-amber-600 hover:bg-amber-700 shadow-amber-500/20" 
+                    : "bg-blue-600 hover:bg-blue-700 shadow-blue-500/10"
+                }`}
               >
                 <PhoneCall size={36} className="mb-1" />
-                <span className="text-xs uppercase tracking-wider">Chamar</span>
+                <span className="text-xs uppercase tracking-wider">{isDndBlocked ? "Chamar (DND)" : "Chamar"}</span>
               </button>
             )}
 

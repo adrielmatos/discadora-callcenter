@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { 
   Users, PhoneCall, CheckCircle2, Clock, 
-  BarChart3, TrendingUp, Calendar, ArrowUpRight, Target
+  BarChart3, TrendingUp, Calendar, ArrowUpRight, Target, Bot, Award, Zap
 } from "lucide-react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
@@ -129,9 +129,16 @@ export default function Dashboard() {
               <Link href="/leads" className="flex items-center justify-between p-3 rounded-lg border border-slate-100 hover:border-emerald-300 hover:bg-emerald-50/40 transition group">
                 <div className="flex items-center space-x-2.5">
                   <div className="text-emerald-600"><TrendingUp size={16}/></div>
-                  <span className="font-semibold text-slate-700 group-hover:text-emerald-700 text-xs">CRM Funil de Vendas</span>
+                  <span className="font-semibold text-slate-700 group-hover:text-emerald-700 text-xs">CRM & Esteira de Contratos</span>
                 </div>
                 <ArrowUpRight size={14} className="text-slate-400 group-hover:text-emerald-600" />
+              </Link>
+              <Link href="/omnichannel" className="flex items-center justify-between p-3 rounded-lg border border-slate-100 hover:border-indigo-300 hover:bg-indigo-50/40 transition group">
+                <div className="flex items-center space-x-2.5">
+                  <div className="text-indigo-600"><Bot size={16}/></div>
+                  <span className="font-semibold text-slate-700 group-hover:text-indigo-700 text-xs">Atendente IA 24h & WhatsApp</span>
+                </div>
+                <ArrowUpRight size={14} className="text-slate-400 group-hover:text-indigo-600" />
               </Link>
               <Link href="/retornos" className="flex items-center justify-between p-3 rounded-lg border border-slate-100 hover:border-amber-300 hover:bg-amber-50/40 transition group">
                 <div className="flex items-center space-x-2.5">
@@ -181,7 +188,89 @@ export default function Dashboard() {
               </div>
             )}
           </div>
+        </div>
 
+        {/* Painel do Squad de Atendimento & Metas Diárias (Squad Style) */}
+        <div className="bg-white rounded-xl border border-slate-200/80 shadow-xs p-6 space-y-4">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+            <div className="flex items-center space-x-2">
+              <Award size={18} className="text-amber-500" />
+              <h3 className="text-sm font-bold text-slate-900">Produtividade do Squad • A&K Soluções</h3>
+            </div>
+            <span className="text-xs text-slate-400 font-medium">Metas Operacionais do Dia</span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Membros do Squad */}
+            <div className="space-y-3">
+              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Integrantes Ativos</span>
+              
+              <div className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100">
+                <div className="flex items-center space-x-3">
+                  <div className="w-9 h-9 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-xs">
+                    A
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-900">Adriel (Você)</h4>
+                    <p className="text-[10px] text-slate-500">Operador Principal • Administrador</p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full">
+                    {stats.ligacoesHoje} ligações hoje
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between p-3 bg-indigo-50/60 rounded-xl border border-indigo-100">
+                <div className="flex items-center space-x-3">
+                  <div className="w-9 h-9 rounded-full bg-indigo-600 text-white flex items-center justify-center font-bold text-xs">
+                    <Bot size={16} />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-900">Sofia (Atendente IA 24h)</h4>
+                    <p className="text-[10px] text-indigo-600 font-semibold">Atendimento Receptivo WhatsApp</p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <span className="text-[10px] bg-indigo-100 text-indigo-800 font-bold px-2 py-0.5 rounded-full">
+                    Online 24/7
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Progresso de Metas */}
+            <div className="space-y-4">
+              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Metas da Empresa</span>
+              
+              <div>
+                <div className="flex justify-between items-center text-xs font-bold mb-1">
+                  <span className="text-slate-700">Meta de Ligações: {stats.ligacoesHoje} / 100</span>
+                  <span className="text-blue-600">{Math.min(100, Math.round((stats.ligacoesHoje / 100) * 100))}%</span>
+                </div>
+                <div className="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden">
+                  <div 
+                    className="h-full bg-blue-600 rounded-full transition-all"
+                    style={{ width: `${Math.min(100, Math.round((stats.ligacoesHoje / 100) * 100))}%` }}
+                  ></div>
+                </div>
+              </div>
+
+              <div>
+                <div className="flex justify-between items-center text-xs font-bold mb-1">
+                  <span className="text-slate-700">Meta de Contratos Fechados: {stats.contratos} / 5</span>
+                  <span className="text-emerald-600">{Math.min(100, Math.round((stats.contratos / 5) * 100))}%</span>
+                </div>
+                <div className="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden">
+                  <div 
+                    className="h-full bg-emerald-500 rounded-full transition-all"
+                    style={{ width: `${Math.min(100, Math.round((stats.contratos / 5) * 100))}%` }}
+                  ></div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
