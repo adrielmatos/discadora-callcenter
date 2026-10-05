@@ -39,53 +39,149 @@ export default function LeadsCRM() {
     fetchLeads();
   }, []);
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  // Helper para buscar valor em objeto com chaves flexíveis
+  const findFieldValue = (row: Record<string, any>, candidateKeys: string[]): string => {
+    const normalizedCandidates = candidateKeys.map(k => k.toLowerCase().replace(/[^a-z0-9]/g, ""));
+    for (const [key, val] of Object.entries(row)) {
+      if (val === undefined || val === null || val === "") continue;
+      const cleanKey = key.toLowerCase().replace(/[^a-z0-9]/g, "");
+      if (normalizedCandidates.includes(cleanKey)) {
+        return String(val).trim();
+      }
+    }
+    return "";
+  };
 
-    const reader = new FileReader();
-    reader.onload = async (evt) => {
+  const KNOWN_BANKS = [
+    { name: "Banco Pan", aliases: ["pan", "bancopan"] },
+    { name: "Banco Safra", aliases: ["safra", "bancosafra"] },
+    { name: "Banco BMG", aliases: ["bmg", "bancobmg"] },
+    { name: "C6 Bank", aliases: ["c6", "c6bank"] },
+    { name: "Itaú Consignado", aliases: ["itau", "itaú", "itauconsignado", "ole", "olé"] },
+    { name: "Bradesco Promotora", aliases: ["bradesco"] },
+    { name: "Santander", aliases: ["santander", "olens"] },
+    { name: "Caixa Econômica", aliases: ["caixa", "cef"] },
+    { name: "Banco Daycoval", aliases: ["daycoval"] },
+    { name: "Facta Financeira", aliases: ["facta"] },
+    { name: "Banco Inbursa", aliases: ["inbursa"] },
+    { name: "Paraná Banco", aliases: ["parana", "paraná"] },
+    { name: "Banco Mercantil", aliases: ["mercantil"] },
+    { name: "Crefisa", aliases: ["crefisa"] },
+    { name: "Banco do Brasil", aliases: ["bancodobrasil", "bb"] }
+  ];
+
+  const inferBank = (extractedVal: string, fileName: string): string => {
+    if (extractedVal && extractedVal.toLowerCase() !== "não informado" && extractedVal.toLowerCase() !== "nao informado") {
+      const lower = extractedVal.toLowerCase().replace(/[^a-z0-9]/g, "");
+      const match = KNOWN_BANKS.find(b => b.aliases.some(a => lower.includes(a)));
+      if (match) return match.name;
+      return extractedVal;
+    }
+    const cleanFileName = fileName.toLowerCase().replace(/[^a-z0-9]/g, "");
+    const matchFile = KNOWN_BANKS.find(b => b.aliases.some(a => cleanFileName.includes(a)));
+    if (matchFile) return matchFile.name;
+
+    return "Banco Parceiro";
+  };
+
+  const inferProduct = (extractedVal: string, fileName: string): string => {
+    const combined = `${extractedVal} ${fileName}`.toLowerCase();
+    if (combined.includes("fgts") || combined.includes("aniversario") || combined.includes("aniversário")) {
+      return "Saque FGTS";
+    }
+    if (combined.includes("bpc") || combined.includes("loas")) {
+      return "INSS BPC / LOAS";
+    }
+    if (combined.includes("inss") || combined.includes("aposentad") || combined.includes("beneficiari") || combined.includes("beneficiário")) {
+      return "Consignado INSS";
+    }
+    if (combined.includes("siape") || combined.includes("servidor") || combined.includes("federal")) {
+      return "Consignado SIAPE";
+    }
+    if (combined.includes("porta") || combined.includes("portabilidade")) {
+      return "Portabilidade";
+    }
+    if (combined.includes("refin") || combined.includes("refinanciamento")) {
+      return "Refinanciamento";
+    }
+    if (combined.includes("rmc") || combined.includes("rcc") || combined.includes("cartao") || combined.includes("cartão")) {
+      return "Cartão Benefício";
+    }
+    if (extractedVal && extractedVal.trim()) return extractedVal.trim();
+    return "Crédito Consignado";
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    setLoading(true);
+    let totalImported = 0;
+    let allLeads: any[] = [];
+    const fileArray = Array.from(files);
+
+    for (const file of fileArray) {
       try {
-        const bstr = evt.target?.result;
-        const wb = XLSX.read(bstr, { type: "binary" });
-        const wsname = wb.SheetNames[0];
-        const ws = wb.Sheets[wsname];
-        const data = XLSX.utils.sheet_to_json(ws) as any[];
+        const data = await file.arrayBuffer();
+        const wb = XLSX.read(data, { type: "array" });
 
-        const formattedLeads = data.map((row) => {
-          const rawProduto = String(row["Produto"] || row["PRODUTO"] || row["produto"] || row["Operação"] || row["Convênio"] || "Consignado");
-          return {
-            nome: row["Nome"] || row["NOME"] || row["cliente"] || row["Cliente"] || "Sem Nome",
-            telefone: String(row["Telefone"] || row["TELEFONE"] || row["Celular"] || row["celular"] || "").replace(/\D/g, ""),
-            cpf: String(row["CPF"] || row["cpf"] || ""),
-            margem_disponivel: String(row["Margem"] || row["margem"] || row["Valor"] || "R$ 0,00"),
-            banco: String(row["Banco"] || row["banco"] || "Não informado"),
-            produto: rawProduto,
-            status: "pendente",
-            etapa_crm: "fila"
-          };
-        }).filter(l => l.telefone.length >= 8);
+        for (const sheetName of wb.SheetNames) {
+          const ws = wb.Sheets[sheetName];
+          const rows = XLSX.utils.sheet_to_json(ws) as Record<string, any>[];
 
-        if (formattedLeads.length === 0) {
-          alert("Nenhum lead com telefone válido encontrado.");
-          return;
-        }
+          for (const row of rows) {
+            const nome = findFieldValue(row, ["nome", "cliente", "titular", "name", "nomecliente", "nomedocliente", "razaosocial", "beneficiario"]) || "Sem Nome";
+            const rawPhone = findFieldValue(row, ["telefone", "tel", "celular", "cel", "fone", "contato", "whatsapp", "numero", "telefone1", "tel1", "celular1", "telefoneprincipal"]);
+            const cleanPhone = String(rawPhone || "").replace(/\D/g, "");
+            if (cleanPhone.length < 8) continue;
 
-        setLoading(true);
-        const { error } = await supabase.from("leads").insert(formattedLeads);
-        if (error) {
-          alert("Erro ao importar: " + error.message);
-        } else {
-          alert(`Sucesso! ${formattedLeads.length} leads importados para o banco de dados!`);
-          fetchLeads();
+            const rawCpf = findFieldValue(row, ["cpf", "documento", "doc", "cpfcnpj", "identificacao"]);
+            const rawMargem = findFieldValue(row, ["margem", "margemdisponivel", "valor", "limite", "saldo", "valoremprestimo", "proposta", "credito"]);
+            const rawBanco = findFieldValue(row, ["banco", "instituicao", "instituicaofinanceira", "bco", "convenio", "orgao", "entidade", "fonte", "bancocredor"]);
+            const rawProduto = findFieldValue(row, ["produto", "operacao", "tipo", "modalidade", "segmento", "tabela"]);
+
+            const finalBanco = inferBank(rawBanco, file.name);
+            const finalProduto = inferProduct(rawProduto, file.name);
+
+            allLeads.push({
+              nome,
+              telefone: cleanPhone,
+              cpf: rawCpf || null,
+              margem_disponivel: rawMargem ? (rawMargem.includes("R$") ? rawMargem : `R$ ${rawMargem}`) : "R$ 0,00",
+              banco: finalBanco,
+              produto: finalProduto,
+              status: "pendente",
+              etapa_crm: "fila"
+            });
+          }
         }
       } catch (err: any) {
-        alert("Erro na leitura da planilha: " + err.message);
-      } finally {
-        setLoading(false);
+        console.error(`Erro ao ler arquivo ${file.name}:`, err);
       }
-    };
-    reader.readAsBinaryString(file);
+    }
+
+    if (allLeads.length === 0) {
+      alert("Nenhum lead com telefone válido encontrado nas planilhas selecionadas.");
+      setLoading(false);
+      return;
+    }
+
+    // Inserção em lotes de 100
+    const chunkSize = 100;
+    for (let i = 0; i < allLeads.length; i += chunkSize) {
+      const chunk = allLeads.slice(i, i + chunkSize);
+      const { error } = await supabase.from("leads").insert(chunk);
+      if (error) {
+        console.error("Erro no lote:", error);
+      } else {
+        totalImported += chunk.length;
+      }
+    }
+
+    alert(`Sucesso! ${totalImported} leads importados de ${fileArray.length} planilha(s)!`);
+    fetchLeads();
+    setLoading(false);
+    if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
   const handleExport = () => {
@@ -168,7 +264,7 @@ export default function LeadsCRM() {
             <Upload size={13} />
             <span>Importar Planilha</span>
           </button>
-          <input type="file" ref={fileInputRef} onChange={handleFileUpload} accept=".xlsx, .xls, .csv" className="hidden" />
+          <input type="file" multiple ref={fileInputRef} onChange={handleFileUpload} accept=".xlsx, .xls, .csv, .txt, .ods" className="hidden" />
         </div>
       </header>
 

@@ -267,10 +267,16 @@ export default function DialerWorkspace() {
 
   const renderScriptText = (text: string) => {
     if (!text) return "";
+    const bancoRaw = activeLead?.banco;
+    const bancoValido = bancoRaw && bancoRaw !== "Não informado" && bancoRaw.trim() !== "";
+    const bancoNome = bancoValido ? bancoRaw : "bancos parceiros conveniados";
+
     return text
+      .replaceAll("no Não informado", `no ${bancoNome}`)
+      .replaceAll("no banco Não informado", `no ${bancoNome}`)
+      .replaceAll("[BANCO]", bancoNome)
       .replaceAll("[NOME]", activeLead?.nome || "cliente")
-      .replaceAll("[BANCO]", activeLead?.banco || "banco parceiro")
-      .replaceAll("[VALOR]", activeLead?.margem_disponivel || "valores liberados");
+      .replaceAll("[VALOR]", activeLead?.margem_disponivel && activeLead.margem_disponivel !== "R$ 0,00" ? activeLead.margem_disponivel : "valores liberados");
   };
 
   if (!activeLead && leadsList.length === 0) {
@@ -374,19 +380,13 @@ export default function DialerWorkspace() {
                   {activeLead?.nome.charAt(0)}
                 </div>
                 <div>
-                  <div className="flex items-center space-x-2">
-                    <h2 className="text-lg font-bold text-slate-900">{activeLead?.nome}</h2>
-                    <span className="bg-blue-50 text-blue-700 border border-blue-200/60 text-[10px] font-bold px-2 py-0.5 rounded-md flex items-center space-x-1">
-                      <Tag size={10} className="mr-0.5" />
-                      <span>{activeLead?.produto || "Saque FGTS"}</span>
-                    </span>
-                  </div>
+                  <h2 className="text-lg font-bold text-slate-900">{activeLead?.nome}</h2>
                   <div className="flex items-center space-x-3 mt-1 text-xs text-slate-500">
                     <span className="font-mono">{activeLead?.cpf || "CPF Indisponível"}</span>
                     <span>•</span>
-                    <span className="flex items-center space-x-1">
-                      <Building2 size={12} className="text-slate-400" />
-                      <span>{activeLead?.banco || "Banco não informado"}</span>
+                    <span className="flex items-center space-x-1 font-semibold text-slate-700 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+                      <Building2 size={12} className="text-blue-600" />
+                      <span>{activeLead?.banco || "Banco Parceiro"}</span>
                     </span>
                     <span>•</span>
                     <button 
@@ -431,31 +431,26 @@ export default function DialerWorkspace() {
             )}
           </div>
 
-          {/* Script de Atendimento Automático por Produto */}
+          {/* Script de Atendimento Automático por Produto (Local Único Consolidado) */}
           <div className="flex-1 bg-white rounded-xl border border-slate-200/80 shadow-xs flex flex-col overflow-hidden">
             <div className="h-12 px-5 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
               <div className="flex items-center space-x-2">
+                <Sparkles size={15} className="text-blue-600" />
                 <span className="text-xs font-bold text-slate-800">Script de Atendimento:</span>
-                <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200 shadow-2xs">
-                  {currentScript.produto}
-                </span>
-                {activeLead?.banco && activeLead.banco !== "Não informado" && (
-                  <span className="hidden sm:inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-600 border border-slate-200">
-                    {activeLead.banco}
-                  </span>
-                )}
               </div>
 
-              {/* Seletor Manual opcional */}
-              <div className="flex items-center space-x-1.5">
-                <span className="text-[10px] text-slate-400 font-semibold hidden md:inline">Trocar:</span>
+              {/* Seletor Único do Produto / Script Ativo */}
+              <div className="flex items-center space-x-2">
+                <span className="text-[11px] font-medium text-slate-400 hidden sm:inline">Produto:</span>
                 <select 
                   value={selectedScriptProduct} 
                   onChange={e => setSelectedScriptProduct(e.target.value)}
-                  className="text-[11px] font-semibold text-slate-700 border border-slate-200 bg-white rounded-md px-2 py-1 outline-none shadow-xs"
+                  className="text-xs font-bold text-blue-700 bg-blue-50 hover:bg-blue-100/70 border border-blue-200 rounded-lg px-3 py-1.5 outline-none shadow-2xs cursor-pointer transition"
                 >
                   {scriptsList.map(s => (
-                    <option key={s.id} value={s.produto}>{s.produto}</option>
+                    <option key={s.id} value={s.produto} className="bg-white text-slate-800 font-normal">
+                      {s.produto}
+                    </option>
                   ))}
                 </select>
               </div>
