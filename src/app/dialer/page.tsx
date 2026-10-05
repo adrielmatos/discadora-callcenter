@@ -4,9 +4,42 @@ import React, { useState, useEffect, useRef } from "react";
 import { 
   PhoneCall, PhoneOff, Check, X, Calendar, MessageSquare, 
   Play, FastForward, User, AlertCircle, Calculator,
-  Clock, ShieldAlert, Sparkles, Building2, Tag, ChevronDown, CheckCircle2
+  Clock, ShieldAlert, Sparkles, Building2, Tag, ChevronDown, CheckCircle2, Zap
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+
+const OBJECTION_LIST = [
+  {
+    id: "golpe",
+    label: "🛡️ É Golpe?",
+    resposta: "Compreendo perfeitamente o receio, [NOME], e o senhor está certíssimo em ter cuidado. Nós nunca pedimos senha nem adiantamento em dinheiro. A autorização é feita diretamente no aplicativo oficial do banco ou Meu INSS com biometria facial no seu celular. O valor entra direto na sua conta do [BANCO]. Posso te mandar o passo a passo seguro pelo WhatsApp?"
+  },
+  {
+    id: "sem_margem",
+    label: "💰 Sem Margem / Já Fiz",
+    resposta: "Excelente que já possui contrato ativo, [NOME]! É justamente por isso que liguei. Conseguimos fazer a Portabilidade com Troco: reduzimos a taxa do seu banco antigo e liberamos um troco de até R$ 2.500,00 na sua conta sem aumentar a parcela que o senhor já paga todo mês. Gostaria de ver quanto sobra de troco?"
+  },
+  {
+    id: "juros",
+    label: "📉 Juros Altos",
+    resposta: "Entendo sua preocupação com juros, [NOME]. Mas veja: o consignado e FGTS têm a menor taxa do país (cerca de 1,6% a 1,8% ao mês), enquanto cartão de crédito e cheque especial passam de 14% ao mês. Usar esse limite para quitar dívidas caras ou economizar é a melhor decisão financeira. Vamos fazer uma simulação sem compromisso?"
+  },
+  {
+    id: "familia",
+    label: "🤔 Falar com Família",
+    resposta: "Com certeza, [NOME], conversar com a família é muito importante. O que posso fazer para te ajudar é gerar a pré-análise formal agora e te mandar no WhatsApp. Assim você senta com eles, confere os números exatos e valores liberados no [BANCO]. Pode ser?"
+  },
+  {
+    id: "sem_interesse",
+    label: "❌ Sem Interesse",
+    resposta: "Entendo perfeitamente, [NOME]! Mas me tira uma dúvida rápida: se hoje liberasse uma margem de [VALOR] com uma parcela que cabe no seu bolso para você guardar ou realizar algum projeto, você deixaria passar essa condição ou gostaria ao menos de saber os números exatos sem compromisso nenhum?"
+  },
+  {
+    id: "agencia",
+    label: "🏦 Prefiro na Agência",
+    resposta: "Compreendo, [NOME]. Mas a agência física costuma ter filas e taxas de balcão mais altas. Pelo nosso canal de correspondente bancário digital, a taxa é de esteira nacional reduzida e o dinheiro entra na sua conta hoje mesmo sem você precisar sair de casa. Vamos dar uma olhada na simulação?"
+  }
+];
 
 interface Lead {
   id: number;
@@ -43,6 +76,9 @@ export default function DialerWorkspace() {
   // Calculadora
   const [showCalc, setShowCalc] = useState(false);
   const [calcSaldo, setCalcSaldo] = useState(2500);
+
+  // Quebra de Objeções Ativa
+  const [activeObjection, setActiveObjection] = useState<string | null>(null);
 
   const activeLead = leadsList[currentLeadIndex];
 
@@ -455,6 +491,63 @@ export default function DialerWorkspace() {
                 </select>
               </div>
             </div>
+
+            {/* Barra de Pílulas de Contorno de Objeções (IA / Quebra de Objeções Instantânea) */}
+            <div className="px-5 py-2.5 bg-amber-50/60 border-b border-amber-100 flex items-center space-x-2 overflow-x-auto shrink-0">
+              <div className="flex items-center text-[11px] font-bold text-amber-800 shrink-0 mr-1">
+                <Zap size={13} className="text-amber-600 mr-1 fill-amber-500" />
+                <span>Socorro / Objeções:</span>
+              </div>
+              <div className="flex items-center space-x-1.5 flex-nowrap">
+                {OBJECTION_LIST.map((obj) => {
+                  const isActive = activeObjection === obj.id;
+                  return (
+                    <button
+                      key={obj.id}
+                      type="button"
+                      onClick={() => setActiveObjection(isActive ? null : obj.id)}
+                      className={`text-[11px] px-2.5 py-1 rounded-full font-medium transition shrink-0 flex items-center shadow-2xs ${
+                        isActive
+                          ? "bg-amber-600 text-white font-bold ring-2 ring-amber-400"
+                          : "bg-white text-amber-900 border border-amber-200/80 hover:bg-amber-100/70"
+                      }`}
+                    >
+                      {obj.label}
+                    </button>
+                  );
+                })}
+                {activeObjection && (
+                  <button
+                    type="button"
+                    onClick={() => setActiveObjection(null)}
+                    className="text-[10px] text-slate-400 hover:text-slate-600 px-1 py-0.5 underline shrink-0 cursor-pointer"
+                  >
+                    Fechar
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Caixa de Resposta da Objeção Ativa */}
+            {activeObjection && (
+              <div className="mx-5 mt-3 p-3.5 bg-amber-100/70 border border-amber-300 rounded-xl text-xs text-amber-950 animate-in fade-in slide-in-from-top-2 duration-150">
+                <div className="flex items-center justify-between font-bold text-amber-900 mb-1 text-[11px]">
+                  <span className="flex items-center">
+                    <Zap size={12} className="text-amber-600 mr-1 fill-amber-600" />
+                    Como Contornar: {OBJECTION_LIST.find(o => o.id === activeObjection)?.label}
+                  </span>
+                  <button 
+                    onClick={() => setActiveObjection(null)}
+                    className="text-amber-800 hover:text-amber-950 p-0.5 cursor-pointer"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+                <p className="text-sm font-medium leading-snug">
+                  "{renderScriptText(OBJECTION_LIST.find(o => o.id === activeObjection)?.resposta || "")}"
+                </p>
+              </div>
+            )}
 
             <div className="p-6 overflow-y-auto space-y-4 text-xs leading-relaxed text-slate-700">
               <div className="bg-slate-50/80 p-3.5 rounded-lg border border-slate-100">
