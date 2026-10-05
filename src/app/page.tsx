@@ -3,11 +3,11 @@
 import React from "react";
 import { 
   Users, PhoneCall, CheckCircle, Clock, 
-  BarChart2, TrendingUp, Calendar, AlertCircle 
+  BarChart2, TrendingUp, Calendar, AlertCircle, FileText
 } from "lucide-react";
 import Link from "next/link";
 
-export default function Home() {
+export default function Dashboard() {
   return (
     <div className="flex-1 flex flex-col h-full bg-[#f4f7f6] overflow-y-auto">
       {/* Header */}
@@ -27,7 +27,7 @@ export default function Home() {
             </div>
             <div>
               <p className="text-slate-500 text-sm font-medium">Ligações Hoje</p>
-              <h3 className="text-3xl font-bold text-slate-800">142</h3>
+              <h3 className="text-3xl font-bold text-slate-800">0</h3>
             </div>
           </div>
 
@@ -37,7 +37,7 @@ export default function Home() {
             </div>
             <div>
               <p className="text-slate-500 text-sm font-medium">Contratos (Mês)</p>
-              <h3 className="text-3xl font-bold text-slate-800">18</h3>
+              <h3 className="text-3xl font-bold text-slate-800">0</h3>
             </div>
           </div>
 
@@ -46,8 +46,8 @@ export default function Home() {
               <Clock size={24} />
             </div>
             <div>
-              <p className="text-slate-500 text-sm font-medium">Retornos Agendados</p>
-              <h3 className="text-3xl font-bold text-slate-800">24</h3>
+              <p className="text-slate-500 text-sm font-medium">Retornos</p>
+              <h3 className="text-3xl font-bold text-slate-800">0</h3>
             </div>
           </div>
 
@@ -57,7 +57,7 @@ export default function Home() {
             </div>
             <div>
               <p className="text-slate-500 text-sm font-medium">Leads na Fila</p>
-              <h3 className="text-3xl font-bold text-slate-800">856</h3>
+              <h3 className="text-3xl font-bold text-slate-800">-</h3>
             </div>
           </div>
         </div>
@@ -73,7 +73,7 @@ export default function Home() {
               <Link href="/dialer" className="w-full flex items-center justify-between p-4 rounded-lg border border-slate-200 hover:border-blue-500 hover:bg-blue-50 transition group">
                 <div className="flex items-center space-x-3">
                   <div className="bg-blue-100 p-2 rounded-md text-blue-600"><PhoneCall size={20}/></div>
-                  <span className="font-semibold text-slate-700 group-hover:text-blue-700">Iniciar Discador</span>
+                  <span className="font-semibold text-slate-700 group-hover:text-blue-700">Ir para o Discador</span>
                 </div>
               </Link>
               <Link href="/leads" className="w-full flex items-center justify-between p-4 rounded-lg border border-slate-200 hover:border-green-500 hover:bg-green-50 transition group">
@@ -94,31 +94,19 @@ export default function Home() {
           {/* Activity Feed */}
           <div className="col-span-2 bg-white rounded-xl border border-slate-200 shadow-sm p-6">
             <h3 className="text-lg font-bold text-slate-800 mb-6 flex items-center">
-              <BarChart2 className="mr-2 text-slate-500" size={20}/> Últimas Tabulações
+              <BarChart2 className="mr-2 text-slate-500" size={20}/> Bem-vindo à Nova Arquitetura
             </h3>
             
-            <div className="space-y-4">
-              {[
-                { name: "Carlos Pereira", status: "Interessado", time: "Há 5 min", color: "text-blue-600", bg: "bg-blue-50" },
-                { name: "Maria Silva", status: "Caixa Postal", time: "Há 12 min", color: "text-orange-600", bg: "bg-orange-50" },
-                { name: "João Santos", status: "Venda Fechada", time: "Há 45 min", color: "text-green-600", bg: "bg-green-50" },
-                { name: "Ana Oliveira", status: "Número Inválido", time: "Há 1 hora", color: "text-red-600", bg: "bg-red-50" },
-              ].map((act, i) => (
-                <div key={i} className="flex items-center justify-between border-b border-slate-100 pb-4 last:border-0 last:pb-0">
-                  <div className="flex items-center space-x-3">
-                    <div className="w-10 h-10 bg-slate-100 rounded-full flex items-center justify-center text-slate-500 font-bold">
-                      {act.name.charAt(0)}
-                    </div>
-                    <div>
-                      <p className="font-semibold text-slate-700">{act.name}</p>
-                      <p className="text-xs text-slate-500">{act.time}</p>
-                    </div>
-                  </div>
-                  <span className={`px-3 py-1 rounded-full text-xs font-bold ${act.bg} ${act.color}`}>
-                    {act.status}
-                  </span>
-                </div>
-              ))}
+            <div className="text-slate-600 space-y-4">
+              <p>O sistema foi completamente reescrito para utilizar rotas independentes (App Router do Next.js), exatamente como os sistemas CloudTalk e Five9 funcionam.</p>
+              <ul className="list-disc pl-5 space-y-2">
+                <li><strong>Discador Remodelado:</strong> Acesse no menu esquerdo para ter a tela focada apenas no atendimento.</li>
+                <li><strong>Módulo de CRM (Leads):</strong> Importação e pesquisa agora rodam em uma tela própria, sem pesar a tela de discagem.</li>
+                <li><strong>Scripts Dedicados:</strong> Crie as abordagens separadamente.</li>
+              </ul>
+              <div className="bg-blue-50 text-blue-800 p-4 rounded-lg mt-4 border border-blue-200">
+                <strong>Importante:</strong> Se ocorrer erro 401 ou de permissões ao usar a plataforma, você precisa ajustar as regras de RLS (Row Level Security) no Supabase.
+              </div>
             </div>
           </div>
 

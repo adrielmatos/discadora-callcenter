@@ -254,20 +254,32 @@ export default function DialerWorkspace() {
                   <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-4 text-center">Tabulação (Wrap-up)</h3>
                   <div className="flex-1 overflow-y-auto space-y-2 pr-2 custom-scrollbar">
                     {/* Dispositions List */}
-                    <button onClick={() => handleDisposition("Venda Concluída")} className="w-full bg-green-50 hover:bg-green-100 text-green-700 border border-green-200 p-3 rounded-lg font-bold flex items-center justify-between transition">
-                      <span>Venda Fechada</span> <Check size={18} />
+                    <button onClick={() => handleDisposition("Contrato")} className="w-full bg-green-50 hover:bg-green-100 text-green-700 border border-green-200 p-2.5 rounded-lg font-bold flex items-center justify-between transition">
+                      <span>Contrato</span> <Check size={16} />
                     </button>
-                    <button onClick={() => handleDisposition("Agendar Retorno")} className="w-full bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 p-3 rounded-lg font-bold flex items-center justify-between transition">
-                      <span>Agendar Retorno</span> <Calendar size={18} />
+                    <button onClick={() => handleDisposition("Proposta")} className="w-full bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 p-2.5 rounded-lg font-bold flex items-center justify-between transition">
+                      <span>Proposta</span> <Check size={16} />
                     </button>
-                    <button onClick={() => handleDisposition("Caixa Postal")} className="w-full bg-orange-50 hover:bg-orange-100 text-orange-700 border border-orange-200 p-3 rounded-lg font-bold flex items-center justify-between transition">
-                      <span>Caixa Postal</span> <PhoneOff size={18} />
+                    <button onClick={() => handleDisposition("Simulação")} className="w-full bg-teal-50 hover:bg-teal-100 text-teal-700 border border-teal-200 p-2.5 rounded-lg font-bold flex items-center justify-between transition">
+                      <span>Simulação</span> <MessageCircle size={16} />
                     </button>
-                    <button onClick={() => handleDisposition("Sem Interesse")} className="w-full bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 p-3 rounded-lg font-bold flex items-center justify-between transition">
-                      <span>Sem Interesse</span> <X size={18} />
+                    <button onClick={() => handleDisposition("Interessado")} className="w-full bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 p-2.5 rounded-lg font-bold flex items-center justify-between transition">
+                      <span>Interessado</span> <User size={16} />
                     </button>
-                    <button onClick={() => handleDisposition("Número Inválido")} className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 p-3 rounded-lg font-bold flex items-center justify-between transition">
-                      <span>Número Inválido</span> <AlertCircle size={18} />
+                    <button onClick={() => handleDisposition("Retorno")} className="w-full bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 p-2.5 rounded-lg font-bold flex items-center justify-between transition">
+                      <span>Retorno</span> <Calendar size={16} />
+                    </button>
+                    <button onClick={() => handleDisposition("Não atendeu")} className="w-full bg-orange-50 hover:bg-orange-100 text-orange-700 border border-orange-200 p-2.5 rounded-lg font-bold flex items-center justify-between transition">
+                      <span>Não atendeu</span> <PhoneOff size={16} />
+                    </button>
+                    <button onClick={() => handleDisposition("Não interessado")} className="w-full bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 p-2.5 rounded-lg font-bold flex items-center justify-between transition">
+                      <span>Não interessado</span> <Ban size={16} />
+                    </button>
+                    <button onClick={() => handleDisposition("Número inválido")} className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 p-2.5 rounded-lg font-bold flex items-center justify-between transition">
+                      <span>Número inválido</span> <AlertCircle size={16} />
+                    </button>
+                    <button onClick={() => handleDisposition("Sem perfil")} className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 p-2.5 rounded-lg font-bold flex items-center justify-between transition">
+                      <span>Sem perfil</span> <X size={16} />
                     </button>
                   </div>
                 </div>
