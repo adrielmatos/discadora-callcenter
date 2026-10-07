@@ -217,13 +217,13 @@ export default function LeadsCRM() {
   return (
     <div className="flex-1 flex flex-col h-full bg-[#f8fafc] text-slate-900">
       {/* Header */}
-      <header className="h-16 bg-white border-b border-slate-200/80 px-8 flex justify-between items-center shrink-0">
+      <header className="min-h-16 py-3 bg-white border-b border-slate-200/80 px-4 lg:px-8 flex flex-wrap justify-between items-center gap-3 shrink-0">
         <div>
           <h1 className="text-xl font-bold text-slate-900">CRM & Funil de Tabulações</h1>
           <p className="text-slate-500 text-xs mt-0.5">Pipeline de negociação com todos os status de tabulação do discador.</p>
         </div>
 
-        <div className="flex items-center space-x-3">
+        <div className="flex items-center flex-wrap gap-2.5">
           <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200 text-xs">
             <button 
               onClick={() => setViewMode("kanban")}
@@ -237,7 +237,7 @@ export default function LeadsCRM() {
               className={`flex items-center space-x-1 px-3 py-1 rounded-md font-semibold transition cursor-pointer ${viewMode === "esteira" ? "bg-white shadow-xs text-emerald-600 font-bold" : "text-slate-500"}`}
             >
               <CheckCircle2 size={13} className={viewMode === "esteira" ? "text-emerald-600" : "text-slate-400"} />
-              <span>Esteira de Contratos (Promosys)</span>
+              <span>Esteira de Contratos</span>
             </button>
             <button 
               onClick={() => setViewMode("table")}

@@ -117,42 +117,52 @@ export default function Dashboard() {
           
           {/* Ações Rápidas */}
           <div className="bg-white rounded-xl border border-slate-200/80 shadow-xs p-5 flex flex-col">
-            <span className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-3">Módulos Operacionais</span>
+            <span className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-3">Atalhos Operacionais</span>
             <div className="space-y-2 flex-1">
-              <Link href="/dialer" className="flex items-center justify-between p-3 rounded-lg border border-slate-100 hover:border-blue-300 hover:bg-blue-50/40 transition group">
+              <Link href="/dialer" className="flex items-center justify-between p-3 rounded-lg border border-slate-100 hover:border-blue-200 hover:bg-slate-50/80 transition group">
                 <div className="flex items-center space-x-2.5">
-                  <div className="text-blue-600"><PhoneCall size={16}/></div>
+                  <div className="w-7 h-7 rounded-md bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+                    <PhoneCall size={14}/>
+                  </div>
                   <span className="font-semibold text-slate-700 group-hover:text-blue-700 text-xs">Discador com Pulo Automático</span>
                 </div>
                 <ArrowUpRight size={14} className="text-slate-400 group-hover:text-blue-600" />
               </Link>
-              <Link href="/leads" className="flex items-center justify-between p-3 rounded-lg border border-slate-100 hover:border-emerald-300 hover:bg-emerald-50/40 transition group">
+              <Link href="/leads" className="flex items-center justify-between p-3 rounded-lg border border-slate-100 hover:border-blue-200 hover:bg-slate-50/80 transition group">
                 <div className="flex items-center space-x-2.5">
-                  <div className="text-emerald-600"><TrendingUp size={16}/></div>
-                  <span className="font-semibold text-slate-700 group-hover:text-emerald-700 text-xs">CRM & Esteira de Contratos</span>
+                  <div className="w-7 h-7 rounded-md bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+                    <TrendingUp size={14}/>
+                  </div>
+                  <span className="font-semibold text-slate-700 group-hover:text-blue-700 text-xs">CRM & Esteira de Contratos</span>
                 </div>
-                <ArrowUpRight size={14} className="text-slate-400 group-hover:text-emerald-600" />
+                <ArrowUpRight size={14} className="text-slate-400 group-hover:text-blue-600" />
               </Link>
-              <Link href="/omnichannel" className="flex items-center justify-between p-3 rounded-lg border border-slate-100 hover:border-indigo-300 hover:bg-indigo-50/40 transition group">
+              <Link href="/omnichannel" className="flex items-center justify-between p-3 rounded-lg border border-slate-100 hover:border-blue-200 hover:bg-slate-50/80 transition group">
                 <div className="flex items-center space-x-2.5">
-                  <div className="text-indigo-600"><Bot size={16}/></div>
-                  <span className="font-semibold text-slate-700 group-hover:text-indigo-700 text-xs">Atendente IA 24h & WhatsApp</span>
+                  <div className="w-7 h-7 rounded-md bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+                    <Bot size={14}/>
+                  </div>
+                  <span className="font-semibold text-slate-700 group-hover:text-blue-700 text-xs">Atendente IA 24h & WhatsApp</span>
                 </div>
-                <ArrowUpRight size={14} className="text-slate-400 group-hover:text-indigo-600" />
+                <ArrowUpRight size={14} className="text-slate-400 group-hover:text-blue-600" />
               </Link>
-              <Link href="/retornos" className="flex items-center justify-between p-3 rounded-lg border border-slate-100 hover:border-amber-300 hover:bg-amber-50/40 transition group">
+              <Link href="/retornos" className="flex items-center justify-between p-3 rounded-lg border border-slate-100 hover:border-blue-200 hover:bg-slate-50/80 transition group">
                 <div className="flex items-center space-x-2.5">
-                  <div className="text-amber-600"><Calendar size={16}/></div>
-                  <span className="font-semibold text-slate-700 group-hover:text-amber-700 text-xs">Agenda de Retornos em Tempo Real</span>
+                  <div className="w-7 h-7 rounded-md bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+                    <Calendar size={14}/>
+                  </div>
+                  <span className="font-semibold text-slate-700 group-hover:text-blue-700 text-xs">Agenda de Retornos</span>
                 </div>
-                <ArrowUpRight size={14} className="text-slate-400 group-hover:text-amber-600" />
+                <ArrowUpRight size={14} className="text-slate-400 group-hover:text-blue-600" />
               </Link>
-              <Link href="/campanhas" className="flex items-center justify-between p-3 rounded-lg border border-slate-100 hover:border-purple-300 hover:bg-purple-50/40 transition group">
+              <Link href="/campanhas" className="flex items-center justify-between p-3 rounded-lg border border-slate-100 hover:border-blue-200 hover:bg-slate-50/80 transition group">
                 <div className="flex items-center space-x-2.5">
-                  <div className="text-purple-600"><Target size={16}/></div>
-                  <span className="font-semibold text-slate-700 group-hover:text-purple-700 text-xs">Campanhas por Convênio</span>
+                  <div className="w-7 h-7 rounded-md bg-slate-100 text-slate-600 flex items-center justify-center shrink-0">
+                    <Target size={14}/>
+                  </div>
+                  <span className="font-semibold text-slate-700 group-hover:text-blue-700 text-xs">Campanhas por Convênio</span>
                 </div>
-                <ArrowUpRight size={14} className="text-slate-400 group-hover:text-purple-600" />
+                <ArrowUpRight size={14} className="text-slate-400 group-hover:text-blue-600" />
               </Link>
             </div>
           </div>

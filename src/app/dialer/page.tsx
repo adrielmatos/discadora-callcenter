@@ -515,8 +515,8 @@ export default function DialerWorkspace() {
   return (
     <div className="flex-1 flex flex-col h-full bg-[#f8fafc] text-slate-900 overflow-hidden font-sans">
       {/* Sub-Header / Workspace Bar */}
-      <header className="h-14 bg-white border-b border-slate-200/80 flex items-center justify-between px-6 shrink-0">
-        <div className="flex items-center space-x-3">
+      <header className="min-h-14 py-2.5 px-4 lg:px-6 bg-white border-b border-slate-200/80 flex flex-wrap items-center justify-between gap-3 shrink-0">
+        <div className="flex items-center flex-wrap gap-2.5">
           <div className="flex items-center space-x-1.5">
             <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Fila:</span>
             <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200 text-xs font-medium">
@@ -555,7 +555,7 @@ export default function DialerWorkspace() {
         </div>
 
         {/* Dialing Modes & Tools */}
-        <div className="flex items-center space-x-3">
+        <div className="flex items-center space-x-2.5">
           <button 
             onClick={() => setShowCalc(!showCalc)}
             className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition border ${
@@ -590,18 +590,18 @@ export default function DialerWorkspace() {
         {/* Left / Center: Lead Profile + Dynamic Script */}
         <div className="flex-1 flex flex-col p-4 lg:p-6 overflow-y-auto space-y-4 lg:space-y-5">
           
-          {/* Ficha Minimalista do Cliente com Diagnóstico IA */}
+          {/* Ficha Minimalista do Cliente com Diagnóstico */}
           <div className="bg-white rounded-xl border border-slate-200/80 p-5 shadow-xs">
-            {/* Diagnóstico Inteligente de Oportunidade com IA (Viver de IA) */}
-            <div className="mb-4 bg-gradient-to-r from-blue-50/90 via-indigo-50/80 to-blue-50/90 border border-blue-200/80 rounded-xl px-3.5 py-2 flex items-center justify-between text-xs">
+            {/* Oportunidade Identificada pelo Sistema */}
+            <div className="mb-4 bg-slate-50 border border-slate-200/80 rounded-xl px-4 py-2.5 flex items-center justify-between text-xs">
               <div className="flex items-center space-x-2">
-                <Sparkles size={14} className="text-blue-600 shrink-0 animate-pulse" />
-                <span className="text-slate-800 font-medium">
-                  <strong className="text-blue-700">Diagnóstico IA:</strong> {getLeadDiagnosis(activeLead)}
+                <Sparkles size={14} className="text-blue-600 shrink-0" />
+                <span className="text-slate-700">
+                  <strong className="text-slate-900 font-bold">Oportunidade Identificada:</strong> {getLeadDiagnosis(activeLead)}
                 </span>
               </div>
-              <span className="text-[10px] bg-blue-600 text-white font-bold px-2 py-0.5 rounded-full shrink-0 shadow-2xs">
-                Score IA: 98%
+              <span className="text-[10px] font-bold uppercase tracking-wider text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded-full border border-blue-200/60 shrink-0">
+                Alta Conversão
               </span>
             </div>
 
