@@ -41,6 +41,99 @@ const OBJECTION_LIST = [
   }
 ];
 
+const DDD_REGIONS: Record<string, { uf: string, regiao: string }> = {
+  "11": { uf: "SP", regiao: "São Paulo / Capital" },
+  "12": { uf: "SP", regiao: "Vale do Paraíba" },
+  "13": { uf: "SP", regiao: "Baixada Santista" },
+  "14": { uf: "SP", regiao: "Bauru / Marília" },
+  "15": { uf: "SP", regiao: "Sorocaba" },
+  "16": { uf: "SP", regiao: "Ribeirão Preto" },
+  "17": { uf: "SP", regiao: "São José do Rio Preto" },
+  "18": { uf: "SP", regiao: "Presidente Prudente" },
+  "19": { uf: "SP", regiao: "Campinas" },
+  "21": { uf: "RJ", regiao: "Rio de Janeiro / Capital" },
+  "22": { uf: "RJ", regiao: "Região dos Lagos / Norte Fluminense" },
+  "24": { uf: "RJ", regiao: "Petrópolis / Volta Redonda" },
+  "27": { uf: "ES", regiao: "Vitória / Vila Velha" },
+  "28": { uf: "ES", regiao: "Cachoeiro de Itapemirim" },
+  "31": { uf: "MG", regiao: "Belo Horizonte e Região" },
+  "32": { uf: "MG", regiao: "Juiz de Fora" },
+  "33": { uf: "MG", regiao: "Governador Valadares" },
+  "34": { uf: "MG", regiao: "Uberlândia / Triângulo Mineiro" },
+  "35": { uf: "MG", regiao: "Poços de Caldas / Sul de Minas" },
+  "37": { uf: "MG", regiao: "Divinópolis" },
+  "38": { uf: "MG", regiao: "Montes Claros" },
+  "41": { uf: "PR", regiao: "Curitiba e Região Metropolitana" },
+  "42": { uf: "PR", regiao: "Ponta Grossa" },
+  "43": { uf: "PR", regiao: "Londrina" },
+  "44": { uf: "PR", regiao: "Maringá" },
+  "45": { uf: "PR", regiao: "Foz do Iguaçu / Cascavel" },
+  "46": { uf: "PR", regiao: "Francisco Beltrão" },
+  "47": { uf: "SC", regiao: "Joinville / Blumenau / Itajaí" },
+  "48": { uf: "SC", regiao: "Florianópolis" },
+  "49": { uf: "SC", regiao: "Chapecó / Oeste Catarinense" },
+  "51": { uf: "RS", regiao: "Porto Alegre" },
+  "53": { uf: "RS", regiao: "Pelotas / Rio Grande" },
+  "54": { uf: "RS", regiao: "Caxias do Sul / Serra Gaúcha" },
+  "55": { uf: "RS", regiao: "Santa Maria" },
+  "61": { uf: "DF", regiao: "Brasília / Distrito Federal" },
+  "62": { uf: "GO", regiao: "Goiânia" },
+  "63": { uf: "TO", regiao: "Palmas / Tocantins" },
+  "64": { uf: "GO", regiao: "Rio Verde" },
+  "65": { uf: "MT", regiao: "Cuiabá" },
+  "66": { uf: "MT", regiao: "Rondonópolis" },
+  "67": { uf: "MS", regiao: "Campo Grande" },
+  "68": { uf: "AC", regiao: "Rio Branco / Acre" },
+  "69": { uf: "RO", regiao: "Porto Velho / Rondônia" },
+  "71": { uf: "BA", regiao: "Salvador e Região" },
+  "73": { uf: "BA", regiao: "Ilhéus / Itabuna" },
+  "74": { uf: "BA", regiao: "Juazeiro" },
+  "75": { uf: "BA", regiao: "Feira de Santana" },
+  "77": { uf: "BA", regiao: "Vitória da Conquista" },
+  "79": { uf: "SE", regiao: "Aracaju / Sergipe" },
+  "81": { uf: "PE", regiao: "Recife e Região Metropolitana" },
+  "82": { uf: "AL", regiao: "Maceió / Alagoas" },
+  "83": { uf: "PB", regiao: "João Pessoa / Paraíba" },
+  "84": { uf: "RN", regiao: "Natal / Rio Grande do Norte" },
+  "85": { uf: "CE", regiao: "Fortaleza e Região" },
+  "86": { uf: "PI", regiao: "Teresina / Piauí" },
+  "87": { uf: "PE", regiao: "Petrolina" },
+  "88": { uf: "CE", regiao: "Juazeiro do Norte" },
+  "89": { uf: "PI", regiao: "Picos" },
+  "91": { uf: "PA", regiao: "Belém / Pará" },
+  "92": { uf: "AM", regiao: "Manaus / Amazonas" },
+  "93": { uf: "PA", regiao: "Santarém" },
+  "94": { uf: "PA", regiao: "Marabá" },
+  "95": { uf: "RR", regiao: "Boa Vista / Roraima" },
+  "96": { uf: "AP", regiao: "Macapá / Amapá" },
+  "97": { uf: "AM", regiao: "Interior do Amazonas" },
+  "98": { uf: "MA", regiao: "São Luís / Maranhão" },
+  "99": { uf: "MA", regiao: "Imperatriz / Maranhão" }
+};
+
+const formatPhone = (phone?: string) => {
+  if (!phone) return "";
+  const clean = phone.replace(/\D/g, "");
+  if (clean.length === 11) {
+    return `(${clean.slice(0, 2)}) ${clean.slice(2, 7)}-${clean.slice(7)}`;
+  }
+  if (clean.length === 10) {
+    return `(${clean.slice(0, 2)}) ${clean.slice(2, 6)}-${clean.slice(6)}`;
+  }
+  return phone;
+};
+
+const getRegionInfo = (phone?: string) => {
+  if (!phone) return { ddd: "XX", uf: "BR", regiao: "Nacional" };
+  const clean = phone.replace(/\D/g, "");
+  const ddd = clean.length >= 10 ? clean.slice(0, 2) : "";
+  return {
+    ddd: ddd || "XX",
+    uf: DDD_REGIONS[ddd]?.uf || "BR",
+    regiao: DDD_REGIONS[ddd]?.regiao || "Região Nacional"
+  };
+};
+
 interface Lead {
   id: number;
   nome: string;
@@ -302,18 +395,45 @@ export default function DialerWorkspace() {
       tentativas: 1
     }).eq("id", activeLead.id);
 
-    setCallStatus("idle");
+    handleNextLead();
+  };
 
-    // Avança para o próximo lead
+  const handleNextLead = () => {
+    setCallStatus("idle");
     if (currentLeadIndex + 1 < leadsList.length) {
       setCurrentLeadIndex(curr => curr + 1);
       if (isPowerDialing) {
-        // Dispara contagem de 2 segundos para próxima chamada
         setAutoNextCountdown(2);
       }
     } else {
       fetchQueue();
     }
+  };
+
+  const handleQualifySdr = async () => {
+    if (!activeLead) return;
+
+    await supabase.from("leads").update({ 
+      etapa_crm: "esteira_docs", 
+      status: "qualificado",
+      ultima_tabulacao: "Qualificado SDR" 
+    }).eq("id", activeLead.id);
+
+    await supabase.from("historico_ligacoes").insert({
+      lead_id: activeLead.id,
+      tabulacao: "Qualificado SDR",
+      duracao_segundos: duration
+    });
+
+    // Abre WhatsApp formal com proposta pré-formatada
+    const cleanNumber = activeLead.telefone.replace(/\D/g, "");
+    const rawMargem = (activeLead.margem_disponivel || "").trim();
+    const isMargemZero = !rawMargem || rawMargem === "R$ 0,00" || rawMargem === "0";
+    const valorMsg = isMargemZero ? "condição especial aprovada" : `margem liberada de ${rawMargem}`;
+    const msg = `Olá, ${activeLead.nome}! Sou o Adriel da A&K Soluções Financeiras. Sua simulação de crédito pelo ${activeLead.banco || "banco parceiro"} com ${valorMsg} foi qualificada com sucesso! Para darmos andamento na liberação direta na sua conta, pode me enviar uma foto do seu documento (RG ou CNH)?`;
+    window.open(`https://wa.me/55${cleanNumber}?text=${encodeURIComponent(msg)}`, "_blank");
+
+    handleNextLead();
   };
 
   const confirmScheduleReturn = async () => {
@@ -341,8 +461,11 @@ export default function DialerWorkspace() {
   const handleWhatsApp = () => {
     if (!activeLead) return;
     const cleanPhone = activeLead.telefone.replace(/\D/g, "");
+    const rawMargem = (activeLead.margem_disponivel || "").trim();
+    const isMargemZero = !rawMargem || rawMargem === "R$ 0,00" || rawMargem === "0";
+    const valorMsg = isMargemZero ? "condição especial aprovada" : `limite liberado de ${rawMargem}`;
     const text = encodeURIComponent(
-      `Olá, ${activeLead.nome}! Sou o Adriel da A&K Soluções Financeiras. Conforme conversamos, segue a simulação referente ao seu limite de ${activeLead.margem_disponivel || "crédito liberado"} pelo banco ${activeLead.banco || "parceiro"}. Ficou com alguma dúvida nas condições?`
+      `Olá, ${activeLead.nome}! Sou o Adriel da A&K Soluções Financeiras. Conforme conversamos, segue a simulação referente à sua ${valorMsg} pelo banco ${activeLead.banco || "parceiro"}. Ficou com alguma dúvida nas condições?`
     );
     window.open(`https://wa.me/55${cleanPhone}?text=${text}`, "_blank");
   };
@@ -352,7 +475,7 @@ export default function DialerWorkspace() {
     abertura: "Olá, [NOME], tudo bem? Aqui é o Adriel da A&K Soluções Financeiras.",
     motivo: "Estou em contato sobre as condições aprovadas no [BANCO].",
     qualificacao: "Gostaria de conhecer os valores?",
-    fechamento: "Posso enviar a simulação de [VALOR] pelo WhatsApp?"
+    fechamento: "Posso enviar a simulação do seu saldo liberado pelo WhatsApp?"
   };
 
   const renderScriptText = (text: string) => {
@@ -360,13 +483,18 @@ export default function DialerWorkspace() {
     const bancoRaw = activeLead?.banco;
     const bancoValido = bancoRaw && bancoRaw !== "Não informado" && bancoRaw.trim() !== "";
     const bancoNome = bancoValido ? bancoRaw : "bancos parceiros conveniados";
+    const rawMargem = (activeLead?.margem_disponivel || "").trim();
+    const isMargemZero = !rawMargem || rawMargem === "R$ 0,00" || rawMargem === "0" || rawMargem === "R$ 0";
+    const valorTexto = isMargemZero ? "valores liberados" : rawMargem;
 
     return text
       .replaceAll("no Não informado", `no ${bancoNome}`)
       .replaceAll("no banco Não informado", `no ${bancoNome}`)
       .replaceAll("[BANCO]", bancoNome)
       .replaceAll("[NOME]", activeLead?.nome || "cliente")
-      .replaceAll("[VALOR]", activeLead?.margem_disponivel && activeLead.margem_disponivel !== "R$ 0,00" ? activeLead.margem_disponivel : "valores liberados");
+      .replaceAll("seus [VALOR]", isMargemZero ? "do seu saldo liberado" : `dos seus ${rawMargem}`)
+      .replaceAll("dos seus [VALOR]", isMargemZero ? "do seu saldo liberado" : `dos seus ${rawMargem}`)
+      .replaceAll("[VALOR]", valorTexto);
   };
 
   if (!activeLead && leadsList.length === 0) {
@@ -456,11 +584,11 @@ export default function DialerWorkspace() {
         </div>
       </header>
 
-      {/* Main Container */}
-      <div className="flex-1 flex overflow-hidden">
+      {/* Main Container - Responsivo Mobile e Desktop */}
+      <div className="flex-1 flex flex-col lg:flex-row overflow-y-auto lg:overflow-hidden">
         
         {/* Left / Center: Lead Profile + Dynamic Script */}
-        <div className="flex-1 flex flex-col p-6 overflow-y-auto space-y-5">
+        <div className="flex-1 flex flex-col p-4 lg:p-6 overflow-y-auto space-y-4 lg:space-y-5">
           
           {/* Ficha Minimalista do Cliente com Diagnóstico IA */}
           <div className="bg-white rounded-xl border border-slate-200/80 p-5 shadow-xs">
@@ -484,7 +612,7 @@ export default function DialerWorkspace() {
                 </div>
                 <div>
                   <h2 className="text-lg font-bold text-slate-900">{activeLead?.nome}</h2>
-                  <div className="flex items-center space-x-3 mt-1 text-xs text-slate-500">
+                  <div className="flex items-center flex-wrap gap-2 mt-1 text-xs text-slate-500">
                     <span className="font-mono">{activeLead?.cpf || "CPF Indisponível"}</span>
                     <span>•</span>
                     <span className="flex items-center space-x-1 font-semibold text-slate-700 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
@@ -636,38 +764,15 @@ export default function DialerWorkspace() {
             )}
           </div>
 
-          {/* Script de Atendimento Automático por Produto (Local Único Consolidado) */}
+          {/* Script de Atendimento Automático Inteligente (Sincronizado Direto com Produto e Banco) */}
           <div className="flex-1 bg-white rounded-xl border border-slate-200/80 shadow-xs flex flex-col overflow-hidden">
-            <div className="h-12 px-5 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
-              <div className="flex items-center space-x-2">
-                <Sparkles size={15} className="text-blue-600" />
-                <span className="text-xs font-bold text-slate-800">Script de Atendimento:</span>
-              </div>
-
-              {/* Seletor Único do Produto / Script Ativo */}
-              <div className="flex items-center space-x-2">
-                <span className="text-[11px] font-medium text-slate-400 hidden sm:inline">Produto:</span>
-                <select 
-                  value={selectedScriptProduct} 
-                  onChange={e => setSelectedScriptProduct(e.target.value)}
-                  className="text-xs font-bold text-blue-700 bg-blue-50 hover:bg-blue-100/70 border border-blue-200 rounded-lg px-3 py-1.5 outline-none shadow-2xs cursor-pointer transition"
-                >
-                  {scriptsList.map(s => (
-                    <option key={s.id} value={s.produto} className="bg-white text-slate-800 font-normal">
-                      {s.produto}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            {/* Barra de Pílulas de Contorno de Objeções (IA / Quebra de Objeções Instantânea) */}
-            <div className="px-5 py-2.5 bg-amber-50/60 border-b border-amber-100 flex items-center space-x-2 overflow-x-auto shrink-0">
-              <div className="flex items-center text-[11px] font-bold text-amber-800 shrink-0 mr-1">
-                <Zap size={13} className="text-amber-600 mr-1 fill-amber-500" />
+            {/* Barra de Pílulas de Contorno de Objeções (Clean Wrap sem Barra de Rolagem) */}
+            <div className="px-5 py-3 bg-amber-50/70 border-b border-amber-200/70 flex flex-wrap items-center gap-2 shrink-0">
+              <div className="flex items-center text-xs font-bold text-amber-900 shrink-0 mr-1">
+                <Zap size={14} className="text-amber-600 mr-1.5 fill-amber-500" />
                 <span>Socorro / Objeções:</span>
               </div>
-              <div className="flex items-center space-x-1.5 flex-nowrap">
+              <div className="flex flex-wrap items-center gap-1.5">
                 {OBJECTION_LIST.map((obj) => {
                   const isActive = activeObjection === obj.id;
                   return (
@@ -675,10 +780,10 @@ export default function DialerWorkspace() {
                       key={obj.id}
                       type="button"
                       onClick={() => setActiveObjection(isActive ? null : obj.id)}
-                      className={`text-[11px] px-2.5 py-1 rounded-full font-medium transition shrink-0 flex items-center shadow-2xs ${
+                      className={`text-[11px] px-2.5 py-1 rounded-full font-medium transition flex items-center shadow-2xs ${
                         isActive
                           ? "bg-amber-600 text-white font-bold ring-2 ring-amber-400"
-                          : "bg-white text-amber-900 border border-amber-200/80 hover:bg-amber-100/70"
+                          : "bg-white text-amber-900 border border-amber-200/90 hover:bg-amber-100"
                       }`}
                     >
                       {obj.label}
@@ -689,7 +794,7 @@ export default function DialerWorkspace() {
                   <button
                     type="button"
                     onClick={() => setActiveObjection(null)}
-                    className="text-[10px] text-slate-400 hover:text-slate-600 px-1 py-0.5 underline shrink-0 cursor-pointer"
+                    className="text-[11px] text-slate-500 hover:text-slate-800 px-1 py-0.5 underline cursor-pointer font-medium"
                   >
                     Fechar
                   </button>
@@ -718,7 +823,7 @@ export default function DialerWorkspace() {
               </div>
             )}
 
-            <div className="p-6 overflow-y-auto space-y-4 text-xs leading-relaxed text-slate-700">
+            <div className="p-5 lg:p-6 overflow-y-auto space-y-4 text-xs leading-relaxed text-slate-700">
               <div className="bg-slate-50/80 p-3.5 rounded-lg border border-slate-100">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-blue-600 block mb-1">1. Abertura</span>
                 <p className="text-sm font-medium text-slate-800">"{renderScriptText(currentScript.abertura)}"</p>
@@ -744,8 +849,8 @@ export default function DialerWorkspace() {
           </div>
         </div>
 
-        {/* Right Panel: Dialing & Dispositions */}
-        <div className="w-80 bg-white border-l border-slate-200/80 flex flex-col justify-between p-6 shrink-0 shadow-xs">
+        {/* Right Panel: Dialing & Dispositions - 100% Responsivo */}
+        <div className="w-full lg:w-80 bg-white border-t lg:border-t-0 lg:border-l border-slate-200/80 flex flex-col justify-between p-5 lg:p-6 shrink-0 shadow-xs">
           
           <div className="text-center">
             {isDndBlocked && (
@@ -755,23 +860,48 @@ export default function DialerWorkspace() {
               </div>
             )}
             <span className="text-[11px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Número</span>
-            <p className="text-2xl font-mono font-bold text-slate-900">{activeLead?.telefone}</p>
+            <p className="text-2xl font-mono font-bold text-slate-900 tracking-tight">
+              {formatPhone(activeLead?.telefone) || "(00) 00000-0000"}
+            </p>
+            {/* Bina Inteligente & Localização */}
+            {activeLead?.telefone && (() => {
+              const region = getRegionInfo(activeLead.telefone);
+              return (
+                <div className="mt-1 flex items-center justify-center space-x-1.5 text-[11px] text-slate-500 font-medium">
+                  <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                  <span>📍 {region.uf} ({region.ddd}) • {region.regiao}</span>
+                </div>
+              );
+            })()}
           </div>
 
-          {/* Call Status Actions */}
-          <div className="flex-1 flex flex-col justify-center items-center my-6">
+          {/* SDR Qualification CTA & Call Status Actions */}
+          <div className="flex-1 flex flex-col justify-center items-center my-5 lg:my-6">
             {callStatus === "idle" && (
-              <button 
-                onClick={handleStartCall}
-                className={`w-32 h-32 rounded-2xl text-white flex flex-col items-center justify-center font-bold shadow-md hover:scale-102 transition-all cursor-pointer ${
-                  isDndBlocked 
-                    ? "bg-amber-600 hover:bg-amber-700 shadow-amber-500/20" 
-                    : "bg-blue-600 hover:bg-blue-700 shadow-blue-500/10"
-                }`}
-              >
-                <PhoneCall size={36} className="mb-1" />
-                <span className="text-xs uppercase tracking-wider">{isDndBlocked ? "Chamar (DND)" : "Chamar"}</span>
-              </button>
+              <div className="w-full flex flex-col items-center space-y-4">
+                {/* Botão de Qualificação SDR (Acelera para Esteira + Dispara Whats) */}
+                <button
+                  onClick={handleQualifySdr}
+                  className="w-full bg-emerald-600 hover:bg-emerald-700 active:scale-98 text-white py-2.5 px-4 rounded-xl font-bold text-xs flex items-center justify-center space-x-2 shadow-sm shadow-emerald-600/20 transition cursor-pointer"
+                  title="Qualifica o lead, move para a Esteira em 'Documentos Pendentes' e abre o WhatsApp com mensagem formatada"
+                >
+                  <Check size={15} className="stroke-[3]" />
+                  <span>Qualificar SDR ➔ Esteira</span>
+                </button>
+
+                {/* Botão Principal de Ligação */}
+                <button 
+                  onClick={handleStartCall}
+                  className={`w-32 h-32 rounded-2xl text-white flex flex-col items-center justify-center font-bold shadow-md hover:scale-102 transition-all cursor-pointer ${
+                    isDndBlocked 
+                      ? "bg-amber-600 hover:bg-amber-700 shadow-amber-500/20" 
+                      : "bg-blue-600 hover:bg-blue-700 shadow-blue-500/10"
+                  }`}
+                >
+                  <PhoneCall size={36} className="mb-1" />
+                  <span className="text-xs uppercase tracking-wider">{isDndBlocked ? "Chamar (DND)" : "Chamar"}</span>
+                </button>
+              </div>
             )}
 
             {callStatus === "calling" && (
