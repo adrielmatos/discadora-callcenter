@@ -1,15 +1,53 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { useState, useEffect } from "react";
 import { 
   LayoutDashboard, PhoneCall, Kanban, FileText, 
   Settings, PhoneOff, Calendar,
-  BarChart3, Target, Phone, MessageSquare
+  BarChart3, Target, Phone, MessageSquare, LogOut
 } from "lucide-react";
+import { supabase } from "@/lib/supabase";
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const router = useRouter();
+  const [currentUser, setCurrentUser] = useState<{ email?: string; nome?: string } | null>(null);
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (user) {
+        setCurrentUser({
+          email: user.email,
+          nome: user.user_metadata?.nome || user.email?.split("@")[0] || "Adriel"
+        });
+      }
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) {
+        setCurrentUser({
+          email: session.user.email,
+          nome: session.user.user_metadata?.nome || session.user.email?.split("@")[0] || "Adriel"
+        });
+      } else {
+        setCurrentUser(null);
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    router.push("/login");
+  };
+
+  // Se estiver na tela de login, não renderiza a sidebar
+  if (pathname === "/login") {
+    return null;
+  }
 
   const navGroups = [
     {
@@ -58,14 +96,16 @@ export default function Sidebar() {
       {/* User Status Card */}
       <div className="px-4 py-3 border-b border-slate-800/40 shrink-0">
         <div className="flex items-center space-x-3 bg-slate-900/60 px-3 py-2 rounded-lg border border-slate-800/60">
-          <div className="w-7 h-7 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-white font-semibold text-xs">
-            A
+          <div className="w-7 h-7 rounded-full bg-blue-600 border border-blue-500/40 flex items-center justify-center text-white font-bold text-xs">
+            {(currentUser?.nome || "A").charAt(0).toUpperCase()}
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-slate-200 font-semibold text-xs truncate">Adriel</p>
+            <p className="text-slate-200 font-semibold text-xs truncate">
+              {currentUser?.nome || "Adriel (Dono)"}
+            </p>
             <p className="text-[10px] text-emerald-400 flex items-center space-x-1 font-medium">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0"></span>
-              <span className="truncate">Operador • Online</span>
+              <span className="truncate">Administrador • Online</span>
             </p>
           </div>
         </div>
@@ -99,10 +139,18 @@ export default function Sidebar() {
         ))}
       </nav>
 
-      {/* Footer */}
-      <div className="p-4 border-t border-slate-800/60 text-center shrink-0">
-        <p className="text-[11px] font-semibold text-slate-400">Plataforma de Crédito v3.2</p>
-        <p className="text-[10px] text-slate-500">A&K Soluções Financeiras</p>
+      {/* Footer & Logout */}
+      <div className="p-3 border-t border-slate-800/60 shrink-0 space-y-2">
+        <button
+          onClick={handleLogout}
+          className="w-full flex items-center justify-center space-x-2 py-2 px-3 rounded-lg text-xs font-semibold text-rose-400 hover:text-white hover:bg-rose-950/40 border border-slate-800/60 hover:border-rose-900/50 transition cursor-pointer"
+        >
+          <LogOut size={14} />
+          <span>Sair da Conta</span>
+        </button>
+        <div className="text-center">
+          <p className="text-[10px] text-slate-500 font-medium">A&K Soluções Financeiras • v3.2</p>
+        </div>
       </div>
     </aside>
   );
