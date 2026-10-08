@@ -6,7 +6,7 @@ import { useState, useEffect } from "react";
 import { 
   LayoutDashboard, PhoneCall, Kanban, FileText, 
   Settings, PhoneOff, Calendar,
-  BarChart3, Target, Phone, MessageSquare, LogOut
+  BarChart3, Target, Phone, MessageSquare, LogOut, Building2
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
@@ -61,7 +61,8 @@ export default function Sidebar() {
     {
       title: "Gestão & Métricas",
       items: [
-        { name: "Visão Geral", path: "/", icon: LayoutDashboard },
+        { name: "Painel da Dona / Master", path: "/", icon: LayoutDashboard },
+        { name: "Empresas Assinantes (SaaS)", path: "/settings?tab=empresas", icon: Building2 },
         { name: "Resultados & Relatórios", path: "/resultados", icon: BarChart3 },
         { name: "Campanhas de Mailing", path: "/campanhas", icon: Target },
       ]
