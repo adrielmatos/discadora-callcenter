@@ -4,7 +4,7 @@ import React, { useState, useEffect } from "react";
 import {
   PhoneCall, PhoneOff, Check, X, Calendar, MessageSquare,
   Play, FastForward, User, AlertCircle, Calculator,
-  ShieldAlert, Sparkles, Building2, CheckCircle2, Zap, ChevronRight
+  ShieldAlert, Sparkles, Building2, CheckCircle2, Zap, ChevronRight, Settings2
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
@@ -127,6 +127,7 @@ export default function DialerWorkspace() {
   const [calcParcela, setCalcParcela] = useState(380);
   const [calcMargem, setCalcMargem] = useState(150);
   const [activeObjection, setActiveObjection] = useState<string | null>(null);
+  const [isToolbarOpen, setIsToolbarOpen] = useState(false);
 
   const activeLead = leadsList[currentLeadIndex];
   const cleanActivePhone = activeLead?.telefone?.replace(/\D/g, "") || "";
@@ -341,10 +342,12 @@ export default function DialerWorkspace() {
 
   // ─── RENDER PRINCIPAL ─────────────────────────────────────────────
   return (
-    <div className="flex-1 flex flex-col h-full bg-slate-50 text-slate-900 overflow-hidden font-sans">
+    <div className="flex-1 flex flex-col h-full bg-slate-50 text-slate-900 overflow-hidden font-sans relative">
 
-      {/* ── TOOLBAR SLIM ─────────────────────────────────────────────── */}
-      <div className="h-11 px-4 lg:px-6 bg-white border-b border-slate-200 flex items-center justify-between gap-3 shrink-0">
+      {/* ── TOOLBAR EXPANSÍVEL (Desliza e empurra conteúdo) ────────── */}
+      <div className={`bg-white transition-all duration-300 ease-in-out flex flex-wrap items-center justify-between gap-3 shrink-0 overflow-hidden ${
+        isToolbarOpen ? "h-14 px-4 lg:px-6 border-b border-slate-200 opacity-100" : "h-0 opacity-0 border-transparent pointer-events-none"
+      }`}>
         {/* Esquerda: contador + auto-next */}
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-500">
@@ -358,20 +361,20 @@ export default function DialerWorkspace() {
           )}
         </div>
 
-        {/* Direita: simulador + modo */}
+        {/* Direita: simulador + modo + botão fechar */}
         <div className="flex items-center gap-2">
           <button
             onClick={() => setShowCalc(!showCalc)}
             title="Simulador de FGTS, Portabilidade e Margem"
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition ${
-              showCalc ? "bg-blue-600 text-white border-blue-600" : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
+              showCalc ? "bg-blue-600 text-white border-blue-600" : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
             }`}
           >
             <Calculator size={13} />
             Simulador
           </button>
 
-          <div className="flex items-center bg-slate-100 rounded-lg border border-slate-200 p-0.5 text-xs">
+          <div className="flex items-center bg-slate-100 rounded-lg border border-slate-200 p-0.5 text-xs mr-2">
             <button
               onClick={() => { setIsPowerDialing(false); setAutoNextCountdown(null); }}
               title="Manual: você decide quando ligar para cada lead"
@@ -388,11 +391,31 @@ export default function DialerWorkspace() {
               Power
             </button>
           </div>
+
+          <button 
+            onClick={() => setIsToolbarOpen(false)}
+            className="w-7 h-7 flex items-center justify-center rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-800 transition"
+            title="Ocultar barra"
+          >
+            <X size={14} />
+          </button>
         </div>
       </div>
 
       {/* ── BODY: grid 2 colunas ──────────────────────────────────────── */}
-      <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
+      <div className="flex-1 flex flex-col lg:flex-row overflow-hidden relative">
+        
+        {/* BOTÃO FLUTUANTE DE AJUSTES (Aparece quando a barra está fechada) */}
+        <div className={`absolute top-3 right-4 lg:right-6 z-20 transition-all duration-300 ${isToolbarOpen ? 'scale-0 opacity-0' : 'scale-100 opacity-100'}`}>
+          <button 
+            onClick={() => setIsToolbarOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white border border-slate-200 text-slate-600 shadow-sm hover:shadow-md hover:text-blue-600 hover:border-blue-200 transition"
+            title="Abrir ajustes da fila"
+          >
+            <Settings2 size={14} />
+            <span className="text-[11px] font-bold">Ajustes</span>
+          </button>
+        </div>
 
         {/* ── COLUNA ESQUERDA: lead + script ─────────────────────────── */}
         <div className="flex-1 flex flex-col overflow-y-auto">
