@@ -202,11 +202,36 @@ export default function LeadsCRM() {
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
-  const handleExport = () => {
-    const ws = XLSX.utils.json_to_sheet(leads);
+  const handleExport = (format: "xlsx" | "csv" = "xlsx") => {
+    const listToExport = filteredLeads.length > 0 ? filteredLeads : leads;
+    if (listToExport.length === 0) {
+      alert("Nenhum lead disponível para exportar.");
+      return;
+    }
+
+    const formatted = listToExport.map(l => ({
+      "Nome Completo": l.nome || "",
+      "Telefone": l.telefone || "",
+      "CPF": l.cpf || "",
+      "Banco": l.banco || "",
+      "Produto": l.produto || "",
+      "Margem Disponível": l.margem_disponivel || "",
+      "Status": l.status || "",
+      "Etapa CRM": l.etapa_crm || "",
+      "Última Tabulação": l.ultima_tabulacao || "",
+      "Operador / Carteira": l.operador_nome || "Pool Geral"
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(formatted);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "CRM Leads");
-    XLSX.writeFile(wb, `leads_crm_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    XLSX.utils.book_append_sheet(wb, ws, "Leads Exportados");
+
+    const empObj = empresas.find(e => e.id === selectedEmpresa);
+    const empSlug = empObj ? (empObj.nome_fantasia || empObj.razao_social).replace(/[^a-zA-Z0-9]/g, "_") : "base_geral";
+    const dateStr = new Date().toISOString().slice(0, 10);
+    const fileName = `leads_${empSlug}_${dateStr}.${format}`;
+
+    XLSX.writeFile(wb, fileName, { bookType: format });
   };
 
   const changeEtapa = async (leadId: number, nextEtapa: string) => {
@@ -283,13 +308,24 @@ export default function LeadsCRM() {
             <RefreshCw size={15} className={loading ? "animate-spin" : ""} />
           </button>
 
-          <button 
-            onClick={handleExport}
-            className="flex items-center space-x-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 px-3 py-1.5 rounded-lg font-semibold text-xs transition"
-          >
-            <Download size={13} />
-            <span>Exportar Excel</span>
-          </button>
+          <div className="flex items-center space-x-1.5">
+            <button 
+              onClick={() => handleExport("xlsx")}
+              className="flex items-center space-x-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 px-3 py-1.5 rounded-lg font-bold text-xs transition"
+              title="Baixar planilha formatada para Excel (.xlsx)"
+            >
+              <Download size={13} />
+              <span>Baixar Excel</span>
+            </button>
+            <button 
+              onClick={() => handleExport("csv")}
+              className="flex items-center space-x-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 px-2.5 py-1.5 rounded-lg font-semibold text-xs transition"
+              title="Baixar arquivo em formato CSV (.csv)"
+            >
+              <Download size={13} />
+              <span>CSV</span>
+            </button>
+          </div>
 
           <button 
             onClick={() => fileInputRef.current?.click()}
