@@ -7,6 +7,7 @@ import {
   Building2, DollarSign, Layers, ChevronRight, Check, AlertCircle, RefreshCw
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import Link from "next/link";
 
 interface Operador {
   id: number;
@@ -458,7 +459,7 @@ export default function SettingsPage() {
                     <thead className="bg-slate-50 text-slate-400 uppercase text-[10px] font-bold border-b border-slate-200">
                       <tr>
                         <th className="px-4 py-3">Empresa / Razão Social</th>
-                        <th className="px-3 py-3">CNPJ</th>
+                        <th className="px-3 py-3">CNPJ / CPF</th>
                         <th className="px-3 py-3">Gestor / Dono</th>
                         <th className="px-3 py-3">Plano Contratado</th>
                         <th className="px-3 py-3 text-center">Limite Operadores</th>
@@ -516,20 +517,31 @@ export default function SettingsPage() {
                             </span>
                           </td>
                           <td className="px-3 py-3 text-right">
-                            {!emp.interna ? (
-                              <button
-                                onClick={() => toggleStatusEmpresa(emp.id, emp.status)}
-                                className={`text-[11px] font-bold px-2 py-1 rounded transition ${
-                                  emp.status === "ativa"
-                                    ? "text-rose-600 hover:bg-rose-50"
-                                    : "text-emerald-600 hover:bg-emerald-50"
-                                }`}
+                            <div className="flex items-center justify-end gap-2">
+                              <Link
+                                href={`/leads?empresa=${emp.id}`}
+                                className="text-[11px] font-bold text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-2.5 py-1 rounded-md border border-blue-200 transition flex items-center gap-1"
+                                title="Visualizar base de leads e mailing desta empresa"
                               >
-                                {emp.status === "ativa" ? "Suspender" : "Reativar"}
-                              </button>
-                            ) : (
-                              <span className="text-[10px] text-slate-400 font-semibold italic">Dona</span>
-                            )}
+                                <Eye size={12} />
+                                <span>Ver Leads</span>
+                              </Link>
+
+                              {!emp.interna ? (
+                                <button
+                                  onClick={() => toggleStatusEmpresa(emp.id, emp.status)}
+                                  className={`text-[11px] font-bold px-2 py-1 rounded transition ${
+                                    emp.status === "ativa"
+                                      ? "text-rose-600 hover:bg-rose-50"
+                                      : "text-emerald-600 hover:bg-emerald-50"
+                                  }`}
+                                >
+                                  {emp.status === "ativa" ? "Suspender" : "Reativar"}
+                                </button>
+                              ) : (
+                                <span className="text-[10px] text-slate-400 font-semibold italic">Matriz</span>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -902,14 +914,15 @@ export default function SettingsPage() {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
-                  <label className="text-[11px] font-bold text-slate-600 block mb-1">CNPJ (opcional):</label>
+                  <label className="text-[11px] font-bold text-slate-600 block mb-1">CNPJ ou CPF (opcional):</label>
                   <input 
                     type="text" 
-                    placeholder="00.000.000/0001-00"
+                    placeholder="CNPJ ou CPF (para autônomo/MEI)"
                     value={novoCnpj}
                     onChange={e => setNovoCnpj(e.target.value)}
                     className="w-full text-xs border border-slate-200 rounded-lg p-2 outline-none focus:border-blue-500 font-mono"
                   />
+                  <span className="text-[10px] text-slate-400 mt-0.5 block">Aceita CNPJ ou CPF sem restrição.</span>
                 </div>
 
                 <div>

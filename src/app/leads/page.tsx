@@ -3,7 +3,8 @@
 import React, { useState, useRef, useEffect } from "react";
 import { 
   Upload, Search, Download, RefreshCw, Kanban, Table, 
-  ArrowRight, CheckCircle2, PhoneOff, XCircle, AlertCircle, User, MessageSquare
+  ArrowRight, CheckCircle2, PhoneOff, XCircle, AlertCircle, User, MessageSquare,
+  Building2, Filter, Eye, ShieldCheck
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import * as XLSX from "xlsx";
@@ -19,6 +20,8 @@ interface Lead {
   status?: string;
   etapa_crm?: string;
   ultima_tabulacao?: string;
+  empresa_id?: string;
+  operador_nome?: string;
 }
 
 export default function LeadsCRM() {
@@ -27,6 +30,11 @@ export default function LeadsCRM() {
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Filtros de Auditoria Master
+  const [empresas, setEmpresas] = useState<any[]>([]);
+  const [selectedEmpresa, setSelectedEmpresa] = useState<string>("all");
+  const [selectedOperador, setSelectedOperador] = useState<string>("all");
 
   const fetchLeads = async () => {
     setLoading(true);
@@ -37,6 +45,16 @@ export default function LeadsCRM() {
 
   useEffect(() => {
     fetchLeads();
+    // Carrega empresas para auditoria do dono
+    supabase.from("empresas").select("id, razao_social, nome_fantasia").then(({ data }) => {
+      if (data) setEmpresas(data);
+    });
+
+    if (typeof window !== "undefined") {
+      const p = new URLSearchParams(window.location.search);
+      const emp = p.get("empresa");
+      if (emp) setSelectedEmpresa(emp);
+    }
   }, []);
 
   // Helper para buscar valor em objeto com chaves flexíveis
@@ -196,11 +214,20 @@ export default function LeadsCRM() {
     setLeads(prev => prev.map(l => l.id === leadId ? { ...l, etapa_crm: nextEtapa } : l));
   };
 
-  const filteredLeads = leads.filter(l => 
-    l.nome.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    l.telefone.includes(searchTerm) || 
-    (l.cpf && l.cpf.includes(searchTerm))
-  );
+  const filteredLeads = leads.filter(l => {
+    const matchSearch = l.nome.toLowerCase().includes(searchTerm.toLowerCase()) || 
+      l.telefone.includes(searchTerm) || 
+      (l.cpf && l.cpf.includes(searchTerm));
+    
+    const matchEmpresa = selectedEmpresa === "all" || l.empresa_id === selectedEmpresa;
+    const matchOperador = selectedOperador === "all" 
+      ? true 
+      : selectedOperador === "pool" 
+      ? !l.operador_nome 
+      : l.operador_nome === selectedOperador;
+
+    return matchSearch && matchEmpresa && matchOperador;
+  });
 
   // Estágios do Pipeline correspondentes à Tabulação (sem Retorno que tem tela própria)
   const stages = [
@@ -275,22 +302,65 @@ export default function LeadsCRM() {
         </div>
       </header>
 
-      {/* Search Bar */}
-      <div className="px-8 py-3 bg-white border-b border-slate-100 flex items-center justify-between">
-        <div className="relative w-80">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
-          <input 
-            type="text" 
-            placeholder="Buscar por cliente, telefone ou CPF..."
-            value={searchTerm}
-            onChange={e => setSearchTerm(e.target.value)}
-            className="w-full pl-8 pr-3 py-1.5 border border-slate-200 rounded-lg text-xs outline-none focus:border-blue-500"
-          />
+      {/* Search & Master Auditoria Bar */}
+      <div className="px-8 py-3 bg-white border-b border-slate-100 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center flex-wrap gap-2.5 flex-1 max-w-4xl">
+          {/* Busca por texto */}
+          <div className="relative w-72">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
+            <input 
+              type="text" 
+              placeholder="Buscar por cliente, telefone ou CPF..."
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+              className="w-full pl-8 pr-3 py-1.5 border border-slate-200 rounded-lg text-xs outline-none focus:border-blue-500"
+            />
+          </div>
+
+          {/* Filtro de Empresa (Auditoria Master) */}
+          <div className="flex items-center space-x-1.5 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1">
+            <Building2 size={13} className="text-blue-600 shrink-0" />
+            <select
+              value={selectedEmpresa}
+              onChange={e => setSelectedEmpresa(e.target.value)}
+              className="bg-transparent text-xs text-slate-700 font-semibold outline-none cursor-pointer"
+            >
+              <option value="all">🏢 Todas as Empresas (Visão Master)</option>
+              {empresas.map(emp => (
+                <option key={emp.id} value={emp.id}>
+                  {emp.razao_social} {emp.nome_fantasia ? `(${emp.nome_fantasia})` : ""}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Filtro de Operador / Carteira */}
+          <div className="flex items-center space-x-1.5 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1">
+            <User size={13} className="text-emerald-600 shrink-0" />
+            <select
+              value={selectedOperador}
+              onChange={e => setSelectedOperador(e.target.value)}
+              className="bg-transparent text-xs text-slate-700 font-semibold outline-none cursor-pointer"
+            >
+              <option value="all">👥 Todos os Operadores / Carteiras</option>
+              <option value="pool">⚡ Pool Geral (Livre na Fila)</option>
+              <option value="Adriel Matos Santos">👤 Adriel Matos Santos (Dono)</option>
+              <option value="Camila Rocha">👤 Camila Rocha (SDR)</option>
+              <option value="Marcos Vinicius">👤 Marcos Vinicius</option>
+            </select>
+          </div>
         </div>
 
-        <span className="text-xs text-slate-500 font-medium">
-          {filteredLeads.length} leads no sistema
-        </span>
+        <div className="flex items-center gap-2">
+          {selectedEmpresa !== "all" && (
+            <span className="text-[11px] font-bold bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full border border-blue-200">
+              Auditando Empresa
+            </span>
+          )}
+          <span className="text-xs text-slate-500 font-semibold">
+            {filteredLeads.length} leads exibidos
+          </span>
+        </div>
       </div>
 
       {/* Main Content Area */}
