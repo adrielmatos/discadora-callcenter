@@ -1,12 +1,14 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { FileText, Save, CheckCircle2, Plus, Trash2, Sparkles, Copy, Layers, Search, MessageCircle, Target, HelpCircle, Send, Info } from "lucide-react";
+import { FileText, Save, CheckCircle2, Plus, Trash2, Sparkles, Copy, Layers, Search, MessageCircle, Target, HelpCircle, Send, Info, ArrowLeft, FolderOpen } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
 export default function ScriptsPage() {
   const [scripts, setScripts] = useState<any[]>([]);
   const [selectedScript, setSelectedScript] = useState<any>(null);
+  const [viewMode, setViewMode] = useState<"grid" | "editor">("grid");
+  
   const [abertura, setAbertura] = useState("");
   const [motivo, setMotivo] = useState("");
   const [qualificacao, setQualificacao] = useState("");
@@ -24,7 +26,6 @@ export default function ScriptsPage() {
     const { data } = await supabase.from("scripts_ligacao").select("*").order("id", { ascending: true });
     if (data && data.length > 0) {
       setScripts(data);
-      if (!selectedScript) selectScript(data[0]);
     }
     setLoading(false);
   };
@@ -33,13 +34,19 @@ export default function ScriptsPage() {
     fetchScripts();
   }, []);
 
-  const selectScript = (s: any) => {
+  const openEditor = (s: any) => {
     setSelectedScript(s);
     setAbertura(s.abertura || "");
     setMotivo(s.motivo || "");
     setQualificacao(s.qualificacao || "");
     setFechamento(s.fechamento || "");
     setSavedSuccess(false);
+    setViewMode("editor");
+  };
+
+  const closeEditor = () => {
+    setSelectedScript(null);
+    setViewMode("grid");
   };
 
   const handleSave = async () => {
@@ -94,7 +101,7 @@ export default function ScriptsPage() {
     setNewProduto("");
     setShowNewModal(false);
     await fetchScripts();
-    if (data) selectScript(data);
+    if (data) openEditor(data);
   };
 
   const handleDelete = async (id: number) => {
@@ -105,7 +112,7 @@ export default function ScriptsPage() {
     if (!confirm("Tem certeza que deseja excluir este roteiro de produto?")) return;
 
     await supabase.from("scripts_ligacao").delete().eq("id", id);
-    setSelectedScript(null);
+    closeEditor();
     fetchScripts();
   };
 
@@ -114,90 +121,108 @@ export default function ScriptsPage() {
 
   return (
     <div className="flex-1 flex flex-col h-full bg-[#f8fafc] text-slate-900">
-      <header className="h-16 bg-white border-b border-slate-200/80 px-8 flex justify-between items-center shrink-0">
-        <div>
-          <h1 className="text-xl font-bold text-slate-900">Catálogo de Roteiros & Scripts</h1>
-          <p className="text-slate-500 text-xs mt-0.5">Roteiros operacionais de crédito consignado, cartões, FGTS e garantias.</p>
-        </div>
-        <button 
-          onClick={() => setShowNewModal(true)}
-          className="flex items-center space-x-1.5 bg-blue-600 hover:bg-blue-700 text-white px-3.5 py-1.5 rounded-lg font-semibold text-xs shadow-xs transition"
-        >
-          <Plus size={14} />
-          <span>Novo Roteiro de Produto</span>
-        </button>
-      </header>
-
-      <div className="flex-1 flex overflow-hidden">
-        {/* Sidebar de Roteiros */}
-        <div className="w-[320px] bg-white border-r border-slate-200/80 overflow-hidden flex flex-col shrink-0">
-          <div className="p-4 border-b border-slate-100">
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-2">
-              Buscar Produto
-            </span>
-            <div className="relative">
-              <Search size={14} className="absolute left-3 top-2.5 text-slate-400" />
-              <input 
-                type="text" 
-                placeholder="Ex: Saque FGTS..."
-                value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
-                className="w-full pl-8 pr-3 py-2 text-xs border border-slate-200 rounded-lg outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-slate-50 transition"
-              />
+      
+      {/* ─── HEADER ────────────────────────────────────────────────────────── */}
+      <header className="h-16 bg-white border-b border-slate-200/80 px-8 flex justify-between items-center shrink-0 shadow-sm z-10">
+        
+        {viewMode === "editor" ? (
+          <div className="flex items-center gap-4">
+            <button 
+              onClick={closeEditor} 
+              className="p-2 hover:bg-slate-100 rounded-full transition text-slate-500 hover:text-slate-900"
+              title="Voltar para o catálogo"
+            >
+              <ArrowLeft size={20} />
+            </button>
+            <div>
+              <h1 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+                Editando Roteiro {isMaster && <Sparkles size={16} className="text-amber-500" />}
+              </h1>
+              <p className="text-slate-500 text-xs mt-0.5">{selectedScript?.produto}</p>
             </div>
           </div>
-          
-          <div className="p-4 pb-2">
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-              Catálogo ({filteredScripts.length})
-            </span>
+        ) : (
+          <div>
+            <h1 className="text-xl font-bold text-slate-900">Catálogo de Roteiros & Scripts</h1>
+            <p className="text-slate-500 text-xs mt-0.5">Clique em um produto abaixo para personalizar seu roteiro de vendas.</p>
           </div>
+        )}
 
-          <div className="flex-1 overflow-y-auto px-3 pb-4 space-y-1 custom-scrollbar">
-            {filteredScripts.map(s => {
-              const isSelected = selectedScript?.id === s.id;
-              const isItemMaster = s.produto?.toLowerCase().includes("mestre");
-              return (
-                <div 
-                  key={s.id}
-                  onClick={() => selectScript(s)}
-                  className={`w-full text-left px-3 py-3 rounded-xl text-[13px] font-semibold cursor-pointer transition flex items-center justify-between group ${
-                    isSelected 
-                      ? "bg-blue-600 text-white shadow-md shadow-blue-500/20" 
-                      : isItemMaster ? "bg-amber-50 text-amber-900 border border-amber-200/60 hover:bg-amber-100" : "text-slate-700 hover:bg-slate-100 border border-transparent"
-                  }`}
-                >
-                  <div className="flex items-center space-x-2.5 truncate">
-                    {isItemMaster ? <Sparkles size={16} className={isSelected ? "text-amber-200" : "text-amber-500 shrink-0"} /> : <FileText size={16} className={isSelected ? "text-blue-200" : "text-slate-400"} />}
-                    <span className="truncate">{s.produto}</span>
+        {viewMode === "grid" && (
+          <button 
+            onClick={() => setShowNewModal(true)}
+            className="flex items-center space-x-1.5 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-bold text-xs shadow-sm transition"
+          >
+            <Plus size={15} />
+            <span>Novo Roteiro de Produto</span>
+          </button>
+        )}
+      </header>
+
+      {/* ─── CONTEÚDO PRINCIPAL ───────────────────────────────────────────────── */}
+      <div className="flex-1 overflow-y-auto">
+        
+        {/* VISÃO GRID (CATÁLOGO) */}
+        {viewMode === "grid" && (
+          <div className="p-8 max-w-7xl mx-auto space-y-8">
+            
+            {/* Barra de Busca Grande */}
+            <div className="max-w-xl relative">
+              <Search size={18} className="absolute left-4 top-3.5 text-slate-400" />
+              <input 
+                type="text" 
+                placeholder="Buscar por produto... (Ex: Saque FGTS)"
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                className="w-full pl-11 pr-4 py-3 text-sm font-medium border border-slate-200 rounded-xl outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 bg-white shadow-sm transition"
+              />
+            </div>
+
+            {/* Grid de Cards Quadrados */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-5">
+              {filteredScripts.map(s => {
+                const isItemMaster = s.produto?.toLowerCase().includes("mestre");
+                return (
+                  <div 
+                    key={s.id} 
+                    onClick={() => openEditor(s)} 
+                    className={`bg-white p-6 rounded-2xl border shadow-sm transition cursor-pointer flex flex-col items-center text-center group hover:-translate-y-1 hover:shadow-md ${
+                      isItemMaster ? "border-amber-200 hover:border-amber-400" : "border-slate-200 hover:border-blue-400"
+                    }`}
+                  >
+                    <div className={`w-14 h-14 rounded-full flex items-center justify-center mb-4 transition-transform group-hover:scale-110 ${
+                      isItemMaster ? "bg-amber-50 text-amber-500" : "bg-blue-50 text-blue-600"
+                    }`}>
+                      {isItemMaster ? <Sparkles size={26} /> : <FolderOpen size={26} />}
+                    </div>
+                    <h3 className="text-[13px] font-bold text-slate-800 line-clamp-2 leading-tight">
+                      {s.produto}
+                    </h3>
+                    <p className="text-[11px] text-slate-400 mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      Clique para editar
+                    </p>
                   </div>
-                  {!isItemMaster && (
-                    <button 
-                      onClick={(e) => { e.stopPropagation(); handleDelete(s.id); }}
-                      className={`p-1 rounded-md transition opacity-0 group-hover:opacity-100 ${isSelected ? "text-blue-200 hover:bg-blue-700 hover:text-white" : "text-slate-400 hover:bg-rose-100 hover:text-rose-600"}`}
-                      title="Excluir roteiro"
-                    >
-                      <Trash2 size={13} />
-                    </button>
-                  )}
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
+
             {filteredScripts.length === 0 && (
-              <div className="text-center py-6 text-xs text-slate-400">Nenhum produto encontrado.</div>
+              <div className="text-center py-20 bg-white rounded-2xl border border-slate-200 shadow-sm max-w-lg mx-auto">
+                <Search size={48} className="mx-auto text-slate-300 mb-4" />
+                <h3 className="text-lg font-bold text-slate-700">Nenhum produto encontrado</h3>
+                <p className="text-slate-500 text-sm mt-2">Tente buscar com outras palavras ou crie um novo roteiro.</p>
+              </div>
             )}
           </div>
-        </div>
+        )}
 
-        {/* Editor do Script */}
-        <div className="flex-1 p-8 overflow-y-auto bg-slate-50/50">
-          {selectedScript ? (
-            <div className="bg-white border border-slate-200/80 rounded-2xl shadow-sm p-8 max-w-4xl mx-auto space-y-6">
+        {/* VISÃO EDITOR (TELA CHEIA) */}
+        {viewMode === "editor" && selectedScript && (
+          <div className="p-8 max-w-4xl mx-auto space-y-6">
+            
+            <div className="bg-white border border-slate-200/80 rounded-2xl shadow-sm p-8 space-y-6">
               <div className="flex justify-between items-center border-b border-slate-100 pb-4">
                 <div>
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-blue-600 block mb-1">
-                    {isMaster ? "Script Mestre / Global" : "Roteiro Específico"}
-                  </span>
                   <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
                     {isMaster && <Sparkles size={18} className="text-amber-500" />}
                     {selectedScript.produto}
@@ -216,16 +241,23 @@ export default function ScriptsPage() {
                     </button>
                   )}
 
+                  <button 
+                    onClick={() => handleDelete(selectedScript.id)}
+                    className="flex items-center space-x-1.5 bg-white border border-slate-200 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200 text-slate-500 px-3 py-2 rounded-lg font-bold text-[13px] shadow-sm transition"
+                  >
+                    <Trash2 size={15} />
+                  </button>
+
                   <div className="flex items-center gap-3">
                     {savedSuccess && (
                       <span className="text-emerald-600 font-bold text-xs flex items-center space-x-1 animate-pulse">
                         <CheckCircle2 size={14} />
-                        <span>Roteiro Salvo!</span>
+                        <span>Salvo!</span>
                       </span>
                     )}
                     <button 
                       onClick={handleSave}
-                      className="flex items-center space-x-1.5 bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 rounded-lg font-bold text-[13px] shadow-sm transition"
+                      className="flex items-center space-x-1.5 bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2 rounded-lg font-bold text-[13px] shadow-sm transition"
                     >
                       <Save size={15} />
                       <span>Salvar Alterações</span>
@@ -234,7 +266,7 @@ export default function ScriptsPage() {
                 </div>
               </div>
 
-              {/* Box de Informação Moderno */}
+              {/* Box de Informação */}
               <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-xs text-blue-900 flex items-start gap-3 shadow-sm">
                 <Info size={16} className="text-blue-600 mt-0.5 shrink-0" />
                 <div className="space-y-1">
@@ -249,19 +281,13 @@ export default function ScriptsPage() {
               </div>
 
               <div className="space-y-5 pt-2">
-                
                 {/* 1. Abertura */}
                 <div className="bg-white border-2 border-blue-100 rounded-xl overflow-hidden shadow-sm transition focus-within:border-blue-400 focus-within:shadow-md">
                   <div className="bg-blue-50/70 px-4 py-2.5 border-b border-blue-100 flex items-center gap-2">
                     <MessageCircle size={15} className="text-blue-600" />
                     <label className="text-xs font-bold text-blue-900 uppercase tracking-wider">1. Abertura do Atendimento</label>
                   </div>
-                  <textarea 
-                    value={abertura}
-                    onChange={e => setAbertura(e.target.value)}
-                    placeholder="Ex: Oi, [NOME], tudo bem? Aqui é..."
-                    className="w-full p-4 text-[13px] h-20 outline-none text-slate-700 leading-relaxed resize-y bg-transparent placeholder-slate-400 font-medium"
-                  />
+                  <textarea value={abertura} onChange={e => setAbertura(e.target.value)} placeholder="Ex: Oi, [NOME], tudo bem? Aqui é..." className="w-full p-4 text-[13px] h-20 outline-none text-slate-700 leading-relaxed resize-y bg-transparent placeholder-slate-400 font-medium"/>
                 </div>
 
                 {/* 2. Motivo */}
@@ -270,12 +296,7 @@ export default function ScriptsPage() {
                     <Target size={15} className="text-slate-600" />
                     <label className="text-xs font-bold text-slate-800 uppercase tracking-wider">2. Motivo da Ligação (Apresentação)</label>
                   </div>
-                  <textarea 
-                    value={motivo}
-                    onChange={e => setMotivo(e.target.value)}
-                    placeholder="Ex: Identificamos que você possui margem no [BANCO]..."
-                    className="w-full p-4 text-[13px] h-24 outline-none text-slate-700 leading-relaxed resize-y bg-transparent placeholder-slate-400 font-medium"
-                  />
+                  <textarea value={motivo} onChange={e => setMotivo(e.target.value)} placeholder="Ex: Identificamos que você possui margem no [BANCO]..." className="w-full p-4 text-[13px] h-24 outline-none text-slate-700 leading-relaxed resize-y bg-transparent placeholder-slate-400 font-medium"/>
                 </div>
 
                 {/* 3. Qualificação */}
@@ -284,12 +305,7 @@ export default function ScriptsPage() {
                     <HelpCircle size={15} className="text-amber-600" />
                     <label className="text-xs font-bold text-amber-900 uppercase tracking-wider">3. Qualificação & Sondagem</label>
                   </div>
-                  <textarea 
-                    value={qualificacao}
-                    onChange={e => setQualificacao(e.target.value)}
-                    placeholder="Ex: Você já utiliza a modalidade do saque-aniversário?"
-                    className="w-full p-4 text-[13px] h-20 outline-none text-slate-700 leading-relaxed resize-y bg-transparent placeholder-slate-400 font-medium"
-                  />
+                  <textarea value={qualificacao} onChange={e => setQualificacao(e.target.value)} placeholder="Ex: Você já utiliza a modalidade do saque-aniversário?" className="w-full p-4 text-[13px] h-20 outline-none text-slate-700 leading-relaxed resize-y bg-transparent placeholder-slate-400 font-medium"/>
                 </div>
 
                 {/* 4. Fechamento */}
@@ -298,24 +314,12 @@ export default function ScriptsPage() {
                     <Send size={15} className="text-emerald-600" />
                     <label className="text-xs font-bold text-emerald-900 uppercase tracking-wider">4. Fechamento & Simulação</label>
                   </div>
-                  <textarea 
-                    value={fechamento}
-                    onChange={e => setFechamento(e.target.value)}
-                    placeholder="Ex: Posso te enviar uma simulação no WhatsApp?"
-                    className="w-full p-4 text-[13px] h-24 outline-none text-slate-700 leading-relaxed resize-y bg-transparent placeholder-slate-400 font-medium"
-                  />
+                  <textarea value={fechamento} onChange={e => setFechamento(e.target.value)} placeholder="Ex: Posso te enviar uma simulação no WhatsApp?" className="w-full p-4 text-[13px] h-24 outline-none text-slate-700 leading-relaxed resize-y bg-transparent placeholder-slate-400 font-medium"/>
                 </div>
-
               </div>
             </div>
-          ) : (
-            <div className="text-center py-20 bg-white rounded-2xl border border-slate-200 shadow-sm max-w-lg mx-auto">
-              <FileText size={48} className="mx-auto text-slate-300 mb-4" />
-              <h3 className="text-lg font-bold text-slate-700">Selecione um Roteiro</h3>
-              <p className="text-slate-500 text-sm mt-2">Escolha um produto no menu lateral para editar os scripts de venda.</p>
-            </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
       {/* Modal Novo Roteiro */}
@@ -331,14 +335,7 @@ export default function ScriptsPage() {
 
             <div>
               <label className="text-[11px] font-bold text-slate-600 block mb-1.5 uppercase tracking-wider">Nome do Produto:</label>
-              <input 
-                type="text" 
-                placeholder="Ex: Saque FGTS"
-                value={newProduto}
-                onChange={e => setNewProduto(e.target.value)}
-                className="w-full border-2 border-slate-200 p-3 rounded-xl text-sm font-semibold outline-none focus:border-blue-500 transition"
-                autoFocus
-              />
+              <input type="text" placeholder="Ex: Saque FGTS" value={newProduto} onChange={e => setNewProduto(e.target.value)} className="w-full border-2 border-slate-200 p-3 rounded-xl text-sm font-semibold outline-none focus:border-blue-500 transition" autoFocus/>
             </div>
 
             <div className="flex space-x-3 pt-2">
