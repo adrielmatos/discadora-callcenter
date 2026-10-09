@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { FileText, Save, CheckCircle2, Plus, Trash2, Sparkles, Copy, Layers } from "lucide-react";
+import { FileText, Save, CheckCircle2, Plus, Trash2, Sparkles, Copy, Layers, Search, MessageCircle, Target, HelpCircle, Send, Info } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
 export default function ScriptsPage() {
@@ -13,6 +13,7 @@ export default function ScriptsPage() {
   const [fechamento, setFechamento] = useState("");
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState("");
 
   // Modal Novo Roteiro
   const [showNewModal, setShowNewModal] = useState(false);
@@ -56,7 +57,6 @@ export default function ScriptsPage() {
     fetchScripts();
   };
 
-  // Propagar Script Mestre para todos os outros produtos
   const handlePropagateMaster = async () => {
     if (!confirm("Deseja aplicar a Abertura e o Fechamento deste Script Mestre para todos os outros produtos? Os motivos específicos de cada produto serão preservados.")) return;
 
@@ -110,6 +110,7 @@ export default function ScriptsPage() {
   };
 
   const isMaster = selectedScript?.produto?.toLowerCase().includes("mestre") || selectedScript?.produto?.toLowerCase().includes("geral");
+  const filteredScripts = scripts.filter(s => s.produto.toLowerCase().includes(searchQuery.toLowerCase()));
 
   return (
     <div className="flex-1 flex flex-col h-full bg-[#f8fafc] text-slate-900">
@@ -129,149 +130,220 @@ export default function ScriptsPage() {
 
       <div className="flex-1 flex overflow-hidden">
         {/* Sidebar de Roteiros */}
-        <div className="w-72 bg-white border-r border-slate-200/80 overflow-y-auto p-3 space-y-1 shrink-0">
-          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-2 block mb-2">
-            Produtos Cadastrados ({scripts.length})
-          </span>
-          {scripts.map(s => {
-            const isSelected = selectedScript?.id === s.id;
-            const isItemMaster = s.produto?.toLowerCase().includes("mestre");
-            return (
-              <div 
-                key={s.id}
-                onClick={() => selectScript(s)}
-                className={`w-full text-left px-3 py-2.5 rounded-lg text-xs font-semibold cursor-pointer transition flex items-center justify-between group ${
-                  isSelected 
-                    ? "bg-blue-50 text-blue-700 border border-blue-200 font-bold" 
-                    : isItemMaster ? "bg-amber-50/50 text-amber-900 border border-amber-200/60" : "text-slate-700 hover:bg-slate-50 border border-transparent"
-                }`}
-              >
-                <div className="flex items-center space-x-2 truncate">
-                  {isItemMaster ? <Sparkles size={14} className="text-amber-500 shrink-0" /> : <FileText size={14} className={isSelected ? "text-blue-600" : "text-slate-400"} />}
-                  <span className="truncate">{s.produto}</span>
+        <div className="w-[320px] bg-white border-r border-slate-200/80 overflow-hidden flex flex-col shrink-0">
+          <div className="p-4 border-b border-slate-100">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-2">
+              Buscar Produto
+            </span>
+            <div className="relative">
+              <Search size={14} className="absolute left-3 top-2.5 text-slate-400" />
+              <input 
+                type="text" 
+                placeholder="Ex: Saque FGTS..."
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                className="w-full pl-8 pr-3 py-2 text-xs border border-slate-200 rounded-lg outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-slate-50 transition"
+              />
+            </div>
+          </div>
+          
+          <div className="p-4 pb-2">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+              Catálogo ({filteredScripts.length})
+            </span>
+          </div>
+
+          <div className="flex-1 overflow-y-auto px-3 pb-4 space-y-1 custom-scrollbar">
+            {filteredScripts.map(s => {
+              const isSelected = selectedScript?.id === s.id;
+              const isItemMaster = s.produto?.toLowerCase().includes("mestre");
+              return (
+                <div 
+                  key={s.id}
+                  onClick={() => selectScript(s)}
+                  className={`w-full text-left px-3 py-3 rounded-xl text-[13px] font-semibold cursor-pointer transition flex items-center justify-between group ${
+                    isSelected 
+                      ? "bg-blue-600 text-white shadow-md shadow-blue-500/20" 
+                      : isItemMaster ? "bg-amber-50 text-amber-900 border border-amber-200/60 hover:bg-amber-100" : "text-slate-700 hover:bg-slate-100 border border-transparent"
+                  }`}
+                >
+                  <div className="flex items-center space-x-2.5 truncate">
+                    {isItemMaster ? <Sparkles size={16} className={isSelected ? "text-amber-200" : "text-amber-500 shrink-0"} /> : <FileText size={16} className={isSelected ? "text-blue-200" : "text-slate-400"} />}
+                    <span className="truncate">{s.produto}</span>
+                  </div>
+                  {!isItemMaster && (
+                    <button 
+                      onClick={(e) => { e.stopPropagation(); handleDelete(s.id); }}
+                      className={`p-1 rounded-md transition opacity-0 group-hover:opacity-100 ${isSelected ? "text-blue-200 hover:bg-blue-700 hover:text-white" : "text-slate-400 hover:bg-rose-100 hover:text-rose-600"}`}
+                      title="Excluir roteiro"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  )}
                 </div>
-                {!isItemMaster && (
-                  <button 
-                    onClick={(e) => { e.stopPropagation(); handleDelete(s.id); }}
-                    className="text-slate-300 hover:text-rose-600 opacity-0 group-hover:opacity-100 p-0.5 transition"
-                    title="Excluir roteiro"
-                  >
-                    <Trash2 size={12} />
-                  </button>
-                )}
-              </div>
-            );
-          })}
+              );
+            })}
+            {filteredScripts.length === 0 && (
+              <div className="text-center py-6 text-xs text-slate-400">Nenhum produto encontrado.</div>
+            )}
+          </div>
         </div>
 
         {/* Editor do Script */}
-        <div className="flex-1 p-8 overflow-y-auto">
+        <div className="flex-1 p-8 overflow-y-auto bg-slate-50/50">
           {selectedScript ? (
-            <div className="bg-white border border-slate-200/80 rounded-xl shadow-xs p-6 max-w-3xl space-y-5">
-              <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+            <div className="bg-white border border-slate-200/80 rounded-2xl shadow-sm p-8 max-w-4xl mx-auto space-y-6">
+              <div className="flex justify-between items-center border-b border-slate-100 pb-4">
                 <div>
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-blue-600 block">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-blue-600 block mb-1">
                     {isMaster ? "Script Mestre / Global" : "Roteiro Específico"}
                   </span>
-                  <h2 className="text-base font-bold text-slate-900">{selectedScript.produto}</h2>
+                  <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+                    {isMaster && <Sparkles size={18} className="text-amber-500" />}
+                    {selectedScript.produto}
+                  </h2>
                 </div>
 
-                <div className="flex items-center space-x-2">
+                <div className="flex items-center space-x-3">
                   {isMaster && (
                     <button 
                       onClick={handlePropagateMaster}
-                      className="flex items-center space-x-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 px-3 py-1.5 rounded-lg font-bold text-xs transition"
+                      className="flex items-center space-x-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 px-3 py-2 rounded-lg font-bold text-xs transition shadow-sm"
                       title="Aplica a Abertura e o Fechamento deste script em todos os outros produtos"
                     >
-                      <Layers size={13} />
-                      <span>Propagar para Todos</span>
+                      <Layers size={14} />
+                      <span>Propagar Padrão</span>
                     </button>
                   )}
 
-                  {savedSuccess && (
-                    <span className="text-emerald-600 font-semibold text-xs flex items-center space-x-1">
-                      <CheckCircle2 size={14} />
-                      <span>Salvo!</span>
-                    </span>
-                  )}
-                  <button 
-                    onClick={handleSave}
-                    className="flex items-center space-x-1.5 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-1.5 rounded-lg font-bold text-xs shadow-xs transition"
-                  >
-                    <Save size={13} />
-                    <span>Salvar</span>
-                  </button>
+                  <div className="flex items-center gap-3">
+                    {savedSuccess && (
+                      <span className="text-emerald-600 font-bold text-xs flex items-center space-x-1 animate-pulse">
+                        <CheckCircle2 size={14} />
+                        <span>Roteiro Salvo!</span>
+                      </span>
+                    )}
+                    <button 
+                      onClick={handleSave}
+                      className="flex items-center space-x-1.5 bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 rounded-lg font-bold text-[13px] shadow-sm transition"
+                    >
+                      <Save size={15} />
+                      <span>Salvar Alterações</span>
+                    </button>
+                  </div>
                 </div>
               </div>
 
-              <div className="bg-slate-50 border border-slate-200/60 rounded-lg p-2.5 text-[11px] text-slate-600">
-                Variáveis dinâmicas: <code className="bg-white px-1.5 py-0.5 rounded border border-slate-200 font-bold">[NOME]</code>, <code className="bg-white px-1.5 py-0.5 rounded border border-slate-200 font-bold">[BANCO]</code> e <code className="bg-white px-1.5 py-0.5 rounded border border-slate-200 font-bold">[VALOR]</code>.
+              {/* Box de Informação Moderno */}
+              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-xs text-blue-900 flex items-start gap-3 shadow-sm">
+                <Info size={16} className="text-blue-600 mt-0.5 shrink-0" />
+                <div className="space-y-1">
+                  <p className="font-semibold">Dica de Produtividade: Personalize o roteiro usando variáveis dinâmicas.</p>
+                  <p className="text-blue-800/80">O sistema substitui essas tags automaticamente pelo nome e dados do cliente na tela da discadora.</p>
+                  <div className="pt-2 flex gap-2">
+                    <code className="bg-white px-2 py-1 rounded border border-blue-200 font-bold text-blue-700 cursor-default select-all">[NOME]</code>
+                    <code className="bg-white px-2 py-1 rounded border border-blue-200 font-bold text-blue-700 cursor-default select-all">[BANCO]</code>
+                    <code className="bg-white px-2 py-1 rounded border border-blue-200 font-bold text-blue-700 cursor-default select-all">[VALOR]</code>
+                  </div>
+                </div>
               </div>
 
-              <div className="space-y-3.5">
-                <div>
-                  <label className="text-[11px] font-bold text-slate-600 block mb-1">1. Abertura do Atendimento:</label>
+              <div className="space-y-5 pt-2">
+                
+                {/* 1. Abertura */}
+                <div className="bg-white border-2 border-blue-100 rounded-xl overflow-hidden shadow-sm transition focus-within:border-blue-400 focus-within:shadow-md">
+                  <div className="bg-blue-50/70 px-4 py-2.5 border-b border-blue-100 flex items-center gap-2">
+                    <MessageCircle size={15} className="text-blue-600" />
+                    <label className="text-xs font-bold text-blue-900 uppercase tracking-wider">1. Abertura do Atendimento</label>
+                  </div>
                   <textarea 
                     value={abertura}
                     onChange={e => setAbertura(e.target.value)}
-                    className="w-full border border-slate-200 p-2.5 rounded-lg text-xs h-20 outline-none focus:border-blue-500 text-slate-800 leading-relaxed"
+                    placeholder="Ex: Oi, [NOME], tudo bem? Aqui é..."
+                    className="w-full p-4 text-[13px] h-20 outline-none text-slate-700 leading-relaxed resize-y bg-transparent placeholder-slate-400 font-medium"
                   />
                 </div>
 
-                <div>
-                  <label className="text-[11px] font-bold text-slate-600 block mb-1">2. Motivo da Ligação (Apresentação do Produto):</label>
+                {/* 2. Motivo */}
+                <div className="bg-white border-2 border-slate-200 rounded-xl overflow-hidden shadow-sm transition focus-within:border-slate-400 focus-within:shadow-md">
+                  <div className="bg-slate-50/70 px-4 py-2.5 border-b border-slate-200 flex items-center gap-2">
+                    <Target size={15} className="text-slate-600" />
+                    <label className="text-xs font-bold text-slate-800 uppercase tracking-wider">2. Motivo da Ligação (Apresentação)</label>
+                  </div>
                   <textarea 
                     value={motivo}
                     onChange={e => setMotivo(e.target.value)}
-                    className="w-full border border-slate-200 p-2.5 rounded-lg text-xs h-20 outline-none focus:border-blue-500 text-slate-800 leading-relaxed"
+                    placeholder="Ex: Identificamos que você possui margem no [BANCO]..."
+                    className="w-full p-4 text-[13px] h-24 outline-none text-slate-700 leading-relaxed resize-y bg-transparent placeholder-slate-400 font-medium"
                   />
                 </div>
 
-                <div>
-                  <label className="text-[11px] font-bold text-slate-600 block mb-1">3. Qualificação & Sondagem:</label>
+                {/* 3. Qualificação */}
+                <div className="bg-white border-2 border-amber-100 rounded-xl overflow-hidden shadow-sm transition focus-within:border-amber-400 focus-within:shadow-md">
+                  <div className="bg-amber-50/70 px-4 py-2.5 border-b border-amber-100 flex items-center gap-2">
+                    <HelpCircle size={15} className="text-amber-600" />
+                    <label className="text-xs font-bold text-amber-900 uppercase tracking-wider">3. Qualificação & Sondagem</label>
+                  </div>
                   <textarea 
                     value={qualificacao}
                     onChange={e => setQualificacao(e.target.value)}
-                    className="w-full border border-slate-200 p-2.5 rounded-lg text-xs h-16 outline-none focus:border-blue-500 text-slate-800 leading-relaxed"
+                    placeholder="Ex: Você já utiliza a modalidade do saque-aniversário?"
+                    className="w-full p-4 text-[13px] h-20 outline-none text-slate-700 leading-relaxed resize-y bg-transparent placeholder-slate-400 font-medium"
                   />
                 </div>
 
-                <div>
-                  <label className="text-[11px] font-bold text-slate-600 block mb-1">4. Fechamento e Simulação:</label>
+                {/* 4. Fechamento */}
+                <div className="bg-white border-2 border-emerald-100 rounded-xl overflow-hidden shadow-sm transition focus-within:border-emerald-400 focus-within:shadow-md">
+                  <div className="bg-emerald-50/70 px-4 py-2.5 border-b border-emerald-100 flex items-center gap-2">
+                    <Send size={15} className="text-emerald-600" />
+                    <label className="text-xs font-bold text-emerald-900 uppercase tracking-wider">4. Fechamento & Simulação</label>
+                  </div>
                   <textarea 
                     value={fechamento}
                     onChange={e => setFechamento(e.target.value)}
-                    className="w-full border border-slate-200 p-2.5 rounded-lg text-xs h-20 outline-none focus:border-blue-500 text-slate-800 leading-relaxed"
+                    placeholder="Ex: Posso te enviar uma simulação no WhatsApp?"
+                    className="w-full p-4 text-[13px] h-24 outline-none text-slate-700 leading-relaxed resize-y bg-transparent placeholder-slate-400 font-medium"
                   />
                 </div>
+
               </div>
             </div>
           ) : (
-            <div className="text-center py-16 text-slate-400 text-xs">Carregando catálogo de roteiros...</div>
+            <div className="text-center py-20 bg-white rounded-2xl border border-slate-200 shadow-sm max-w-lg mx-auto">
+              <FileText size={48} className="mx-auto text-slate-300 mb-4" />
+              <h3 className="text-lg font-bold text-slate-700">Selecione um Roteiro</h3>
+              <p className="text-slate-500 text-sm mt-2">Escolha um produto no menu lateral para editar os scripts de venda.</p>
+            </div>
           )}
         </div>
       </div>
 
       {/* Modal Novo Roteiro */}
       {showNewModal && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl p-6 max-w-sm w-full shadow-xl border border-slate-200 space-y-4">
-            <h3 className="text-sm font-bold text-slate-800">Novo Roteiro de Produto</h3>
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl border border-slate-200 space-y-5">
+            <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
+              <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
+                <Plus size={20} className="text-blue-600" />
+              </div>
+              <h3 className="text-base font-bold text-slate-800">Novo Produto</h3>
+            </div>
 
             <div>
-              <label className="text-[11px] font-bold text-slate-600 block mb-1">Nome do Produto:</label>
+              <label className="text-[11px] font-bold text-slate-600 block mb-1.5 uppercase tracking-wider">Nome do Produto:</label>
               <input 
                 type="text" 
-                placeholder="Ex: Empréstimo com Débito em Conta"
+                placeholder="Ex: Saque FGTS"
                 value={newProduto}
                 onChange={e => setNewProduto(e.target.value)}
-                className="w-full border border-slate-200 p-2 rounded-lg text-xs outline-none focus:border-blue-500"
+                className="w-full border-2 border-slate-200 p-3 rounded-xl text-sm font-semibold outline-none focus:border-blue-500 transition"
+                autoFocus
               />
             </div>
 
-            <div className="flex space-x-2 pt-2">
-              <button onClick={() => setShowNewModal(false)} className="flex-1 py-2 text-xs font-semibold text-slate-600 border border-slate-200 rounded-lg">Cancelar</button>
-              <button onClick={handleCreateNew} className="flex-1 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-xs">Criar Roteiro</button>
+            <div className="flex space-x-3 pt-2">
+              <button onClick={() => setShowNewModal(false)} className="flex-1 py-2.5 text-xs font-bold text-slate-600 border-2 border-slate-200 rounded-xl hover:bg-slate-50 transition">Cancelar</button>
+              <button onClick={handleCreateNew} className="flex-1 py-2.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-md transition">Criar Roteiro</button>
             </div>
           </div>
         </div>
