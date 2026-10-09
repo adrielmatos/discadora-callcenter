@@ -517,34 +517,12 @@ export default function DialerWorkspace() {
       {/* Sub-Header / Workspace Bar */}
       <header className="min-h-14 py-2.5 px-4 lg:px-6 bg-white border-b border-slate-200/80 flex flex-wrap items-center justify-between gap-3 shrink-0">
         <div className="flex items-center flex-wrap gap-2.5">
-          <div className="flex items-center space-x-1.5">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Fila:</span>
-            <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200 text-xs font-medium">
-              <button 
-                onClick={() => handleFilterChange("all")} 
-                className={`px-2.5 py-1 rounded-md transition ${productFilter === "all" ? "bg-white text-slate-900 font-bold shadow-xs" : "text-slate-600 hover:text-slate-900"}`}
-              >
-                Todos ({leadsList.length - currentLeadIndex})
-              </button>
-              <button 
-                onClick={() => handleFilterChange("inss")} 
-                className={`px-2.5 py-1 rounded-md transition ${productFilter === "inss" ? "bg-white text-blue-700 font-bold shadow-xs" : "text-slate-600 hover:text-slate-900"}`}
-              >
-                INSS & BPC
-              </button>
-              <button 
-                onClick={() => handleFilterChange("fgts")} 
-                className={`px-2.5 py-1 rounded-md transition ${productFilter === "fgts" ? "bg-white text-blue-700 font-bold shadow-xs" : "text-slate-600 hover:text-slate-900"}`}
-              >
-                FGTS
-              </button>
-              <button 
-                onClick={() => handleFilterChange("consignado")} 
-                className={`px-2.5 py-1 rounded-md transition ${productFilter === "consignado" ? "bg-white text-blue-700 font-bold shadow-xs" : "text-slate-600 hover:text-slate-900"}`}
-              >
-                Consignado
-              </button>
-            </div>
+          {/* Contador de leads na fila */}
+          <div className="flex items-center space-x-2 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-lg">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse inline-block shrink-0"></span>
+            <span className="text-xs font-semibold text-slate-600">
+              {leadsList.length - currentLeadIndex} lead{leadsList.length - currentLeadIndex !== 1 ? "s" : ""} na fila
+            </span>
           </div>
 
           {autoNextCountdown !== null && (
