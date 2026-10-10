@@ -193,17 +193,17 @@ export default function SettingsPage() {
       }
     }
 
-    const savedConfig = localStorage.getItem("ak_settings_full_v2");
-    if (savedConfig) {
-      try {
-        const c = JSON.parse(savedConfig);
-        if (c.empresaNome) setEmpresaNome(c.empresaNome);
-        if (c.responsavelNome) setResponsavelNome(c.responsavelNome);
-        if (c.metaLigacoes) setMetaLigacoes(c.metaLigacoes);
-        if (c.metaContratos) setMetaContratos(c.metaContratos);
-        if (c.ticketMedio) setTicketMedio(c.ticketMedio);
-      } catch (e) {}
-    }
+    const fetchGlobalConfig = async () => {
+      const { data } = await supabase.from("app_configuracoes").select("*").eq("id", 1).single();
+      if (data) {
+        if (data.empresa_nome) setEmpresaNome(data.empresa_nome);
+        if (data.responsavel_nome) setResponsavelNome(data.responsavel_nome);
+        if (data.meta_ligacoes) setMetaLigacoes(String(data.meta_ligacoes));
+        if (data.meta_contratos) setMetaContratos(String(data.meta_contratos));
+        if (data.ticket_medio) setTicketMedio(String(data.ticket_medio));
+      }
+    };
+    fetchGlobalConfig();
   }, []);
 
   // Cadastro de Nova Empresa Assinante (SaaS)
@@ -267,16 +267,22 @@ export default function SettingsPage() {
     }
   };
 
-  const handleSaveConfig = () => {
-    localStorage.setItem("ak_settings_full_v2", JSON.stringify({
-      empresaNome,
-      responsavelNome,
-      metaLigacoes,
-      metaContratos,
-      ticketMedio
-    }));
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2500);
+  const handleSaveConfig = async () => {
+    const { error } = await supabase.from("app_configuracoes").update({
+      empresa_nome: empresaNome,
+      responsavel_nome: responsavelNome,
+      meta_ligacoes: parseInt(metaLigacoes) || 120,
+      meta_contratos: parseInt(metaContratos) || 5,
+      ticket_medio: parseFloat(ticketMedio) || 4500,
+      updated_at: new Date().toISOString()
+    }).eq("id", 1);
+
+    if (!error) {
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2500);
+    } else {
+      alert("Erro ao salvar parâmetros: " + error.message);
+    }
   };
 
   const handleAddOperador = async () => {

@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { Phone, Shield, CheckCircle2, Save, Wifi, WifiOff } from "lucide-react";
+import { supabase } from "@/lib/supabase";
 
 export default function TelefoniaPage() {
   const [sipHost, setSipHost] = useState("");
@@ -10,31 +11,49 @@ export default function TelefoniaPage() {
   const [sipPassword, setSipPassword] = useState("");
   const [protocol, setProtocol] = useState("WSS");
   const [saved, setSaved] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const savedConfig = localStorage.getItem("ak_sip_config");
-    if (savedConfig) {
-      try {
-        const c = JSON.parse(savedConfig);
-        if (c.sipHost) setSipHost(c.sipHost);
-        if (c.sipPort) setSipPort(c.sipPort);
-        if (c.sipUser) setSipUser(c.sipUser);
-        if (c.sipPassword) setSipPassword(c.sipPassword);
-        if (c.protocol) setProtocol(c.protocol);
-      } catch (e) {}
-    }
+    fetchConfig();
   }, []);
 
-  const handleSave = () => {
-    localStorage.setItem("ak_sip_config", JSON.stringify({
-      sipHost,
-      sipPort,
-      sipUser,
-      sipPassword,
-      protocol
-    }));
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2500);
+  const fetchConfig = async () => {
+    setLoading(true);
+    const { data, error } = await supabase
+      .from("app_configuracoes")
+      .select("sip_host, sip_port, sip_user, sip_password, sip_protocol")
+      .eq("id", 1)
+      .single();
+
+    if (data && !error) {
+      setSipHost(data.sip_host || "");
+      setSipPort(data.sip_port || "5060");
+      setSipUser(data.sip_user || "");
+      setSipPassword(data.sip_password || "");
+      setProtocol(data.sip_protocol || "WSS");
+    }
+    setLoading(false);
+  };
+
+  const handleSave = async () => {
+    const { error } = await supabase
+      .from("app_configuracoes")
+      .update({
+        sip_host: sipHost,
+        sip_port: sipPort,
+        sip_user: sipUser,
+        sip_password: sipPassword,
+        sip_protocol: protocol,
+        updated_at: new Date().toISOString()
+      })
+      .eq("id", 1);
+
+    if (!error) {
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2500);
+    } else {
+      alert("Erro ao salvar configurações de telefonia: " + error.message);
+    }
   };
 
   return (
@@ -46,10 +65,11 @@ export default function TelefoniaPage() {
         </div>
         <button 
           onClick={handleSave}
-          className="flex items-center space-x-1.5 bg-blue-600 hover:bg-blue-700 text-white px-4 py-1.5 rounded-lg font-bold text-xs shadow-xs transition"
+          disabled={loading}
+          className="flex items-center space-x-1.5 bg-blue-600 hover:bg-blue-700 text-white px-4 py-1.5 rounded-lg font-bold text-xs shadow-xs transition disabled:opacity-50"
         >
           <Save size={14} />
-          <span>Salvar Credenciais</span>
+          <span>{loading ? "Carregando..." : "Salvar Credenciais"}</span>
         </button>
       </header>
 
@@ -58,7 +78,7 @@ export default function TelefoniaPage() {
           {saved && (
             <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 p-3 rounded-xl flex items-center space-x-2 text-xs font-semibold">
               <CheckCircle2 size={16} className="text-emerald-600" />
-              <span>Configurações SIP salvas com sucesso!</span>
+              <span>Configurações SIP salvas com sucesso no banco de dados!</span>
             </div>
           )}
 
@@ -85,64 +105,70 @@ export default function TelefoniaPage() {
               <p className="text-xs text-slate-500 mt-0.5">Preencha caso queira utilizar provedores como ViciDial, Asterisk, Zoiper ou PABX IP.</p>
             </div>
 
-            <div className="grid grid-cols-2 gap-3.5">
-              <div>
-                <label className="text-[11px] font-bold text-slate-600 block mb-1">Servidor SIP / Host (IP ou Domínio):</label>
-                <input 
-                  type="text" 
-                  placeholder="sip.provedor.com.br"
-                  value={sipHost}
-                  onChange={e => setSipHost(e.target.value)}
-                  className="w-full border border-slate-200 p-2 rounded-lg text-xs outline-none focus:border-blue-500 font-mono"
-                />
-              </div>
+            {loading ? (
+               <div className="py-8 text-center text-slate-400 text-sm font-semibold animate-pulse">
+                 Carregando configurações do servidor...
+               </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-3.5">
+                <div>
+                  <label className="text-[11px] font-bold text-slate-600 block mb-1">Servidor SIP / Host (IP ou Domínio):</label>
+                  <input 
+                    type="text" 
+                    placeholder="sip.provedor.com.br"
+                    value={sipHost}
+                    onChange={e => setSipHost(e.target.value)}
+                    className="w-full border border-slate-200 p-2 rounded-lg text-xs outline-none focus:border-blue-500 font-mono"
+                  />
+                </div>
 
-              <div>
-                <label className="text-[11px] font-bold text-slate-600 block mb-1">Porta SIP:</label>
-                <input 
-                  type="text" 
-                  placeholder="5060 ou 8089"
-                  value={sipPort}
-                  onChange={e => setSipPort(e.target.value)}
-                  className="w-full border border-slate-200 p-2 rounded-lg text-xs outline-none focus:border-blue-500 font-mono"
-                />
-              </div>
+                <div>
+                  <label className="text-[11px] font-bold text-slate-600 block mb-1">Porta SIP:</label>
+                  <input 
+                    type="text" 
+                    placeholder="5060 ou 8089"
+                    value={sipPort}
+                    onChange={e => setSipPort(e.target.value)}
+                    className="w-full border border-slate-200 p-2 rounded-lg text-xs outline-none focus:border-blue-500 font-mono"
+                  />
+                </div>
 
-              <div>
-                <label className="text-[11px] font-bold text-slate-600 block mb-1">Ramal / Usuário:</label>
-                <input 
-                  type="text" 
-                  placeholder="1001"
-                  value={sipUser}
-                  onChange={e => setSipUser(e.target.value)}
-                  className="w-full border border-slate-200 p-2 rounded-lg text-xs outline-none focus:border-blue-500 font-mono"
-                />
-              </div>
+                <div>
+                  <label className="text-[11px] font-bold text-slate-600 block mb-1">Ramal / Usuário:</label>
+                  <input 
+                    type="text" 
+                    placeholder="1001"
+                    value={sipUser}
+                    onChange={e => setSipUser(e.target.value)}
+                    className="w-full border border-slate-200 p-2 rounded-lg text-xs outline-none focus:border-blue-500 font-mono"
+                  />
+                </div>
 
-              <div>
-                <label className="text-[11px] font-bold text-slate-600 block mb-1">Senha do Ramal:</label>
-                <input 
-                  type="password" 
-                  placeholder="••••••••"
-                  value={sipPassword}
-                  onChange={e => setSipPassword(e.target.value)}
-                  className="w-full border border-slate-200 p-2 rounded-lg text-xs outline-none focus:border-blue-500"
-                />
-              </div>
+                <div>
+                  <label className="text-[11px] font-bold text-slate-600 block mb-1">Senha do Ramal:</label>
+                  <input 
+                    type="password" 
+                    placeholder="••••••••"
+                    value={sipPassword}
+                    onChange={e => setSipPassword(e.target.value)}
+                    className="w-full border border-slate-200 p-2 rounded-lg text-xs outline-none focus:border-blue-500"
+                  />
+                </div>
 
-              <div className="col-span-2">
-                <label className="text-[11px] font-bold text-slate-600 block mb-1">Protocolo:</label>
-                <select 
-                  value={protocol}
-                  onChange={e => setProtocol(e.target.value)}
-                  className="w-full border border-slate-200 p-2 rounded-lg text-xs outline-none font-semibold text-slate-700"
-                >
-                  <option value="WSS">WSS (WebRTC Seguro - Navegador)</option>
-                  <option value="UDP">UDP (Padrão PABX)</option>
-                  <option value="TCP">TCP</option>
-                </select>
+                <div className="col-span-2">
+                  <label className="text-[11px] font-bold text-slate-600 block mb-1">Protocolo:</label>
+                  <select 
+                    value={protocol}
+                    onChange={e => setProtocol(e.target.value)}
+                    className="w-full border border-slate-200 p-2 rounded-lg text-xs outline-none font-semibold text-slate-700"
+                  >
+                    <option value="WSS">WSS (WebRTC Seguro - Navegador)</option>
+                    <option value="UDP">UDP (Padrão PABX)</option>
+                    <option value="TCP">TCP</option>
+                  </select>
+                </div>
               </div>
-            </div>
+            )}
           </div>
         </div>
       </div>
