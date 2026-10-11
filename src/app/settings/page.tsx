@@ -4,10 +4,12 @@ import React, { useState, useEffect } from "react";
 import { 
   Settings, Building, Users, Target, Save, CheckCircle2, Plus, Trash2, 
   ShieldCheck, Lock, UserCheck, Briefcase, Eye, ShieldAlert, Award, 
-  Building2, DollarSign, Layers, ChevronRight, Check, AlertCircle, RefreshCw
+  Building2, DollarSign, Layers, ChevronRight, Check, AlertCircle, RefreshCw,
+  CreditCard, QrCode, Copy, ExternalLink, Key, CheckCheck
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import Link from "next/link";
+import CobrancaModal from "@/components/CobrancaModal";
 
 interface Operador {
   id: number;
@@ -92,7 +94,7 @@ const CARGOS_INFO = [
 ];
 
 export default function SettingsPage() {
-  const [activeTab, setActiveTab] = useState<"empresas" | "equipe" | "parametros">("empresas");
+  const [activeTab, setActiveTab] = useState<"empresas" | "equipe" | "parametros" | "financeiro">("empresas");
 
   // Configurações Gerais
   const [empresaNome, setEmpresaNome] = useState("A&K Soluções Financeiras");
@@ -101,6 +103,25 @@ export default function SettingsPage() {
   const [metaContratos, setMetaContratos] = useState("5");
   const [ticketMedio, setTicketMedio] = useState("4500");
   const [saved, setSaved] = useState(false);
+
+  // Configurações de Faturamento & Gateways (Fase 3)
+  const [gatewayAtivo, setGatewayAtivo] = useState("manual");
+  const [pixTipoChave, setPixTipoChave] = useState("cnpj");
+  const [pixChave, setPixChave] = useState("");
+  const [pixBeneficiario, setPixBeneficiario] = useState("A&K Soluções Financeiras");
+  const [pixCidade, setPixCidade] = useState("Salvador");
+  const [mercadopagoToken, setMercadopagoToken] = useState("");
+  const [asaasKey, setAsaasKey] = useState("");
+  const [efiClientId, setEfiClientId] = useState("");
+  const [efiClientSecret, setEfiClientSecret] = useState("");
+
+  // Faturas & Cobranças
+  const [cobrancas, setCobrancas] = useState<any[]>([]);
+  const [loadingCobrancas, setLoadingCobrancas] = useState(false);
+  const [selectedEmpresaForCobranca, setSelectedEmpresaForCobranca] = useState<Empresa | null>(null);
+  const [showCobrancaModal, setShowCobrancaModal] = useState(false);
+  const [cobrancaModalValor, setCobrancaModalValor] = useState(197.0);
+  const [activeCobrancaId, setActiveCobrancaId] = useState<string | undefined>(undefined);
 
   // Empresas Assinantes (SaaS)
   const [empresas, setEmpresas] = useState<Empresa[]>([]);
@@ -188,7 +209,7 @@ export default function SettingsPage() {
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
       const tabParam = params.get("tab");
-      if (tabParam === "empresas" || tabParam === "equipe" || tabParam === "parametros") {
+      if (tabParam === "empresas" || tabParam === "equipe" || tabParam === "parametros" || tabParam === "financeiro") {
         setActiveTab(tabParam);
       }
     }
@@ -201,10 +222,55 @@ export default function SettingsPage() {
         if (data.meta_ligacoes) setMetaLigacoes(String(data.meta_ligacoes));
         if (data.meta_contratos) setMetaContratos(String(data.meta_contratos));
         if (data.ticket_medio) setTicketMedio(String(data.ticket_medio));
+        if (data.gateway_ativo) setGatewayAtivo(data.gateway_ativo);
+        if (data.pix_tipo_chave) setPixTipoChave(data.pix_tipo_chave);
+        if (data.pix_chave) setPixChave(data.pix_chave);
+        if (data.pix_beneficiario) setPixBeneficiario(data.pix_beneficiario);
+        if (data.pix_cidade) setPixCidade(data.pix_cidade);
+        if (data.mercadopago_access_token) setMercadopagoToken(data.mercadopago_access_token);
+        if (data.asaas_api_key) setAsaasKey(data.asaas_api_key);
+        if (data.efi_client_id) setEfiClientId(data.efi_client_id);
+        if (data.efi_client_secret) setEfiClientSecret(data.efi_client_secret);
       }
     };
     fetchGlobalConfig();
+    fetchCobrancas();
   }, []);
+
+  const fetchCobrancas = async () => {
+    setLoadingCobrancas(true);
+    const { data } = await supabase
+      .from("cobrancas_saas")
+      .select("*, empresas(razao_social, nome_fantasia), planos(nome)")
+      .order("created_at", { ascending: false });
+    if (data) setCobrancas(data);
+    setLoadingCobrancas(false);
+  };
+
+  const handleAbrirCobranca = (emp: Empresa) => {
+    setSelectedEmpresaForCobranca(emp);
+    const precoNum = emp.plano_preco ? parseFloat(emp.plano_preco.replace(/\D/g, "")) / 100 : 197.0;
+    setCobrancaModalValor(precoNum || 197.0);
+    setShowCobrancaModal(true);
+  };
+
+  const handleConfirmarPagamentoManual = async (cobrancaId?: string) => {
+    if (selectedEmpresaForCobranca) {
+      await supabase
+        .from("empresas")
+        .update({ status: "ativa", updated_at: new Date().toISOString() })
+        .eq("id", selectedEmpresaForCobranca.id);
+      
+      if (cobrancaId) {
+        await supabase
+          .from("cobrancas_saas")
+          .update({ status: "paga", pago_em: new Date().toISOString() })
+          .eq("id", cobrancaId);
+      }
+      fetchEmpresas();
+      fetchCobrancas();
+    }
+  };
 
   // Cadastro de Nova Empresa Assinante (SaaS)
   const handleAddEmpresa = async () => {
@@ -274,6 +340,15 @@ export default function SettingsPage() {
       meta_ligacoes: parseInt(metaLigacoes) || 120,
       meta_contratos: parseInt(metaContratos) || 5,
       ticket_medio: parseFloat(ticketMedio) || 4500,
+      gateway_ativo: gatewayAtivo,
+      pix_tipo_chave: pixTipoChave,
+      pix_chave: pixChave.trim(),
+      pix_beneficiario: pixBeneficiario.trim(),
+      pix_cidade: pixCidade.trim(),
+      mercadopago_access_token: mercadopagoToken.trim(),
+      asaas_api_key: asaasKey.trim(),
+      efi_client_id: efiClientId.trim(),
+      efi_client_secret: efiClientSecret.trim(),
       updated_at: new Date().toISOString()
     }).eq("id", 1);
 
@@ -394,6 +469,18 @@ export default function SettingsPage() {
           >
             <Target size={15} />
             <span>Metas & Parâmetros da Loja</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab("financeiro")}
+            className={`flex items-center space-x-2 px-4 py-2.5 text-xs font-bold border-b-2 transition ${
+              activeTab === "financeiro"
+                ? "border-blue-600 text-blue-600"
+                : "border-transparent text-slate-500 hover:text-slate-800"
+            }`}
+          >
+            <CreditCard size={15} />
+            <span>Financeiro & Gateways (Fase 3)</span>
           </button>
         </div>
       </header>
@@ -533,10 +620,21 @@ export default function SettingsPage() {
                                 <span>Ver Leads</span>
                               </Link>
 
+                              {!emp.interna && (
+                                <button
+                                  onClick={() => handleAbrirCobranca(emp)}
+                                  className="text-[11px] font-bold text-emerald-700 hover:text-emerald-900 bg-emerald-50 hover:bg-emerald-100 px-2.5 py-1 rounded-md border border-emerald-200 transition flex items-center gap-1 cursor-pointer"
+                                  title="Gerar PIX ou Fatura de Cobrança desta empresa"
+                                >
+                                  <CreditCard size={12} />
+                                  <span>Cobrar PIX</span>
+                                </button>
+                              )}
+
                               {!emp.interna ? (
                                 <button
                                   onClick={() => toggleStatusEmpresa(emp.id, emp.status)}
-                                  className={`text-[11px] font-bold px-2 py-1 rounded transition ${
+                                  className={`text-[11px] font-bold px-2 py-1 rounded transition cursor-pointer ${
                                     emp.status === "ativa"
                                       ? "text-rose-600 hover:bg-rose-50"
                                       : "text-emerald-600 hover:bg-emerald-50"
@@ -876,6 +974,244 @@ export default function SettingsPage() {
             </div>
           )}
 
+          {/* ========================================================================= */}
+          {/* ABA 4: FINANCEIRO & GATEWAYS DE PAGAMENTO SAAS (FASE 3)                   */}
+          {/* ========================================================================= */}
+          {activeTab === "financeiro" && (
+            <div className="space-y-6">
+
+              {/* Banner Multi-Gateway */}
+              <div className="bg-gradient-to-r from-blue-900 to-slate-900 text-white rounded-2xl p-6 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2 text-emerald-400 text-xs font-bold uppercase tracking-wider">
+                    <ShieldCheck size={16} />
+                    <span>Faturamento Desacoplado & Multi-Gateway</span>
+                  </div>
+                  <h2 className="text-lg font-black text-white">Hub de Cobrança e Mensalidades SaaS</h2>
+                  <p className="text-xs text-blue-200 max-w-2xl leading-relaxed">
+                    Você tem total liberdade: pode receber via <strong>PIX Direto na conta bancária da A&K (Zero Taxas)</strong> ou integrar automaticamente com <strong>Mercado Pago, Asaas, EFI/Gerencianet ou Stripe</strong> quando quiser.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    onClick={handleSaveConfig}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-sm cursor-pointer"
+                  >
+                    <Save size={14} />
+                    <span>Salvar Configurações de Faturamento</span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+                {/* Card 1: Chave PIX Direta da A&K (Sem Intermediários) */}
+                <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs p-6 space-y-4">
+                  <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                    <div className="flex items-center space-x-2.5">
+                      <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center font-black">
+                        ⚡
+                      </div>
+                      <div>
+                        <h3 className="text-sm font-bold text-slate-900">Chave PIX da A&K (Recebimento Direto)</h3>
+                        <p className="text-[11px] text-slate-500">Gera QR Code oficial do Banco Central sem pagar comissão para ninguém.</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3.5">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div>
+                        <label className="text-[11px] font-bold text-slate-600 block mb-1">Tipo de Chave:</label>
+                        <select
+                          value={pixTipoChave}
+                          onChange={e => setPixTipoChave(e.target.value)}
+                          className="w-full text-xs border border-slate-200 rounded-lg p-2.5 outline-none font-semibold text-slate-700"
+                        >
+                          <option value="cnpj">CNPJ</option>
+                          <option value="cpf">CPF</option>
+                          <option value="email">E-mail</option>
+                          <option value="telefone">Celular</option>
+                          <option value="aleatoria">Chave Aleatória</option>
+                        </select>
+                      </div>
+
+                      <div className="sm:col-span-2">
+                        <label className="text-[11px] font-bold text-slate-600 block mb-1">Chave PIX Cadastrada:</label>
+                        <input
+                          type="text"
+                          placeholder="Ex: 00.000.000/0001-00 ou seu@email.com"
+                          value={pixChave}
+                          onChange={e => setPixChave(e.target.value)}
+                          className="w-full text-xs border border-slate-200 rounded-lg p-2.5 outline-none focus:border-blue-500 font-mono"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-[11px] font-bold text-slate-600 block mb-1">Nome do Beneficiário:</label>
+                        <input
+                          type="text"
+                          placeholder="Ex: A&K Soluções Financeiras"
+                          value={pixBeneficiario}
+                          onChange={e => setPixBeneficiario(e.target.value)}
+                          className="w-full text-xs border border-slate-200 rounded-lg p-2.5 outline-none focus:border-blue-500 font-semibold"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-[11px] font-bold text-slate-600 block mb-1">Cidade da Conta:</label>
+                        <input
+                          type="text"
+                          placeholder="Ex: Salvador"
+                          value={pixCidade}
+                          onChange={e => setPixCidade(e.target.value)}
+                          className="w-full text-xs border border-slate-200 rounded-lg p-2.5 outline-none focus:border-blue-500 font-semibold"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="p-3 bg-emerald-50/70 border border-emerald-200 rounded-xl text-[11px] text-emerald-800 flex items-center gap-2">
+                      <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
+                      <span>
+                        Quando cadastrada, cada financeira terá um QR Code PIX exclusivo para pagar a mensalidade do plano contratado.
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Card 2: Conexão com Gateway Externo */}
+                <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs p-6 space-y-4">
+                  <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                    <div className="flex items-center space-x-2.5">
+                      <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
+                        <CreditCard size={18} />
+                      </div>
+                      <div>
+                        <h3 className="text-sm font-bold text-slate-900">Provedor de Pagamento Ativo</h3>
+                        <p className="text-[11px] text-slate-500">Escolha como o sistema deve processar o faturamento automático.</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div>
+                      <label className="text-[11px] font-bold text-slate-600 block mb-1">Gateway Ativo:</label>
+                      <select
+                        value={gatewayAtivo}
+                        onChange={e => setGatewayAtivo(e.target.value)}
+                        className="w-full text-xs border border-slate-200 rounded-lg p-2.5 outline-none font-bold text-slate-800 bg-slate-50"
+                      >
+                        <option value="manual">⚡ PIX Direto na Conta A&K (Sem Taxas / Aprovação Flexível) [Recomendado]</option>
+                        <option value="mercadopago">💳 Mercado Pago (PIX & Cartão)</option>
+                        <option value="asaas">🏦 Asaas (Gestão de Assinaturas e Boletos)</option>
+                        <option value="efi">🟢 EFI Bank / Gerencianet (PIX e Carnês)</option>
+                        <option value="stripe">🌍 Stripe (Internacional / Cartão)</option>
+                      </select>
+                    </div>
+
+                    {/* Campos Específicos do Gateway Selecionado */}
+                    {gatewayAtivo === "mercadopago" && (
+                      <div className="space-y-2 p-3.5 bg-slate-50 border border-slate-200 rounded-xl animate-in fade-in">
+                        <label className="text-[11px] font-bold text-slate-700 block">Access Token do Mercado Pago:</label>
+                        <input
+                          type="password"
+                          placeholder="APP_USR-..."
+                          value={mercadopagoToken}
+                          onChange={e => setMercadopagoToken(e.target.value)}
+                          className="w-full text-xs border border-slate-200 rounded-lg p-2.5 outline-none font-mono bg-white"
+                        />
+                        <span className="text-[10px] text-slate-500 block">Obtenha em Mercado Pago Developers ➔ Suas Integrações.</span>
+                      </div>
+                    )}
+
+                    {gatewayAtivo === "asaas" && (
+                      <div className="space-y-2 p-3.5 bg-slate-50 border border-slate-200 rounded-xl animate-in fade-in">
+                        <label className="text-[11px] font-bold text-slate-700 block">Chave de API do Asaas ($aact_...):</label>
+                        <input
+                          type="password"
+                          placeholder="$aact_..."
+                          value={asaasKey}
+                          onChange={e => setAsaasKey(e.target.value)}
+                          className="w-full text-xs border border-slate-200 rounded-lg p-2.5 outline-none font-mono bg-white"
+                        />
+                        <span className="text-[10px] text-slate-500 block">Obtenha em Minha Conta ➔ Integrações ➔ Chaves de API no painel do Asaas.</span>
+                      </div>
+                    )}
+
+                    {gatewayAtivo === "efi" && (
+                      <div className="space-y-2.5 p-3.5 bg-slate-50 border border-slate-200 rounded-xl animate-in fade-in">
+                        <div>
+                          <label className="text-[11px] font-bold text-slate-700 block mb-1">Client ID (EFI):</label>
+                          <input
+                            type="text"
+                            placeholder="Client_Id_..."
+                            value={efiClientId}
+                            onChange={e => setEfiClientId(e.target.value)}
+                            className="w-full text-xs border border-slate-200 rounded-lg p-2 font-mono bg-white"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[11px] font-bold text-slate-700 block mb-1">Client Secret (EFI):</label>
+                          <input
+                            type="password"
+                            placeholder="Client_Secret_..."
+                            value={efiClientSecret}
+                            onChange={e => setEfiClientSecret(e.target.value)}
+                            className="w-full text-xs border border-slate-200 rounded-lg p-2 font-mono bg-white"
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {gatewayAtivo === "manual" && (
+                      <div className="p-3.5 bg-blue-50/60 border border-blue-200/80 rounded-xl text-xs text-blue-900 space-y-1">
+                        <p className="font-bold">Como funciona o modo PIX Direto?</p>
+                        <p className="text-[11px] text-blue-800 leading-relaxed">
+                          O cliente vê o QR Code com a sua chave PIX e transfere direto para você. Você confere o comprovante e clica em <strong>"Cobrar PIX ➔ Dar Baixa Manual"</strong> na lista de empresas. Acesso liberado sem taxa bancária.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+              </div>
+
+              {/* Card 3: URL Oficial de Webhook (Para automação de qualquer gateway) */}
+              <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs p-6 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Key size={16} className="text-blue-600" />
+                    <h3 className="text-sm font-bold text-slate-900">URL do Webhook para Notificação Automática</h3>
+                  </div>
+                  <span className="text-[10px] font-bold bg-emerald-50 text-emerald-700 px-2.5 py-0.5 rounded-full border border-emerald-200">
+                    Endpoint Ativo
+                  </span>
+                </div>
+                <p className="text-xs text-slate-500 leading-relaxed">
+                  Copie a URL abaixo e cole no painel do gateway que você escolher (Mercado Pago, Asaas ou EFI). Sempre que um cliente pagar, o gateway notifica esta URL e o sistema ativa a empresa instantaneamente.
+                </p>
+                <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl p-3">
+                  <span className="text-xs font-mono text-slate-800 font-bold select-all flex-1 truncate">
+                    https://discadora-callcenter.vercel.app/api/webhooks/billing
+                  </span>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText("https://discadora-callcenter.vercel.app/api/webhooks/billing");
+                      alert("URL do Webhook copiada para a área de transferência!");
+                    }}
+                    className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer shrink-0"
+                  >
+                    <Copy size={13} />
+                    <span>Copiar URL</span>
+                  </button>
+                </div>
+              </div>
+
+            </div>
+          )}
+
         </div>
       </div>
 
@@ -1130,6 +1466,28 @@ export default function SettingsPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* MODAL 3: GERAR COBRANÇA PIX & FATURA SAAS */}
+      {selectedEmpresaForCobranca && (
+        <CobrancaModal
+          isOpen={showCobrancaModal}
+          onClose={() => setShowCobrancaModal(false)}
+          empresa={{
+            id: selectedEmpresaForCobranca.id,
+            razao_social: selectedEmpresaForCobranca.razao_social,
+            plano_nome: selectedEmpresaForCobranca.plano_nome,
+            plano_preco: selectedEmpresaForCobranca.plano_preco
+          }}
+          valor={cobrancaModalValor}
+          pixConfig={{
+            chave: pixChave,
+            beneficiario: pixBeneficiario,
+            cidade: pixCidade
+          }}
+          onConfirmManual={handleConfirmarPagamentoManual}
+          cobrancaId={activeCobrancaId}
+        />
       )}
 
     </div>
