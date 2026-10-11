@@ -1,12 +1,15 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   PhoneCall, PhoneOff, Check, X, Calendar, MessageSquare,
   Play, FastForward, User, AlertCircle, Calculator,
-  ShieldAlert, Sparkles, Building2, CheckCircle2, Zap, ChevronRight, Settings2
+  ShieldAlert, Sparkles, Building2, CheckCircle2, Zap, ChevronRight, Settings2,
+  Headphones, Mic, MicOff, Radio, Volume2, Hash, Phone
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { SoftphoneEngine, phoneAudio, SipConfig, SipRegStatus } from "@/lib/softphone";
+import SoftphoneKeypadModal from "@/components/SoftphoneKeypadModal";
 
 const OBJECTION_LIST = [
   {
@@ -129,6 +132,16 @@ export default function DialerWorkspace() {
   const [activeObjection, setActiveObjection] = useState<string | null>(null);
   const [isToolbarOpen, setIsToolbarOpen] = useState(false);
 
+  // ─── ESTADOS DO SOFTPHONE WEBRTC (Fase 2) ─────────────────────────
+  const [softphoneMode, setSoftphoneMode] = useState<"webrtc" | "smartphone">("webrtc");
+  const [sipRegStatus, setSipRegStatus] = useState<SipRegStatus>("smartphone_mode");
+  const [isKeypadOpen, setIsKeypadOpen] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
+  const [sipConfig, setSipConfig] = useState<SipConfig | null>(null);
+
+  const softphoneRef = useRef<SoftphoneEngine | null>(null);
+  const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
+
   const activeLead = leadsList[currentLeadIndex];
   const cleanActivePhone = activeLead?.telefone?.replace(/\D/g, "") || "";
   const cleanActiveCpf = activeLead?.cpf?.replace(/\D/g, "") || "";
@@ -174,7 +187,55 @@ export default function DialerWorkspace() {
     } catch (e) { console.error("Erro DND:", e); }
   };
 
-  useEffect(() => { fetchQueue("all"); fetchScripts(); fetchDnd(); }, []);
+  // Inicializa o Softphone WebRTC a partir das configurações do Supabase
+  const initSoftphone = async () => {
+    try {
+      const { data } = await supabase
+        .from("app_configuracoes")
+        .select("sip_host, sip_port, sip_user, sip_password, sip_protocol")
+        .eq("id", 1)
+        .single();
+
+      if (data && data.sip_host && data.sip_user) {
+        setSipConfig(data as SipConfig);
+        const engine = new SoftphoneEngine(
+          (status) => setSipRegStatus(status),
+          (state) => {
+            if (state === "talking") setCallStatus("talking");
+            else if (state === "wrapup") setCallStatus("wrapup");
+            else if (state === "failed") {
+              setCallStatus("wrapup");
+            }
+          }
+        );
+
+        if (remoteAudioRef.current) {
+          engine.setAudioElement(remoteAudioRef.current);
+        }
+
+        softphoneRef.current = engine;
+        engine.connect(data as SipConfig);
+      } else {
+        setSipRegStatus("smartphone_mode");
+      }
+    } catch (e) {
+      console.warn("Softphone WebRTC rodando em modo smartphone:", e);
+      setSipRegStatus("smartphone_mode");
+    }
+  };
+
+  useEffect(() => {
+    fetchQueue("all");
+    fetchScripts();
+    fetchDnd();
+    initSoftphone();
+
+    return () => {
+      if (softphoneRef.current) {
+        softphoneRef.current.disconnect();
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (!activeLead || scriptsList.length === 0) return;
@@ -219,11 +280,30 @@ export default function DialerWorkspace() {
     return `${m}:${s}`;
   };
 
-  const triggerCall = () => {
-    if (!activeLead) return;
-    window.location.href = `tel:+55${activeLead.telefone.replace(/\D/g, "")}`;
-    setCallStatus("calling");
-    setTimeout(() => setCallStatus("talking"), 2000);
+  // Disparo da Chamada: WebRTC nativo ou Ponte Smartphone
+  const triggerCall = async (customNumber?: string) => {
+    const targetNumber = customNumber || activeLead?.telefone;
+    if (!targetNumber) return;
+
+    // Se estiver no Modo WebRTC e ramal estiver registrado no PABX
+    if (softphoneMode === "webrtc" && softphoneRef.current && sipRegStatus === "registered") {
+      setCallStatus("calling");
+      const success = await softphoneRef.current.makeCall(targetNumber);
+      if (!success) {
+        // Fallback gracioso para ponte celular se falhar áudio local
+        window.location.href = `tel:+55${targetNumber.replace(/\D/g, "")}`;
+        setTimeout(() => setCallStatus("talking"), 2000);
+      }
+    } else {
+      // Modo Smartphone / Ponte tel: padrão
+      phoneAudio.startRinging();
+      window.location.href = `tel:+55${targetNumber.replace(/\D/g, "")}`;
+      setCallStatus("calling");
+      setTimeout(() => {
+        phoneAudio.stopRinging();
+        setCallStatus("talking");
+      }, 2000);
+    }
   };
 
   const handleStartCall = () => {
@@ -235,7 +315,32 @@ export default function DialerWorkspace() {
     triggerCall();
   };
 
-  const handleEndCall = () => setCallStatus("wrapup");
+  const handleEndCall = () => {
+    if (softphoneRef.current) {
+      softphoneRef.current.hangup();
+    } else {
+      phoneAudio.stopRinging();
+      phoneAudio.playHangupTone();
+    }
+    setCallStatus("wrapup");
+  };
+
+  const handleToggleMute = () => {
+    if (softphoneRef.current) {
+      const muted = softphoneRef.current.toggleMute();
+      setIsMuted(muted);
+    } else {
+      setIsMuted(!isMuted);
+    }
+  };
+
+  const handleSendDtmf = (digit: string) => {
+    if (softphoneRef.current) {
+      softphoneRef.current.sendDtmf(digit);
+    } else {
+      phoneAudio.playDtmf(digit);
+    }
+  };
 
   const handleDisposition = async (status: string) => {
     if (!activeLead?.id) return;
@@ -258,6 +363,7 @@ export default function DialerWorkspace() {
   const handleNextLead = () => {
     setCallStatus("idle");
     setActiveObjection(null);
+    setIsMuted(false);
     if (currentLeadIndex + 1 < leadsList.length) {
       setCurrentLeadIndex(curr => curr + 1);
       if (isPowerDialing) setAutoNextCountdown(2);
@@ -344,6 +450,9 @@ export default function DialerWorkspace() {
   return (
     <div className="flex-1 flex flex-col h-full bg-slate-50 text-slate-900 overflow-hidden font-sans relative">
 
+      {/* Áudio Remoto Oculto para WebRTC */}
+      <audio ref={remoteAudioRef} autoPlay playsInline className="hidden" />
+
       {/* ── TOOLBAR EXPANSÍVEL (Desliza e empurra conteúdo) ────────── */}
       <div className={`bg-white transition-all duration-300 ease-in-out flex flex-wrap items-center justify-between gap-3 shrink-0 overflow-hidden ${
         isToolbarOpen ? "h-14 px-4 lg:px-6 border-b border-slate-200 opacity-100" : "h-0 opacity-0 border-transparent pointer-events-none"
@@ -359,14 +468,68 @@ export default function DialerWorkspace() {
               ⚡ Discando em {autoNextCountdown}s
             </span>
           )}
+
+          {/* Status do Softphone WebRTC */}
+          <div className="hidden sm:flex items-center gap-2 pl-2 border-l border-slate-200">
+            <span className={`inline-flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${
+              sipRegStatus === "registered"
+                ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                : sipRegStatus === "connecting"
+                ? "bg-amber-50 text-amber-700 border-amber-200 animate-pulse"
+                : "bg-slate-100 text-slate-600 border-slate-200"
+            }`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${
+                sipRegStatus === "registered" ? "bg-emerald-500" : sipRegStatus === "connecting" ? "bg-amber-500" : "bg-slate-400"
+              }`} />
+              {sipRegStatus === "registered"
+                ? `Ramal ${sipConfig?.sip_user || ""} Online`
+                : sipRegStatus === "connecting"
+                ? "Conectando PABX..."
+                : "Modo Smartphone"}
+            </span>
+
+            {/* Alternador de Modo de Discagem */}
+            <div className="flex items-center bg-slate-100 rounded-lg p-0.5 border border-slate-200 text-[10px]">
+              <button
+                onClick={() => setSoftphoneMode("webrtc")}
+                className={`px-2 py-0.5 rounded-md font-bold transition flex items-center gap-1 cursor-pointer ${
+                  softphoneMode === "webrtc" ? "bg-white text-blue-700 shadow-2xs" : "text-slate-500"
+                }`}
+                title="Discar usando fone de ouvido WebRTC via PABX"
+              >
+                <Headphones size={11} />
+                <span>WebRTC</span>
+              </button>
+              <button
+                onClick={() => setSoftphoneMode("smartphone")}
+                className={`px-2 py-0.5 rounded-md font-bold transition flex items-center gap-1 cursor-pointer ${
+                  softphoneMode === "smartphone" ? "bg-white text-blue-700 shadow-2xs" : "text-slate-500"
+                }`}
+                title="Discar usando aplicativo do smartphone / link tel:"
+              >
+                <Phone size={11} />
+                <span>Celular</span>
+              </button>
+            </div>
+          </div>
         </div>
 
-        {/* Direita: simulador + modo + botão fechar */}
+        {/* Direita: simulador + teclado manual + modo power + fechar */}
         <div className="flex items-center gap-2">
+          {/* Teclado Manual */}
+          <button
+            onClick={() => setIsKeypadOpen(true)}
+            title="Abrir teclado numérico DTMF ou discar número manual"
+            className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 transition cursor-pointer"
+          >
+            <Hash size={13} className="text-blue-600" />
+            <span>Teclado</span>
+          </button>
+
           <button
             onClick={() => setShowCalc(!showCalc)}
             title="Simulador de FGTS, Portabilidade e Margem"
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition cursor-pointer ${
               showCalc ? "bg-blue-600 text-white border-blue-600" : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
             }`}
           >
@@ -378,14 +541,14 @@ export default function DialerWorkspace() {
             <button
               onClick={() => { setIsPowerDialing(false); setAutoNextCountdown(null); }}
               title="Manual: você decide quando ligar para cada lead"
-              className={`px-3 py-1 rounded-md font-semibold transition ${!isPowerDialing ? "bg-white text-blue-600 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
+              className={`px-3 py-1 rounded-md font-semibold transition cursor-pointer ${!isPowerDialing ? "bg-white text-blue-600 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
             >
               Manual
             </button>
             <button
               onClick={() => setIsPowerDialing(true)}
               title="Auto-Pular: após tabular, passa automaticamente para o próximo lead e disca sozinho"
-              className={`flex items-center gap-1 px-3 py-1 rounded-md font-semibold transition ${isPowerDialing ? "bg-white text-blue-600 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
+              className={`flex items-center gap-1 px-3 py-1 rounded-md font-semibold transition cursor-pointer ${isPowerDialing ? "bg-white text-blue-600 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
             >
               <Play size={10} />
               Power
@@ -394,7 +557,7 @@ export default function DialerWorkspace() {
 
           <button 
             onClick={() => setIsToolbarOpen(false)}
-            className="w-7 h-7 flex items-center justify-center rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-800 transition"
+            className="w-7 h-7 flex items-center justify-center rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-800 transition cursor-pointer"
             title="Ocultar barra"
           >
             <X size={14} />
@@ -405,11 +568,20 @@ export default function DialerWorkspace() {
       {/* ── BODY: grid 2 colunas ──────────────────────────────────────── */}
       <div className="flex-1 flex flex-col lg:flex-row overflow-hidden relative">
         
-        {/* BOTÃO FLUTUANTE DE AJUSTES (Aparece quando a barra está fechada) */}
-        <div className={`absolute top-3 right-4 lg:right-6 z-20 transition-all duration-300 ${isToolbarOpen ? 'scale-0 opacity-0' : 'scale-100 opacity-100'}`}>
+        {/* BOTÃO FLUTUANTE DE AJUSTES & TECLADO (Aparece quando a barra está fechada) */}
+        <div className={`absolute top-3 right-4 lg:right-6 z-20 flex items-center gap-2 transition-all duration-300 ${isToolbarOpen ? 'scale-0 opacity-0' : 'scale-100 opacity-100'}`}>
+          <button
+            onClick={() => setIsKeypadOpen(true)}
+            className="flex items-center gap-1 px-3 py-1.5 rounded-full bg-white border border-slate-200 text-slate-700 shadow-xs hover:shadow-md hover:text-blue-600 hover:border-blue-200 transition cursor-pointer"
+            title="Abrir teclado numérico DTMF"
+          >
+            <Hash size={13} className="text-blue-600" />
+            <span className="text-[11px] font-bold">Teclado</span>
+          </button>
+
           <button 
             onClick={() => setIsToolbarOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white border border-slate-200 text-slate-600 shadow-sm hover:shadow-md hover:text-blue-600 hover:border-blue-200 transition"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white border border-slate-200 text-slate-600 shadow-xs hover:shadow-md hover:text-blue-600 hover:border-blue-200 transition cursor-pointer"
             title="Abrir ajustes da fila"
           >
             <Settings2 size={14} />
@@ -485,7 +657,7 @@ export default function DialerWorkspace() {
                 <div className="flex space-x-2 border-b border-slate-200 pb-2">
                   {[["fgts", "Saque FGTS"], ["portabilidade", "Portabilidade c/ Troco"], ["margem", "Novo Consignado"]].map(([tab, label]) => (
                     <button key={tab} type="button" onClick={() => setCalcTab(tab as any)}
-                      className={`px-3 py-1 rounded-lg font-bold text-xs transition ${calcTab === tab ? "bg-blue-600 text-white" : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-100"}`}>
+                      className={`px-3 py-1 rounded-lg font-bold text-xs transition cursor-pointer ${calcTab === tab ? "bg-blue-600 text-white" : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-100"}`}>
                       {label}
                     </button>
                   ))}
@@ -531,7 +703,7 @@ export default function DialerWorkspace() {
                   <div className="space-y-2">
                     <div className="flex justify-between font-bold text-slate-700">
                       <span>Margem consignável:</span>
-                      <span className="text-blue-600">R$ {calcMargem.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                      <span className="text-blue-600">R$ {calcMargem.toLocaleString("pt-BR")}</span>
                     </div>
                     <input type="range" min="30" max="1500" step="10" value={calcMargem} onChange={e => setCalcMargem(Number(e.target.value))} className="w-full accent-blue-600" />
                     <div className="flex justify-between items-center">
@@ -555,13 +727,12 @@ export default function DialerWorkspace() {
                 <Zap size={13} className="text-amber-500 fill-amber-400" />
                 <span>Objeções:</span>
               </div>
-              {/* Scroll horizontal — todos numa linha só */}
               <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none flex-nowrap min-w-0">
                 {OBJECTION_LIST.map((obj) => {
                   const isActive = activeObjection === obj.id;
                   return (
                     <button key={obj.id} type="button" onClick={() => setActiveObjection(isActive ? null : obj.id)}
-                      className={`whitespace-nowrap text-[11px] px-2.5 py-1 rounded-full font-medium transition shrink-0 ${
+                      className={`whitespace-nowrap text-[11px] px-2.5 py-1 rounded-full font-medium transition shrink-0 cursor-pointer ${
                         isActive ? "bg-amber-600 text-white font-bold ring-2 ring-amber-400" : "bg-white text-amber-900 border border-amber-200 hover:bg-amber-100"
                       }`}>
                       {obj.label}
@@ -589,7 +760,7 @@ export default function DialerWorkspace() {
               </div>
             )}
 
-            {/* Script */}
+            {/* Script de 4 etapas */}
             <div className="p-5 overflow-y-auto space-y-3 flex-1">
               {[
                 { num: "1", label: "Abertura", text: currentScript.abertura, color: "blue" },
@@ -618,25 +789,35 @@ export default function DialerWorkspace() {
           </div>
         </div>
 
-        {/* ── COLUNA DIREITA: telefone + ações ───────────────────────── */}
-        <div className="w-full lg:w-72 bg-white border-t lg:border-t-0 lg:border-l border-slate-200 flex flex-col p-5 shrink-0">
+        {/* ── COLUNA DIREITA: telefone + ações de chamada ────────────── */}
+        <div className="w-full lg:w-80 bg-white border-t lg:border-t-0 lg:border-l border-slate-200 flex flex-col p-5 shrink-0 justify-between">
 
-          {/* Número + localização */}
-          <div className="text-center pb-5 border-b border-slate-100">
-            <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-1">Número</span>
+          {/* Número + localização + indicador de canal */}
+          <div className="text-center pb-4 border-b border-slate-100">
+            <div className="flex items-center justify-center gap-1.5 mb-1">
+              <span className={`text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full border ${
+                softphoneMode === "webrtc" && sipRegStatus === "registered"
+                  ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                  : "bg-blue-50 text-blue-700 border-blue-200"
+              }`}>
+                {softphoneMode === "webrtc" && sipRegStatus === "registered" ? "🎧 Softphone WebRTC" : "📱 Ponte Celular"}
+              </span>
+            </div>
+
             <p className="text-3xl font-mono font-extrabold text-slate-900 tracking-tight">
               {formatPhone(activeLead?.telefone) || "(00) 00000-0000"}
             </p>
+
             {activeLead?.telefone && (
-              <div className="mt-1.5 flex items-center justify-center gap-1.5 text-[11px] text-slate-500 font-medium">
+              <div className="mt-1 flex items-center justify-center gap-1.5 text-[11px] text-slate-500 font-medium">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse inline-block"></span>
                 <span>📍 {region.uf} ({region.ddd}) • {region.regiao}</span>
               </div>
             )}
           </div>
 
-          {/* Ações */}
-          <div className="flex-1 flex flex-col justify-center gap-4 py-5">
+          {/* Ações e Estados de Chamada */}
+          <div className="flex-1 flex flex-col justify-center gap-4 py-4">
 
             {callStatus === "idle" && (
               <>
@@ -659,22 +840,70 @@ export default function DialerWorkspace() {
             )}
 
             {callStatus === "calling" && (
-              <div className="text-center space-y-3">
-                <div className="w-16 h-16 rounded-full border-4 border-blue-500 border-t-transparent animate-spin mx-auto"></div>
-                <p className="text-xs font-bold text-blue-600">Disparando para o smartphone...</p>
+              <div className="text-center space-y-3 bg-blue-50/60 p-5 rounded-2xl border border-blue-200/60">
+                <div className="w-14 h-14 rounded-full border-4 border-blue-600 border-t-transparent animate-spin mx-auto"></div>
+                <div>
+                  <p className="text-xs font-bold text-blue-900">
+                    {softphoneMode === "webrtc" && sipRegStatus === "registered"
+                      ? "Chamando pelo Ramal WebRTC..."
+                      : "Disparando para o smartphone..."}
+                  </p>
+                  <p className="text-[11px] text-slate-500 mt-0.5">Aguardando atendimento...</p>
+                </div>
+                <button
+                  onClick={handleEndCall}
+                  className="w-full bg-rose-600 hover:bg-rose-700 text-white py-2.5 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <PhoneOff size={14} />
+                  <span>Cancelar Chamada</span>
+                </button>
               </div>
             )}
 
             {callStatus === "talking" && (
               <div className="space-y-3">
-                <div className="bg-slate-50 border border-slate-200 p-4 rounded-xl text-center">
-                  <span className="text-[10px] font-bold uppercase text-slate-400">Em Ligação</span>
-                  <p className="text-3xl font-mono font-extrabold text-slate-900">{formatTime(duration)}</p>
+                {/* Painel Em Ligação com Cronômetro */}
+                <div className="bg-slate-900 text-white p-5 rounded-2xl text-center shadow-md relative overflow-hidden">
+                  <div className="flex items-center justify-center space-x-1.5 text-[10px] font-bold text-emerald-400 uppercase tracking-widest mb-1">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+                    <span>Em Conversação</span>
+                  </div>
+                  <p className="text-4xl font-mono font-black text-white tracking-wider">{formatTime(duration)}</p>
+
+                  {/* Indicador de Canal */}
+                  <div className="mt-2 flex items-center justify-center gap-1 text-[10px] text-slate-400 font-semibold">
+                    <Radio size={12} className="text-emerald-400" />
+                    <span>{softphoneMode === "webrtc" ? "Áudio WebRTC Ativo" : "Linha Celular"}</span>
+                  </div>
                 </div>
+
+                {/* Controles de Chamada Ativa (Mudo, Teclado URA, Encerrar) */}
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={handleToggleMute}
+                    className={`py-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition cursor-pointer border ${
+                      isMuted
+                        ? "bg-rose-50 text-rose-700 border-rose-300"
+                        : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+                    }`}
+                  >
+                    {isMuted ? <MicOff size={15} /> : <Mic size={15} />}
+                    <span>{isMuted ? "Mutado" : "Mudo"}</span>
+                  </button>
+
+                  <button
+                    onClick={() => setIsKeypadOpen(true)}
+                    className="py-3 rounded-xl text-xs font-bold bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 flex items-center justify-center gap-1.5 transition cursor-pointer"
+                  >
+                    <Hash size={15} className="text-blue-600" />
+                    <span>Teclado URA</span>
+                  </button>
+                </div>
+
                 <button onClick={handleEndCall}
-                  className="w-full bg-rose-600 hover:bg-rose-700 text-white py-3 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition">
-                  <PhoneOff size={15} />
-                  Encerrar Chamada
+                  className="w-full bg-rose-600 hover:bg-rose-700 text-white py-3.5 rounded-xl text-xs font-bold flex items-center justify-center gap-2 shadow-sm transition cursor-pointer">
+                  <PhoneOff size={16} />
+                  <span>Desligar Chamada</span>
                 </button>
               </div>
             )}
@@ -693,7 +922,7 @@ export default function DialerWorkspace() {
                   { label: "⚠️ Sem Perfil / Saldo", status: "Sem perfil", cls: "bg-slate-50 text-slate-600 border-slate-200" },
                 ].map(({ label, status, cls }) => (
                   <button key={status} onClick={() => handleDisposition(status)}
-                    className={`w-full text-left px-3 py-2 border rounded-lg font-medium text-xs flex justify-between items-center transition hover:brightness-95 ${cls}`}>
+                    className={`w-full text-left px-3 py-2 border rounded-lg font-medium text-xs flex justify-between items-center transition hover:brightness-95 cursor-pointer ${cls}`}>
                     <span>{label}</span>
                     <ChevronRight size={13} className="opacity-40" />
                   </button>
@@ -705,7 +934,7 @@ export default function DialerWorkspace() {
           {/* Pular lead */}
           {callStatus === "idle" && (
             <button onClick={() => saveCallRecord("Pulado")}
-              className="w-full py-2 text-slate-400 hover:text-slate-600 text-xs font-semibold flex items-center justify-center gap-1.5 transition border-t border-slate-100 pt-4">
+              className="w-full py-2 text-slate-400 hover:text-slate-600 text-xs font-semibold flex items-center justify-center gap-1.5 transition border-t border-slate-100 pt-3 cursor-pointer">
               <FastForward size={12} />
               Pular Lead
             </button>
@@ -715,7 +944,7 @@ export default function DialerWorkspace() {
 
       {/* ── MODAL RETORNO ─────────────────────────────────────────────── */}
       {showScheduleModal && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-xl border border-slate-200 space-y-4">
             <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
               <Calendar className="text-amber-500" size={16} />
@@ -741,17 +970,30 @@ export default function DialerWorkspace() {
             </div>
             <div className="flex gap-2 pt-1">
               <button onClick={() => setShowScheduleModal(false)}
-                className="flex-1 py-2 text-xs font-semibold text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50 transition">
+                className="flex-1 py-2 text-xs font-semibold text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50 transition cursor-pointer">
                 Cancelar
               </button>
               <button onClick={confirmScheduleReturn}
-                className="flex-1 py-2 text-xs font-bold text-white bg-amber-500 hover:bg-amber-600 rounded-lg transition">
+                className="flex-1 py-2 text-xs font-bold text-white bg-amber-500 hover:bg-amber-600 rounded-lg transition cursor-pointer">
                 Salvar
               </button>
             </div>
           </div>
         </div>
       )}
+
+      {/* ── MODAL TECLADO DTMF & DISCADOR MANUAL ───────────────────────── */}
+      <SoftphoneKeypadModal
+        isOpen={isKeypadOpen}
+        onClose={() => setIsKeypadOpen(false)}
+        onSendDtmf={handleSendDtmf}
+        onCallNumber={(num) => triggerCall(num)}
+        isInCall={callStatus === "talking"}
+        activeNumber={activeLead?.telefone}
+        isMuted={isMuted}
+        onToggleMute={handleToggleMute}
+        onHangup={handleEndCall}
+      />
     </div>
   );
 }
