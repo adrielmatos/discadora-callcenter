@@ -227,10 +227,11 @@ export default function SettingsPage() {
         if (data.pix_chave) setPixChave(data.pix_chave);
         if (data.pix_beneficiario) setPixBeneficiario(data.pix_beneficiario);
         if (data.pix_cidade) setPixCidade(data.pix_cidade);
-        if (data.mercadopago_access_token) setMercadopagoToken(data.mercadopago_access_token);
-        if (data.asaas_api_key) setAsaasKey(data.asaas_api_key);
-        if (data.efi_client_id) setEfiClientId(data.efi_client_id);
-        if (data.efi_client_secret) setEfiClientSecret(data.efi_client_secret);
+        // Proteção contra vazamento de credenciais mestres no navegador
+        if (data.mercadopago_access_token) setMercadopagoToken("••••••••••••••••");
+        if (data.asaas_api_key) setAsaasKey("••••••••••••••••");
+        if (data.efi_client_id) setEfiClientId("••••••••••••••••");
+        if (data.efi_client_secret) setEfiClientSecret("••••••••••••••••");
       }
     };
     fetchGlobalConfig();
@@ -334,7 +335,7 @@ export default function SettingsPage() {
   };
 
   const handleSaveConfig = async () => {
-    const { error } = await supabase.from("app_configuracoes").update({
+    const updatePayload: Record<string, any> = {
       empresa_nome: empresaNome,
       responsavel_nome: responsavelNome,
       meta_ligacoes: parseInt(metaLigacoes) || 120,
@@ -345,12 +346,24 @@ export default function SettingsPage() {
       pix_chave: pixChave.trim(),
       pix_beneficiario: pixBeneficiario.trim(),
       pix_cidade: pixCidade.trim(),
-      mercadopago_access_token: mercadopagoToken.trim(),
-      asaas_api_key: asaasKey.trim(),
-      efi_client_id: efiClientId.trim(),
-      efi_client_secret: efiClientSecret.trim(),
       updated_at: new Date().toISOString()
-    }).eq("id", 1);
+    };
+
+    // Apenas envia a credencial caso tenha sido modificada e não seja o valor mascarado
+    if (mercadopagoToken && !mercadopagoToken.includes("••")) {
+      updatePayload.mercadopago_access_token = mercadopagoToken.trim();
+    }
+    if (asaasKey && !asaasKey.includes("••")) {
+      updatePayload.asaas_api_key = asaasKey.trim();
+    }
+    if (efiClientId && !efiClientId.includes("••")) {
+      updatePayload.efi_client_id = efiClientId.trim();
+    }
+    if (efiClientSecret && !efiClientSecret.includes("••")) {
+      updatePayload.efi_client_secret = efiClientSecret.trim();
+    }
+
+    const { error } = await supabase.from("app_configuracoes").update(updatePayload).eq("id", 1);
 
     if (!error) {
       setSaved(true);

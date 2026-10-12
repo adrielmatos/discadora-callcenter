@@ -7,6 +7,38 @@ export async function POST(req: NextRequest) {
 
     // ─── 1. Confirmação Manual pelo Painel de Controle ─────────────
     if (body.action === "confirm_manual" && body.cobranca_id) {
+      // Validação de segurança: exige segredo interno ou token de administrador
+      const authHeader = req.headers.get("authorization");
+      const adminSecret = req.headers.get("x-admin-secret");
+      const configuredSecret = process.env.ADMIN_WEBHOOK_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+      let isAuthorized = false;
+
+      if (adminSecret && configuredSecret && adminSecret === configuredSecret) {
+        isAuthorized = true;
+      } else if (authHeader) {
+        const token = authHeader.replace(/^Bearer\s+/i, "");
+        const { data: { user } } = await supabase.auth.getUser(token);
+        if (user) {
+          const { data: op } = await supabase
+            .from("operadores_app")
+            .select("perfil")
+            .eq("email", user.email)
+            .maybeSingle();
+
+          if (op && (op.perfil === "proprietario" || op.perfil === "admin" || op.perfil === "gerente")) {
+            isAuthorized = true;
+          }
+        }
+      }
+
+      if (!isAuthorized) {
+        return NextResponse.json(
+          { error: "Acesso negado: operação restrita a administradores autenticados." },
+          { status: 403 }
+        );
+      }
+
       const { data: cobranca, error: findError } = await supabase
         .from("cobrancas_saas")
         .select("*, empresas(*)")

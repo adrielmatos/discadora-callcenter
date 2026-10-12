@@ -3,6 +3,29 @@ import { supabase } from "@/lib/supabase";
 
 export async function POST(req: NextRequest) {
   try {
+    // ─── Validação de Autenticação ────────────────────────────────
+    const authHeader = req.headers.get("authorization");
+    const token = authHeader ? authHeader.replace(/^Bearer\s+/i, "") : null;
+
+    if (!token && !req.headers.get("cookie")) {
+      return NextResponse.json(
+        { error: "Acesso não autorizado: faça login para enviar mensagens." },
+        { status: 401 }
+      );
+    }
+
+    let authUser = null;
+    if (token) {
+      const { data: { user }, error: authErr } = await supabase.auth.getUser(token);
+      if (authErr || !user) {
+        return NextResponse.json(
+          { error: "Sessão inválida ou expirada." },
+          { status: 401 }
+        );
+      }
+      authUser = user;
+    }
+
     const { telefone, mensagem, lead_id } = await req.json();
 
     if (!telefone || !mensagem) {
@@ -12,12 +35,17 @@ export async function POST(req: NextRequest) {
     const cleanNumber = telefone.replace(/\D/g, "");
     const formattedPhone = cleanNumber.startsWith("55") ? cleanNumber : `55${cleanNumber}`;
 
-    // Busca configurações de WhatsApp salvas no banco
-    const { data: config } = await supabase
+    // Busca configurações de WhatsApp salvas no banco (com suporte a multitenancy)
+    const userEmpresaId = authUser?.user_metadata?.empresa_id;
+    let configQuery = supabase
       .from("app_configuracoes")
-      .select("wa_mode, wa_api_url, wa_api_token, wa_instance_name")
-      .eq("id", 1)
-      .single();
+      .select("wa_mode, wa_api_url, wa_api_token, wa_instance_name");
+
+    if (userEmpresaId) {
+      configQuery = configQuery.eq("empresa_id", userEmpresaId);
+    }
+
+    const { data: config } = await configQuery.limit(1).maybeSingle();
 
     const waMode = config?.wa_mode || "web";
     const apiUrl = config?.wa_api_url?.trim() || "";
