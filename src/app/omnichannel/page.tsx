@@ -34,7 +34,8 @@ export default function OmnichannelPage() {
   const [testSending, setTestSending] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string; waUrl?: string } | null>(null);
 
-  // IA 24h Config (Sofia)
+  // IA 24h Config (Sofia) & Motor LLM Gemini
+  const [geminiApiKey, setGeminiApiKey] = useState("");
   const [aiEnabled, setAiEnabled] = useState(true);
   const [aiName, setAiName] = useState("Sofia");
   const [aiTone, setAiTone] = useState<"consultivo" | "fechamento" | "formal">("consultivo");
@@ -75,7 +76,7 @@ export default function OmnichannelPage() {
         .select(`
           wa_mode, wa_api_url, wa_api_token, wa_instance_name, wa_default_message,
           ai_enabled, ai_name, ai_tone, ai_greeting, ai_knowledge, ai_handoff_triggers,
-          empresa_nome
+          gemini_api_key, empresa_nome
         `)
         .eq("id", 1)
         .single();
@@ -87,6 +88,7 @@ export default function OmnichannelPage() {
         if (data.wa_instance_name) setInstanceName(data.wa_instance_name);
         if (data.wa_default_message) setDefaultMessage(data.wa_default_message);
 
+        if (data.gemini_api_key) setGeminiApiKey(data.gemini_api_key);
         if (data.ai_enabled !== undefined && data.ai_enabled !== null) setAiEnabled(data.ai_enabled);
         if (data.ai_name) setAiName(data.ai_name);
         if (data.ai_tone) setAiTone(data.ai_tone as any);
@@ -113,6 +115,7 @@ export default function OmnichannelPage() {
           wa_api_token: apiToken.trim(),
           wa_instance_name: instanceName.trim(),
           wa_default_message: defaultMessage,
+          gemini_api_key: geminiApiKey.trim(),
           ai_enabled: aiEnabled,
           ai_name: aiName.trim(),
           ai_tone: aiTone,
@@ -183,9 +186,9 @@ export default function OmnichannelPage() {
     }
   };
 
-  // Motor Simulado do Atendente IA 24h
-  const handleSimSend = () => {
-    if (!simInput.trim()) return;
+  // Motor Real do Atendente IA 24h conectado à rota /api/ai/chat
+  const handleSimSend = async () => {
+    if (!simInput.trim() || isTyping) return;
 
     const userText = simInput.trim();
     const newMsg: ChatMessage = {
@@ -199,27 +202,22 @@ export default function OmnichannelPage() {
     setSimInput("");
     setIsTyping(true);
 
-    // Resposta Inteligente da IA baseada na base de conhecimento
-    setTimeout(() => {
-      const lower = userText.toLowerCase();
-      let reply = "";
+    try {
+      const res = await fetch("/api/ai/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: userText,
+          history: simMessages,
+          knowledge: aiKnowledge,
+          company: aiCompany,
+          agentName: aiName,
+          handoffTriggers: handoffTriggers
+        })
+      });
 
-      const triggers = handoffTriggers.split(",").map(t => t.trim().toLowerCase());
-      const shouldHandoff = triggers.some(t => t && lower.includes(t));
-
-      if (shouldHandoff) {
-        reply = `Perfeito! Já transferi seu atendimento para o nosso especialista humano Adriel da ${aiCompany}. Ele já tem o seu histórico e vai falar com você aqui em instantes para concluir a formalização! 🚀`;
-      } else if (lower.includes("golpe") || lower.includes("seguro") || lower.includes("confiavel") || lower.includes("confiável")) {
-        reply = `Compreendo sua cautela! Na ${aiCompany} operamos como correspondente credenciado aos bancos oficiais. Nós NUNCA cobramos taxas antecipadas nem pedimos senhas. Todo o processo é validado diretamente com biometria facial no app do banco.`;
-      } else if (lower.includes("fgts") || lower.includes("aniversario") || lower.includes("aniversário")) {
-        reply = `Sim! Fazemos a antecipação de até 10 anos do seu Saque-Aniversário FGTS. A taxa é a partir de 1,69% ao mês e o dinheiro cai via PIX na sua conta em até 2 horas. Gostaria que eu faça uma simulação do seu saldo?`;
-      } else if (lower.includes("portabilidade") || lower.includes("troco") || lower.includes("reduzir")) {
-        reply = `Excelente! Com a Portabilidade com Troco, transferimos sua dívida para um banco parceiro (como Pan ou Safra) com taxa menor e liberamos a diferença como troco em dinheiro direto na sua conta, sem aumentar o valor da sua parcela!`;
-      } else if (lower.includes("inss") || lower.includes("bpc") || lower.includes("loas") || lower.includes("aposentado")) {
-        reply = `Atendemos aposentados, pensionistas e beneficiários BPC/LOAS com a menor taxa de consignado do Brasil e parcelamento em até 84 vezes sem consulta ao SPC/Serasa. Você já sabe qual a sua margem disponível?`;
-      } else {
-        reply = `Entendi perfeitamente! Para que eu possa te passar os números exatos e a melhor proposta liberada hoje pelos bancos conveniados, qual o seu CPF ou qual produto (FGTS ou Consignado) você tem interesse em consultar?`;
-      }
+      const data = await res.json();
+      const reply = data.reply || "Olá! Como posso te ajudar hoje a simular ou liberar seu crédito?";
 
       setSimMessages(prev => [
         ...prev,
@@ -230,9 +228,21 @@ export default function OmnichannelPage() {
           timestamp: new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
         }
       ]);
+    } catch (err: any) {
+      console.error("Erro na resposta da IA:", err);
+      setSimMessages(prev => [
+        ...prev,
+        {
+          id: (Date.now() + 1).toString(),
+          sender: "ai",
+          text: "Desculpe, tive uma oscilação temporária na conexão. Pode repetir sua dúvida?",
+          timestamp: new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
+        }
+      ]);
+    } finally {
       setIsTyping(false);
       chatBottomRef.current?.scrollIntoView({ behavior: "smooth" });
-    }, 1000);
+    }
   };
 
   return (
@@ -508,6 +518,51 @@ export default function OmnichannelPage() {
                   />
                   <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
                 </label>
+              </div>
+
+              {/* Conector Motor LLM Real (Google Gemini 1.5/2.0 Flash) */}
+              <div className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-xs space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Sparkles size={18} className="text-blue-600" />
+                    <div>
+                      <h3 className="text-sm font-bold text-slate-900">Motor de Inteligência Artificial Real (LLM)</h3>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        Alimenta a Sofia com IA generativa real do Google (respostas inteligentes e consultivas a Custo R$ 0,00).
+                      </p>
+                    </div>
+                  </div>
+                  <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
+                    geminiApiKey ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-amber-50 text-amber-700 border border-amber-200"
+                  }`}>
+                    {geminiApiKey ? "🟢 Gemini Conectado" : "🟡 Modo Regras Locais"}
+                  </span>
+                </div>
+
+                <div>
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="text-[11px] font-bold text-slate-700">Chave de API do Google Gemini (AI Studio):</label>
+                    <a
+                      href="https://aistudio.google.com/app/apikey"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-[10px] font-bold text-blue-600 hover:underline flex items-center gap-1"
+                    >
+                      <ExternalLink size={10} />
+                      <span>Gerar Chave Grátis no Google</span>
+                    </a>
+                  </div>
+                  <input
+                    type="password"
+                    placeholder="AIzaSy..."
+                    value={geminiApiKey}
+                    onChange={e => setGeminiApiKey(e.target.value)}
+                    className="w-full border border-slate-200 p-2.5 rounded-xl text-xs font-mono outline-none focus:border-blue-500 bg-slate-50/50"
+                  />
+                  <p className="text-[10px] text-slate-400 mt-1">
+                    A cota gratuita do Google AI Studio oferece até 15 requisições por minuto com custo zero, ideal para atender centenas de clientes sem mensalidade.
+                  </p>
+                </div>
               </div>
 
               {/* Personalidade & Identidade */}

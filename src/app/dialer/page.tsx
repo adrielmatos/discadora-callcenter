@@ -10,6 +10,7 @@ import {
 import { supabase } from "@/lib/supabase";
 import { SoftphoneEngine, phoneAudio, SipConfig, SipRegStatus } from "@/lib/softphone";
 import SoftphoneKeypadModal from "@/components/SoftphoneKeypadModal";
+import FinanceCalculatorModal from "@/components/FinanceCalculatorModal";
 
 const OBJECTION_LIST = [
   {
@@ -993,6 +994,21 @@ export default function DialerWorkspace() {
         isMuted={isMuted}
         onToggleMute={handleToggleMute}
         onHangup={handleEndCall}
+      />
+
+      {/* ── MODAL CALCULADORA FINANCEIRA (FinceptTerminal) ───────────── */}
+      <FinanceCalculatorModal
+        isOpen={showCalc}
+        onClose={() => setShowCalc(false)}
+        leadName={activeLead?.nome}
+        leadPhone={activeLead?.telefone}
+        onSendSimulationWhatsApp={(txt) => {
+          const clean = (activeLead?.telefone || "").replace(/\D/g, "");
+          const phone = clean.startsWith("55") ? clean : `55${clean}`;
+          if (phone.length >= 10) {
+            window.open(`https://wa.me/${phone}?text=${encodeURIComponent(txt)}`, "_blank");
+          }
+        }}
       />
     </div>
   );

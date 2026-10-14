@@ -4,10 +4,11 @@ import React, { useState, useRef, useEffect } from "react";
 import { 
   Upload, Search, Download, RefreshCw, Kanban, Table, 
   ArrowRight, CheckCircle2, PhoneOff, XCircle, AlertCircle, User, MessageSquare,
-  Building2, Filter, Eye, ShieldCheck
+  Building2, Filter, Eye, ShieldCheck, UserPlus
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import * as XLSX from "xlsx";
+import LeadModal from "@/components/LeadModal";
 
 interface Lead {
   id: number;
@@ -29,6 +30,7 @@ export default function LeadsCRM() {
   const [viewMode, setViewMode] = useState<"kanban" | "table" | "esteira">("kanban");
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
+  const [isModalOpen, setIsModalOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Filtros de Auditoria Master
@@ -328,8 +330,17 @@ export default function LeadsCRM() {
           </div>
 
           <button 
+            onClick={() => setIsModalOpen(true)}
+            className="flex items-center space-x-1.5 bg-blue-600 hover:bg-blue-700 text-white px-3.5 py-1.5 rounded-lg font-bold text-xs shadow-xs transition cursor-pointer"
+            title="Cadastrar um novo lead manualmente"
+          >
+            <UserPlus size={13} />
+            <span>+ Novo Lead</span>
+          </button>
+
+          <button 
             onClick={() => fileInputRef.current?.click()}
-            className="flex items-center space-x-1.5 bg-blue-600 hover:bg-blue-700 text-white px-3.5 py-1.5 rounded-lg font-semibold text-xs shadow-xs transition"
+            className="flex items-center space-x-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 px-3 py-1.5 rounded-lg font-semibold text-xs transition cursor-pointer"
           >
             <Upload size={13} />
             <span>Importar Planilha</span>
@@ -664,6 +675,14 @@ export default function LeadsCRM() {
           </div>
         )}
       </div>
+
+      {/* Modal de Cadastro de Lead com Auto-completar por CEP */}
+      <LeadModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        onSuccess={fetchLeads}
+        empresaId={selectedEmpresa !== "all" ? selectedEmpresa : undefined}
+      />
     </div>
   );
 }
