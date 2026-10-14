@@ -9,6 +9,7 @@ import {
 import { supabase } from "@/lib/supabase";
 import * as XLSX from "xlsx";
 import LeadModal from "@/components/LeadModal";
+import LeadDrawer from "@/components/LeadDrawer";
 
 interface Lead {
   id: number;
@@ -21,6 +22,11 @@ interface Lead {
   status?: string;
   etapa_crm?: string;
   ultima_tabulacao?: string;
+  cep?: string;
+  endereco?: string;
+  bairro?: string;
+  cidade?: string;
+  uf?: string;
   empresa_id?: string;
   operador_nome?: string;
 }
@@ -31,6 +37,7 @@ export default function LeadsCRM() {
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [selectedDrawerLead, setSelectedDrawerLead] = useState<Lead | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Filtros de Auditoria Master
@@ -497,7 +504,11 @@ export default function LeadsCRM() {
 
                     <div className="flex-1 p-2.5 overflow-y-auto space-y-2 custom-scrollbar">
                       {stageLeads.map(lead => (
-                        <div key={lead.id} className="bg-white p-3 rounded-lg border border-slate-200 shadow-xs space-y-2 hover:border-slate-300 transition">
+                        <div 
+                          key={lead.id} 
+                          onClick={() => setSelectedDrawerLead(lead)}
+                          className="bg-white p-3 rounded-lg border border-slate-200 shadow-xs space-y-2 hover:border-blue-400 hover:shadow-md transition cursor-pointer"
+                        >
                           <div className="flex justify-between items-start">
                             <p className="font-bold text-xs text-slate-900 leading-snug truncate">{lead.nome}</p>
                             <span className="text-[10px] font-mono text-slate-400">#{lead.id}</span>
@@ -599,7 +610,11 @@ export default function LeadsCRM() {
 
                   <div className="flex-1 p-2.5 overflow-y-auto space-y-2 custom-scrollbar">
                     {stageLeads.map(lead => (
-                      <div key={lead.id} className="bg-white p-3 rounded-lg border border-slate-200 shadow-xs space-y-1.5 hover:border-slate-300 transition">
+                      <div 
+                        key={lead.id} 
+                        onClick={() => setSelectedDrawerLead(lead)}
+                        className="bg-white p-3 rounded-lg border border-slate-200 shadow-xs space-y-1.5 hover:border-blue-400 hover:shadow-md transition cursor-pointer"
+                      >
                         <div className="flex justify-between items-start">
                           <p className="font-bold text-xs text-slate-900 leading-snug truncate">{lead.nome}</p>
                           <span className="text-[10px] font-mono text-slate-400">#{lead.id}</span>
@@ -614,7 +629,7 @@ export default function LeadsCRM() {
                           <span className="truncate max-w-[120px]">{lead.banco || "Banco N/I"}</span>
                           
                           {/* Mover Etapa */}
-                          <div className="flex space-x-1">
+                          <div className="flex space-x-1" onClick={e => e.stopPropagation()}>
                             {st.id !== "Contrato" && (
                               <button 
                                 onClick={() => {
@@ -656,7 +671,11 @@ export default function LeadsCRM() {
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {filteredLeads.map(l => (
-                    <tr key={l.id} className="hover:bg-slate-50">
+                    <tr 
+                      key={l.id} 
+                      onClick={() => setSelectedDrawerLead(l)}
+                      className="hover:bg-blue-50/70 transition cursor-pointer"
+                    >
                       <td className="px-6 py-3 font-semibold text-slate-800">{l.nome}</td>
                       <td className="px-6 py-3 font-mono">{l.telefone}</td>
                       <td className="px-6 py-3">{l.produto || "Consignado"}</td>
@@ -682,6 +701,14 @@ export default function LeadsCRM() {
         onClose={() => setIsModalOpen(false)}
         onSuccess={fetchLeads}
         empresaId={selectedEmpresa !== "all" ? selectedEmpresa : undefined}
+      />
+
+      {/* Gaveta de Detalhes, Histórico e Proposta do Lead */}
+      <LeadDrawer
+        isOpen={Boolean(selectedDrawerLead)}
+        onClose={() => setSelectedDrawerLead(null)}
+        lead={selectedDrawerLead}
+        onUpdateLead={fetchLeads}
       />
     </div>
   );
