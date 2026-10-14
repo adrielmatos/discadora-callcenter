@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { 
   MessageSquare, Save, CheckCircle2, Send, Smartphone, 
   ShieldCheck, Bot, Sparkles, User, Zap, RefreshCw, ArrowRight,
-  Radio, AlertCircle, ExternalLink, Clock, Layers
+  Radio, AlertCircle, ExternalLink, Clock, Layers, Cpu, Activity
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
@@ -13,6 +13,7 @@ interface ChatMessage {
   sender: "client" | "ai";
   text: string;
   timestamp: string;
+  provider?: string;
 }
 
 export default function OmnichannelPage() {
@@ -34,8 +35,9 @@ export default function OmnichannelPage() {
   const [testSending, setTestSending] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string; waUrl?: string } | null>(null);
 
-  // IA 24h Config (Sofia) & Motor LLM Gemini
+  // IA 24h Config (Sofia) & Motor LLM Multi-Provedor (Gemini + Groq)
   const [geminiApiKey, setGeminiApiKey] = useState("");
+  const [groqApiKey, setGroqApiKey] = useState("");
   const [aiEnabled, setAiEnabled] = useState(true);
   const [aiName, setAiName] = useState("Sofia");
   const [aiTone, setAiTone] = useState<"consultivo" | "fechamento" | "formal">("consultivo");
@@ -76,7 +78,7 @@ export default function OmnichannelPage() {
         .select(`
           wa_mode, wa_api_url, wa_api_token, wa_instance_name, wa_default_message,
           ai_enabled, ai_name, ai_tone, ai_greeting, ai_knowledge, ai_handoff_triggers,
-          gemini_api_key, empresa_nome
+          gemini_api_key, groq_api_key, empresa_nome
         `)
         .eq("id", 1)
         .single();
@@ -89,6 +91,7 @@ export default function OmnichannelPage() {
         if (data.wa_default_message) setDefaultMessage(data.wa_default_message);
 
         if (data.gemini_api_key) setGeminiApiKey(data.gemini_api_key);
+        if (data.groq_api_key) setGroqApiKey(data.groq_api_key);
         if (data.ai_enabled !== undefined && data.ai_enabled !== null) setAiEnabled(data.ai_enabled);
         if (data.ai_name) setAiName(data.ai_name);
         if (data.ai_tone) setAiTone(data.ai_tone as any);
@@ -116,6 +119,7 @@ export default function OmnichannelPage() {
           wa_instance_name: instanceName.trim(),
           wa_default_message: defaultMessage,
           gemini_api_key: geminiApiKey.trim(),
+          groq_api_key: groqApiKey.trim(),
           ai_enabled: aiEnabled,
           ai_name: aiName.trim(),
           ai_tone: aiTone,
@@ -225,7 +229,8 @@ export default function OmnichannelPage() {
           id: (Date.now() + 1).toString(),
           sender: "ai",
           text: reply,
-          timestamp: new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
+          timestamp: new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
+          provider: data.provider
         }
       ]);
     } catch (err: any) {
@@ -520,50 +525,131 @@ export default function OmnichannelPage() {
                 </label>
               </div>
 
-              {/* Conector Motor LLM Real (Google Gemini 1.5/2.0 Flash) */}
-              <div className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-xs space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Sparkles size={18} className="text-blue-600" />
-                    <div>
-                      <h3 className="text-sm font-bold text-slate-900">Motor de Inteligência Artificial Real (LLM)</h3>
-                      <p className="text-xs text-slate-500 mt-0.5">
-                        Alimenta a Sofia com IA generativa real do Google (respostas inteligentes e consultivas a Custo R$ 0,00).
-                      </p>
+              {/* Pool de IAs Gratuitas Multi-Provedor (Gemini + Groq com Load Balancer e Failover) */}
+              {(() => {
+                const geminiKeys = geminiApiKey.split(/[\n,;]+/).map(k => k.trim()).filter(k => k.length > 5);
+                const groqKeys = groqApiKey.split(/[\n,;]+/).map(k => k.trim()).filter(k => k.length > 5);
+                const totalKeys = geminiKeys.length + groqKeys.length;
+                const totalRpm = (geminiKeys.length * 15) + (groqKeys.length * 30);
+                const estimatedMsgsHour = totalRpm * 60;
+
+                return (
+                  <div className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-xs space-y-5">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
+                          <Cpu size={18} />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h3 className="text-sm font-bold text-slate-900">Pool de IAs 100% Gratuitas (Load Balancer & Failover)</h3>
+                            <span className="text-[10px] bg-emerald-50 text-emerald-700 font-bold px-2 py-0.5 rounded-full border border-emerald-200">
+                              Custo R$ 0,00
+                            </span>
+                          </div>
+                          <p className="text-xs text-slate-500 mt-0.5">
+                            Distribui as mensagens entre múltiplas contas do Google Gemini e Groq Cloud. Sem custo de API.
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <span className={`px-3 py-1.5 rounded-xl text-[11px] font-bold border ${
+                          totalKeys > 0 
+                            ? "bg-emerald-50 text-emerald-700 border-emerald-200" 
+                            : "bg-amber-50 text-amber-700 border-amber-200"
+                        }`}>
+                          {totalKeys > 0 ? `🟢 Pool Ativo: ${totalKeys} chaves (~${totalRpm} req/min)` : "🟡 Modo Regras Locais (Sem chaves)"}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Telemetria e Capacidade do Pool */}
+                    <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-3.5 flex flex-wrap items-center justify-between gap-3 text-xs">
+                      <div className="flex items-center gap-3">
+                        <Activity size={15} className="text-blue-600" />
+                        <span className="text-slate-600">
+                          Capacidade do Pool: <strong className="text-slate-900">{totalRpm} requisições/minuto</strong> (~{estimatedMsgsHour.toLocaleString("pt-BR")} msgs/hora)
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-3 text-[11px] text-slate-500">
+                        <span className="flex items-center gap-1">
+                          <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+                          Gemini Flash: {geminiKeys.length} chaves ({geminiKeys.length * 15} RPM)
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <span className="w-2 h-2 rounded-full bg-orange-500"></span>
+                          Groq Llama 3: {groqKeys.length} chaves ({groqKeys.length * 30} RPM)
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {/* Chaves Google Gemini */}
+                      <div className="border border-slate-200 rounded-xl p-4 space-y-2 bg-white">
+                        <div className="flex justify-between items-center">
+                          <div className="flex items-center gap-1.5">
+                            <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+                            <label className="text-xs font-bold text-slate-800">Google Gemini 1.5 Flash</label>
+                          </div>
+                          <a
+                            href="https://aistudio.google.com/app/apikey"
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-[10px] font-bold text-blue-600 hover:underline flex items-center gap-1"
+                          >
+                            <ExternalLink size={10} />
+                            <span>Gerar Chave no Google</span>
+                          </a>
+                        </div>
+                        <p className="text-[11px] text-slate-500">
+                          15 req/min grátis por chave. Cole 1 ou várias chaves separadas por vírgula para multiplicar seu limite.
+                        </p>
+                        <textarea
+                          rows={2}
+                          placeholder="AIzaSy... (para mais de uma, separe por vírgula)"
+                          value={geminiApiKey}
+                          onChange={e => setGeminiApiKey(e.target.value)}
+                          className="w-full border border-slate-200 p-2.5 rounded-xl text-xs font-mono outline-none focus:border-blue-500 bg-slate-50/50 resize-none"
+                        />
+                      </div>
+
+                      {/* Chaves Groq Cloud (Llama 3.1) */}
+                      <div className="border border-slate-200 rounded-xl p-4 space-y-2 bg-white">
+                        <div className="flex justify-between items-center">
+                          <div className="flex items-center gap-1.5">
+                            <span className="w-2 h-2 rounded-full bg-orange-500"></span>
+                            <label className="text-xs font-bold text-slate-800">Groq Cloud (Llama 3.1 8B)</label>
+                          </div>
+                          <a
+                            href="https://console.groq.com/keys"
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-[10px] font-bold text-orange-600 hover:underline flex items-center gap-1"
+                          >
+                            <ExternalLink size={10} />
+                            <span>Gerar Chave no Groq</span>
+                          </a>
+                        </div>
+                        <p className="text-[11px] text-slate-500">
+                          30 req/min grátis por chave. Resposta instantânea (500 tokens/s) com o modelo Llama 3.1 da Meta.
+                        </p>
+                        <textarea
+                          rows={2}
+                          placeholder="gsk_... (para mais de uma, separe por vírgula)"
+                          value={groqApiKey}
+                          onChange={e => setGroqApiKey(e.target.value)}
+                          className="w-full border border-slate-200 p-2.5 rounded-xl text-xs font-mono outline-none focus:border-blue-500 bg-slate-50/50 resize-none"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="bg-blue-50/60 border border-blue-100 rounded-xl p-3 text-xs text-blue-900 leading-relaxed">
+                      💡 <strong>Como funciona a rotação sem custo:</strong> O sistema envia cada atendimento para uma chave diferente (Round-Robin). Caso alguma chave atinja o limite temporário por minuto (HTTP 429), o sistema pula imediatamente para a chave seguinte em menos de 10ms. Se todas estiverem ocupadas, o motor de regras locais responde garantindo que nenhum cliente fique sem resposta.
                     </div>
                   </div>
-                  <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
-                    geminiApiKey ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-amber-50 text-amber-700 border border-amber-200"
-                  }`}>
-                    {geminiApiKey ? "🟢 Gemini Conectado" : "🟡 Modo Regras Locais"}
-                  </span>
-                </div>
-
-                <div>
-                  <div className="flex justify-between items-center mb-1">
-                    <label className="text-[11px] font-bold text-slate-700">Chave de API do Google Gemini (AI Studio):</label>
-                    <a
-                      href="https://aistudio.google.com/app/apikey"
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-[10px] font-bold text-blue-600 hover:underline flex items-center gap-1"
-                    >
-                      <ExternalLink size={10} />
-                      <span>Gerar Chave Grátis no Google</span>
-                    </a>
-                  </div>
-                  <input
-                    type="password"
-                    placeholder="AIzaSy..."
-                    value={geminiApiKey}
-                    onChange={e => setGeminiApiKey(e.target.value)}
-                    className="w-full border border-slate-200 p-2.5 rounded-xl text-xs font-mono outline-none focus:border-blue-500 bg-slate-50/50"
-                  />
-                  <p className="text-[10px] text-slate-400 mt-1">
-                    A cota gratuita do Google AI Studio oferece até 15 requisições por minuto com custo zero, ideal para atender centenas de clientes sem mensalidade.
-                  </p>
-                </div>
-              </div>
+                );
+              })()}
 
               {/* Personalidade & Identidade */}
               <div className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-xs space-y-4">
@@ -690,12 +776,25 @@ export default function OmnichannelPage() {
                         ? "bg-blue-600 text-white rounded-tr-none" 
                         : "bg-white text-slate-800 border border-slate-200/90 rounded-tl-none"
                     }`}>
-                      <p>{msg.text}</p>
-                      <span className={`text-[9px] block text-right mt-1.5 ${
-                        msg.sender === "client" ? "text-blue-200" : "text-slate-400"
+                      <p className="whitespace-pre-line">{msg.text}</p>
+                      <div className={`flex items-center justify-between gap-2 mt-2 pt-1 border-t ${
+                        msg.sender === "client" ? "border-blue-500/40" : "border-slate-100"
                       }`}>
-                        {msg.timestamp}
-                      </span>
+                        {msg.provider ? (
+                          <span className={`text-[9px] font-semibold flex items-center gap-1 ${
+                            msg.sender === "client" ? "text-blue-100" : "text-blue-600"
+                          }`}>
+                            <Sparkles size={10} /> {msg.provider}
+                          </span>
+                        ) : (
+                          <span />
+                        )}
+                        <span className={`text-[9px] ${
+                          msg.sender === "client" ? "text-blue-200" : "text-slate-400"
+                        }`}>
+                          {msg.timestamp}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 ))}
