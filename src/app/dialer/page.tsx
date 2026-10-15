@@ -569,8 +569,21 @@ export default function DialerWorkspace() {
       {/* ── BODY: grid 2 colunas ──────────────────────────────────────── */}
       <div className="flex-1 flex flex-col lg:flex-row overflow-hidden relative">
         
-        {/* BOTÃO FLUTUANTE DE AJUSTES & TECLADO (Aparece quando a barra está fechada) */}
-        <div className={`absolute top-3 right-4 lg:right-6 z-20 flex items-center gap-2 transition-all duration-300 ${isToolbarOpen ? 'scale-0 opacity-0' : 'scale-100 opacity-100'}`}>
+        {/* BOTÃO FLUTUANTE DE AJUSTES & TECLADO & SIMULADOR (Aparece quando a barra está fechada) */}
+        <div className={`absolute top-3 right-4 lg:right-6 z-20 flex items-center gap-2 transition-all duration-300 ${isToolbarOpen ? 'scale-0 opacity-0 pointer-events-none' : 'scale-100 opacity-100'}`}>
+          <button
+            onClick={() => setShowCalc(!showCalc)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border shadow-xs hover:shadow-md transition cursor-pointer ${
+              showCalc
+                ? "bg-blue-600 text-white border-blue-600"
+                : "bg-white border-slate-200 text-slate-700 hover:text-blue-600 hover:border-blue-200"
+            }`}
+            title="Calculadora Financeira (FGTS, Portabilidade e Margem)"
+          >
+            <Calculator size={13} className={showCalc ? "text-white" : "text-blue-600"} />
+            <span className="text-[11px] font-bold">Simulador</span>
+          </button>
+
           <button
             onClick={() => setIsKeypadOpen(true)}
             className="flex items-center gap-1 px-3 py-1.5 rounded-full bg-white border border-slate-200 text-slate-700 shadow-xs hover:shadow-md hover:text-blue-600 hover:border-blue-200 transition cursor-pointer"

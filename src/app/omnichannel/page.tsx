@@ -17,7 +17,7 @@ interface ChatMessage {
 }
 
 export default function OmnichannelPage() {
-  const [activeTab, setActiveTab] = useState<"whatsapp" | "ia" | "simulator">("whatsapp");
+  const [activeTab, setActiveTab] = useState<"ia" | "simulator" | "whatsapp">("ia");
   const [loading, setLoading] = useState(true);
   const [saved, setSaved] = useState(false);
 
@@ -152,9 +152,19 @@ export default function OmnichannelPage() {
     setTestResult(null);
 
     try {
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.access_token) {
+          headers["Authorization"] = `Bearer ${session.access_token}`;
+        }
+      } catch (authErr) {
+        // Ignora caso esteja em modo local/demo
+      }
+
       const res = await fetch("/api/whatsapp/send", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({
           telefone: testPhone.trim(),
           mensagem: "Olá! Esta é uma mensagem de teste enviada com sucesso da Discadora A&K Soluções Financeiras 🚀"
@@ -313,6 +323,78 @@ export default function OmnichannelPage() {
               <span>Parâmetros de atendimento salvos com sucesso no Supabase!</span>
             </div>
           )}
+
+          {/* BARRA DE NAVEGAÇÃO PRINCIPAL DAS ABAS (DESTAQUE MÁXIMO) */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 bg-white p-2 rounded-2xl border border-slate-200/80 shadow-xs">
+            <button
+              type="button"
+              onClick={() => setActiveTab("ia")}
+              className={`p-3.5 rounded-xl text-left transition flex items-center space-x-3 cursor-pointer ${
+                activeTab === "ia"
+                  ? "bg-blue-50/90 border-2 border-blue-500 text-blue-900 shadow-2xs ring-2 ring-blue-100"
+                  : "hover:bg-slate-50 border-2 border-transparent text-slate-600"
+              }`}
+            >
+              <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                activeTab === "ia" ? "bg-blue-600 text-white shadow-xs" : "bg-slate-100 text-slate-500"
+              }`}>
+                <Bot size={20} />
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center space-x-1.5">
+                  <span className="text-xs font-black text-slate-900">Atendente Sofia</span>
+                  <span className="text-[10px] bg-emerald-100 text-emerald-800 font-extrabold px-1.5 py-0.5 rounded">Pool Grátis</span>
+                </div>
+                <p className="text-[11px] text-slate-500 truncate">Gemini + Groq Load Balancer</p>
+              </div>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab("simulator")}
+              className={`p-3.5 rounded-xl text-left transition flex items-center space-x-3 cursor-pointer ${
+                activeTab === "simulator"
+                  ? "bg-emerald-50/90 border-2 border-emerald-500 text-emerald-900 shadow-2xs ring-2 ring-emerald-100"
+                  : "hover:bg-slate-50 border-2 border-transparent text-slate-600"
+              }`}
+            >
+              <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                activeTab === "simulator" ? "bg-emerald-600 text-white shadow-xs" : "bg-slate-100 text-slate-500"
+              }`}>
+                <Sparkles size={20} />
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center space-x-1.5">
+                  <span className="text-xs font-black text-slate-900">Simulador ao Vivo</span>
+                  <span className="text-[10px] bg-blue-100 text-blue-800 font-extrabold px-1.5 py-0.5 rounded">Chat Teste</span>
+                </div>
+                <p className="text-[11px] text-slate-500 truncate">Teste conversa com a IA agora</p>
+              </div>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab("whatsapp")}
+              className={`p-3.5 rounded-xl text-left transition flex items-center space-x-3 cursor-pointer ${
+                activeTab === "whatsapp"
+                  ? "bg-slate-100 border-2 border-slate-700 text-slate-900 shadow-2xs ring-2 ring-slate-200"
+                  : "hover:bg-slate-50 border-2 border-transparent text-slate-600"
+              }`}
+            >
+              <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                activeTab === "whatsapp" ? "bg-slate-800 text-white shadow-xs" : "bg-slate-100 text-slate-500"
+              }`}>
+                <Smartphone size={20} />
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center space-x-1.5">
+                  <span className="text-xs font-black text-slate-900">WhatsApp & Disparos</span>
+                  <span className="text-[10px] bg-slate-200 text-slate-700 font-extrabold px-1.5 py-0.5 rounded">API & Web</span>
+                </div>
+                <p className="text-[11px] text-slate-500 truncate">Configuração e teste de envio</p>
+              </div>
+            </button>
+          </div>
 
           {/* ABA 1: WHATSAPP & DISPAROS */}
           {activeTab === "whatsapp" && (
