@@ -200,17 +200,28 @@ export async function POST(req: NextRequest) {
       });
     });
 
-    const systemInstruction = `Você é ${effectiveName}, a consultora virtual de crédito e especialista em soluções financeiras da ${effectiveCompany}.
-Sua missão é acolher o cliente no WhatsApp, explicar as vantagens de forma humana, transparente e persuasiva, e tirar dúvidas sobre:
-1. Saque-Aniversário FGTS (taxa a partir de 1,69% a.m., liberação via PIX em até 2 horas).
-2. Crédito Consignado INSS, BPC/LOAS e Servidores (até 84x, menor taxa do mercado).
-3. Portabilidade com Troco (troca de banco reduzindo juros e liberando dinheiro em conta sem aumentar a parcela).
+    const systemInstruction = `Você é ${effectiveName}, assistente virtual de triagem e pré-atendimento da ${effectiveCompany}.
+Seu papel é acolher o cliente no WhatsApp, tirar dúvidas básicas sobre o funcionamento dos processos e conectar o cliente com o nosso especialista humano da equipe para que ele faça o cálculo oficial no sistema.
 
-Regras de conduta:
-- Nunca cobre nada antecipado. Destaque que a formalização é 100% digital e segura.
-- Responda de forma concisa e amigável (máximo 2 a 3 parágrafos curtos, ideal para ler no celular).
-- Use linguagem brasileira natural e profissional.
-- Base de conhecimento: ${effectiveKnowledge}`;
+DIRETRIZES FUNDAMENTAIS DE CONDUTA:
+1. NUNCA invente, prometa ou informe taxas de juros, porcentagens fixas ou valores específicos de parcelas. As condições dependem da análise oficial de margem, convênio e coeficientes diários do banco.
+2. Quando o cliente perguntar sobre taxas de juros, valores de parcelas ou simulação:
+   - Explique cordialmente que as taxas e limites exatos dependem da consulta da margem oficial no sistema de cada banco parceiro.
+   - Diga que o nosso especialista humano fará essa consulta oficial gratuita e personalizada no sistema agora mesmo.
+   - Pergunte se o cliente gostaria que o especialista faça a consulta para ele.
+3. Segurança e Confiança:
+   - Destaque com ênfase que NUNCA cobramos nenhum depósito antecipado ou taxa prévia (cuidado com golpes).
+   - O dinheiro aprovado cai diretamente na conta bancária do próprio titular (via PIX ou TED).
+   - A contratação é 100% digital e segura pelo celular, com biometria facial oficial do banco parceiro.
+4. Produtos atendidos:
+   - Antecipação de Saque-Aniversário FGTS (sem consulta ao SPC/Serasa, pagamento via PIX na conta do cliente).
+   - Empréstimo Consignado para Aposentados e Pensionistas do INSS, BPC/LOAS e Servidores Públicos.
+   - Portabilidade de Crédito (redução de juros e liberação de troco em dinheiro na conta sem aumentar a parcela).
+5. Estilo de resposta:
+   - Respostas curtas, gentis e objetivas (máximo 2 a 3 parágrafos curtos, ideais para leitura rápida no WhatsApp).
+   - Linguagem natural brasileira, humana, profissional e prestativa.
+   - Sempre finalize com uma pergunta gentil para avançar o atendimento (ex: "Você gostaria que o nosso especialista consulte as condições liberadas no sistema para você?").
+   - Base de conhecimento: ${effectiveKnowledge}`;
 
     // Se temos provedores no pool, balanceia a carga e faz rotação com failover instantâneo
     if (pool.length > 0) {
@@ -247,16 +258,18 @@ Regras de conduta:
 
     // Fallback inteligente contextual caso nenhuma chave esteja configurada ou se todas atingirem a cota momentânea
     let fallbackReply = "";
-    if (lowerMessage.includes("golpe") || lowerMessage.includes("seguro") || lowerMessage.includes("confiavel") || lowerMessage.includes("confiável")) {
-      fallbackReply = `Compreendo sua cautela! Na ${effectiveCompany} operamos como correspondente autorizado aos bancos oficiais. Nós NUNCA cobramos taxas antecipadas. Todo o processo é validado diretamente com biometria facial no app oficial do banco.`;
+    if (lowerMessage.includes("golpe") || lowerMessage.includes("seguro") || lowerMessage.includes("confiavel") || lowerMessage.includes("confiável") || lowerMessage.includes("taxa antecipada") || lowerMessage.includes("depósito")) {
+      fallbackReply = `Compreendo sua cautela! Na ${effectiveCompany} operamos como correspondente autorizado dos bancos parceiros oficiais. Nós NUNCA cobramos taxas ou depósitos antecipados. Todo o processo é 100% digital com biometria facial no app do banco, e o dinheiro cai direto na sua conta.`;
+    } else if (lowerMessage.includes("taxa") || lowerMessage.includes("juros") || lowerMessage.includes("quanto fica") || lowerMessage.includes("valor da parcela") || lowerMessage.includes("quanto pago")) {
+      fallbackReply = `As taxas e valores exatos dependem da análise oficial da sua margem no sistema dos bancos parceiros. Para não te passar nenhuma informação imprecisa, o cálculo oficial é feito pelo nosso especialista humano. Gostaria que eu peça para ele consultar a sua simulação no sistema agora?`;
     } else if (lowerMessage.includes("fgts") || lowerMessage.includes("aniversario") || lowerMessage.includes("aniversário")) {
-      fallbackReply = `Sim! Fazemos a antecipação de até 10 anos do seu Saque-Aniversário FGTS com taxa a partir de 1,69% a.m. O dinheiro cai via PIX na sua conta em até 2 horas. Gostaria de simular seu saldo?`;
+      fallbackReply = `Trabalhamos com a antecipação do Saque-Aniversário FGTS sem consulta ao SPC/Serasa, com liberação rápida na sua conta via PIX após a aprovação! Gostaria que nosso especialista consulte o seu saldo liberado no sistema?`;
     } else if (lowerMessage.includes("portabilidade") || lowerMessage.includes("troco") || lowerMessage.includes("reduzir")) {
-      fallbackReply = `Excelente! Com a Portabilidade com Troco, transferimos sua dívida para um banco parceiro com taxa menor e liberamos a diferença como troco em dinheiro direto na sua conta, sem aumentar o valor da sua parcela atual!`;
+      fallbackReply = `Com a Portabilidade com Troco, avaliamos seu contrato atual para tentar transferir para um banco com condições melhores e liberar troco em dinheiro na sua conta, sem aumentar sua parcela! Gostaria que nosso especialista analise seu caso?`;
     } else if (lowerMessage.includes("inss") || lowerMessage.includes("bpc") || lowerMessage.includes("loas") || lowerMessage.includes("aposentado")) {
-      fallbackReply = `Atendemos aposentados, pensionistas e beneficiários BPC/LOAS com a menor taxa de consignado do Brasil em até 84 parcelas sem consulta ao SPC/Serasa. Você já sabe sua margem disponível?`;
+      fallbackReply = `Atendemos aposentados, pensionistas e beneficiários BPC/LOAS com empréstimo consignado direto em folha sem consulta ao SPC/Serasa. Gostaria que nosso especialista verifique sua margem disponível hoje?`;
     } else {
-      fallbackReply = `Olá! Sou a ${effectiveName} da ${effectiveCompany}. Para que eu possa calcular a melhor proposta liberada hoje pelos bancos parceiros, qual o valor ou produto (FGTS ou Consignado) você tem interesse em consultar?`;
+      fallbackReply = `Olá! Sou a ${effectiveName}, assistente virtual da ${effectiveCompany}. Estou aqui para te ajudar com dúvidas e chamar nosso especialista para calcular as melhores condições aprovadas para você. Qual produto você gostaria de consultar hoje (FGTS ou Consignado)?`;
     }
 
     return NextResponse.json({

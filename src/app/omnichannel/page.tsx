@@ -43,10 +43,10 @@ export default function OmnichannelPage() {
   const [aiTone, setAiTone] = useState<"consultivo" | "fechamento" | "formal">("consultivo");
   const [aiCompany, setAiCompany] = useState("A&K Soluções Financeiras");
   const [aiGreeting, setAiGreeting] = useState(
-    "Olá! Sou a Sofia, especialista virtual da A&K Soluções Financeiras. Como posso te ajudar hoje a liberar ou simular seu crédito?"
+    "Olá! Sou a Sofia, assistente virtual da A&K Soluções Financeiras. Como posso te ajudar hoje com suas dúvidas sobre FGTS ou Consignado?"
   );
   const [aiKnowledge, setAiKnowledge] = useState(
-    "A&K Soluções Financeiras trabalha com correspondência autorizada dos bancos Pan, Safra, BMG, C6, Facta e Daycoval. Produtos: Saque-aniversário FGTS (taxas a partir de 1,69% a.m., liberação via PIX em até 2 horas), Consignado INSS/BPC/LOAS (menor taxa do mercado, até 84 parcelas) e Portabilidade com Troco em dinheiro sem aumentar o valor da parcela atual. Nunca cobramos nenhum depósito adiantado. Contratos 100% digitais com biometria facial."
+    "A&K Soluções Financeiras é correspondente bancário autorizado (Pan, Safra, BMG, C6, Facta e Daycoval). Produtos: Antecipação Saque-Aniversário FGTS, Consignado INSS/BPC/LOAS e Portabilidade com Troco. NUNCA cobramos taxas ou depósitos antecipados. Contratos 100% digitais com biometria facial oficial do banco e liberação via PIX ou conta bancária. IMPORTANTE: Não prometer nem inventar taxas de juros ou valores específicos de parcelas; esclarecer que as taxas e limites exatos dependem da consulta de margem oficial no sistema feita pelo nosso especialista humano."
   );
   const [handoffTriggers, setHandoffTriggers] = useState(
     "falar com atendente, quero contratar, manda o contrato, fechar agora, falar com adriel, falar com humano"
