@@ -12,59 +12,70 @@ interface ProviderCandidate {
   label: string;
 }
 
-// Chamada à API Oficial do Google Gemini (1.5 Flash - Grátis 15 RPM)
+// Chamada à API Oficial do Google Gemini (gemini-flash-latest / 15 RPM Grátis)
 async function callGemini(
   apiKey: string,
   systemInstruction: string,
   history: ChatHistoryItem[],
   message: string
 ): Promise<{ text: string } | { error: string; status: number }> {
-  try {
-    const contents: any[] = [];
-    if (Array.isArray(history)) {
-      for (const item of history.slice(-6)) {
-        contents.push({
-          role: item.sender === "ai" ? "model" : "user",
-          parts: [{ text: item.text }]
-        });
-      }
+  const modelCandidates = ["gemini-3.5-flash-lite", "gemini-flash-latest", "gemini-2.5-flash-lite", "gemini-1.5-flash-latest", "gemini-1.5-flash"];
+  
+  const contents: any[] = [];
+  if (Array.isArray(history)) {
+    for (const item of history.slice(-6)) {
+      contents.push({
+        role: item.sender === "ai" ? "model" : "user",
+        parts: [{ text: item.text }]
+      });
     }
-    contents.push({
-      role: "user",
-      parts: [{ text: message }]
-    });
-
-    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
-
-    const res = await fetch(geminiUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        system_instruction: {
-          parts: [{ text: systemInstruction }]
-        },
-        contents,
-        generationConfig: {
-          temperature: 0.7,
-          maxOutputTokens: 500
-        }
-      })
-    });
-
-    if (!res.ok) {
-      const errText = await res.text();
-      return { error: errText, status: res.status };
-    }
-
-    const data = await res.json();
-    const generatedText = data.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (generatedText) {
-      return { text: generatedText.trim() };
-    }
-    return { error: "Sem resposta gerada pelo Gemini", status: 500 };
-  } catch (err: any) {
-    return { error: err.message, status: 500 };
   }
+  contents.push({
+    role: "user",
+    parts: [{ text: message }]
+  });
+
+  const payload = {
+    system_instruction: {
+      parts: [{ text: systemInstruction }]
+    },
+    contents,
+    generationConfig: {
+      temperature: 0.7,
+      maxOutputTokens: 500
+    }
+  };
+
+  let lastError = { error: "Sem resposta gerada pelo Gemini", status: 500 };
+
+  for (const model of modelCandidates) {
+    try {
+      const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+      const res = await fetch(geminiUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        const generatedText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (generatedText) {
+          return { text: generatedText.trim() };
+        }
+      } else {
+        const errText = await res.text();
+        lastError = { error: errText, status: res.status };
+        // Se for 404 de modelo descontinuado ou 503 de sobrecarga temporária, tenta o próximo modelo
+        if (res.status === 404 || res.status === 503) continue;
+        return lastError;
+      }
+    } catch (err: any) {
+      lastError = { error: err.message, status: 500 };
+    }
+  }
+
+  return lastError;
 }
 
 // Chamada à API Oficial da Groq Cloud (Llama 3.1 8B Instant - Grátis 30 RPM, 500 tokens/s)
