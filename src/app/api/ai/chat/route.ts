@@ -12,6 +12,102 @@ interface ProviderCandidate {
   label: string;
 }
 
+// Sincroniza conversa e cliente diretamente com o CRM da Discadora (Supabase)
+async function syncConversationToCrm(
+  phone: string,
+  name?: string,
+  userMessage?: string,
+  aiReply?: string,
+  isHandoff?: boolean
+) {
+  try {
+    if (!phone) return null;
+    const cleanPhone = phone.replace(/\D/g, "");
+    if (cleanPhone.length < 8) return null;
+
+    const searchPhone = cleanPhone.slice(-8); // Busca pelos últimos 8 dígitos para cobrir com/sem 55 e DDD
+
+    const { data: existingLeads } = await supabase
+      .from("leads")
+      .select("id, nome, telefone, etapa_crm, status")
+      .ilike("telefone", `%${searchPhone}%`)
+      .limit(1);
+
+    let leadId: number | null = null;
+    const nextEtapa = isHandoff ? "Simulação" : "Interessado";
+    const tabulacaoLabel = isHandoff 
+      ? "[WhatsApp Sofia] Aguardando Especialista" 
+      : "[WhatsApp Sofia] Em Atendimento";
+
+    if (existingLeads && existingLeads.length > 0) {
+      const existing = existingLeads[0];
+      leadId = existing.id;
+      // Atualiza status e etapa do lead existente
+      await supabase
+        .from("leads")
+        .update({
+          etapa_crm: nextEtapa,
+          ultima_tabulacao: tabulacaoLabel,
+          updated_at: new Date().toISOString()
+        })
+        .eq("id", leadId);
+    } else {
+      // Cria automaticamente um novo lead vindo do WhatsApp
+      const cleanName = (name || "").trim() || `Cliente WhatsApp (${cleanPhone.slice(-4)})`;
+      const { data: newLead } = await supabase
+        .from("leads")
+        .insert({
+          nome: cleanName,
+          telefone: cleanPhone,
+          status: "pendente",
+          etapa_crm: nextEtapa,
+          ultima_tabulacao: tabulacaoLabel,
+          produto: "FGTS / Consignado"
+        })
+        .select("id")
+        .single();
+
+      if (newLead) {
+        leadId = newLead.id;
+      }
+    }
+
+    if (leadId) {
+      // Registra a interação no histórico da ficha do cliente
+      const interactionText = `[WhatsApp Sofia] Cliente: "${(userMessage || "").slice(0, 150)}" | Sofia: "${(aiReply || "").slice(0, 200)}"`;
+      await supabase.from("historico_ligacoes").insert({
+        lead_id: leadId,
+        tabulacao: interactionText,
+        duracao_segundos: 0
+      });
+
+      // Se for acionado o transbordo para especialista humano, gera alerta prioritário em 'retornos'
+      if (isHandoff) {
+        const { data: existingRetorno } = await supabase
+          .from("retornos")
+          .select("id")
+          .eq("lead_id", leadId)
+          .eq("concluido", false)
+          .limit(1);
+
+        if (!existingRetorno || existingRetorno.length === 0) {
+          await supabase.from("retornos").insert({
+            lead_id: leadId,
+            data_hora: new Date().toISOString(),
+            observacao: `[ALERTA WHATSAPP] Cliente solicitou especialista/simulação: "${(userMessage || "").slice(0, 100)}"`,
+            concluido: false
+          });
+        }
+      }
+    }
+
+    return { leadId, synced: true };
+  } catch (err) {
+    console.error("Erro ao sincronizar WhatsApp com CRM:", err);
+    return null;
+  }
+}
+
 // Chamada à API Oficial do Google Gemini (gemini-flash-latest / 15 RPM Grátis)
 async function callGemini(
   apiKey: string,
@@ -66,7 +162,6 @@ async function callGemini(
       } else {
         const errText = await res.text();
         lastError = { error: errText, status: res.status };
-        // Se for 404 de modelo descontinuado ou 503 de sobrecarga temporária, tenta o próximo modelo
         if (res.status === 404 || res.status === 503) continue;
         return lastError;
       }
@@ -132,7 +227,16 @@ async function callGroq(
 
 export async function POST(req: NextRequest) {
   try {
-    const { message, history, knowledge, company, agentName, handoffTriggers } = await req.json();
+    const { 
+      message, 
+      history, 
+      knowledge, 
+      company, 
+      agentName, 
+      handoffTriggers,
+      clientPhone,
+      clientName
+    } = await req.json();
 
     if (!message || typeof message !== "string") {
       return NextResponse.json({ error: "Mensagem obrigatória" }, { status: 400 });
@@ -157,11 +261,19 @@ export async function POST(req: NextRequest) {
 
     // Se o cliente acionou o gatilho de fechamento/transbordo humano
     if (shouldHandoff) {
+      const reply = `Perfeito! Já transferi seu atendimento para o nosso especialista da ${effectiveCompany}. Ele já tem o seu histórico e vai falar com você aqui em instantes para concluir a formalização! 🚀`;
+      
+      let syncResult = null;
+      if (clientPhone) {
+        syncResult = await syncConversationToCrm(clientPhone, clientName, message, reply, true);
+      }
+
       return NextResponse.json({
-        reply: `Perfeito! Já transferi seu atendimento para o nosso especialista humano da ${effectiveCompany}. Ele já tem o seu histórico e vai falar com você aqui em instantes para concluir a formalização! 🚀`,
+        reply,
         isHandoff: true,
         source: "handoff_trigger",
-        provider: "Gatilho de Transbordo Humano"
+        provider: "Gatilho de Transbordo Humano",
+        crmSync: syncResult
       });
     }
 
@@ -228,7 +340,6 @@ Base de conhecimento da empresa: ${effectiveKnowledge}`;
 
     // Se temos provedores no pool, balanceia a carga e faz rotação com failover instantâneo
     if (pool.length > 0) {
-      // Começa de um índice randômico para distribuir requisições uniformemente entre as chaves gratuitas (Round-Robin)
       const offset = Math.floor(Math.random() * pool.length);
       const candidates = [...pool.slice(offset), ...pool.slice(0, offset)];
 
@@ -236,30 +347,40 @@ Base de conhecimento da empresa: ${effectiveKnowledge}`;
         if (candidate.type === "gemini") {
           const result = await callGemini(candidate.key, systemInstruction, history, message);
           if ("text" in result && result.text) {
+            let syncResult = null;
+            if (clientPhone) {
+              syncResult = await syncConversationToCrm(clientPhone, clientName, message, result.text, false);
+            }
             return NextResponse.json({
               reply: result.text,
               isHandoff: false,
               source: "gemini_ai",
-              provider: candidate.label
+              provider: candidate.label,
+              crmSync: syncResult
             });
           }
-          console.warn(`[Failover IA] ${candidate.label} falhou (HTTP ${"status" in result ? result.status : "unknown"}). Tentando próximo candidato...`);
+          console.warn(`[Failover IA] ${candidate.label} falhou. Tentando próximo...`);
         } else if (candidate.type === "groq") {
           const result = await callGroq(candidate.key, systemInstruction, history, message);
           if ("text" in result && result.text) {
+            let syncResult = null;
+            if (clientPhone) {
+              syncResult = await syncConversationToCrm(clientPhone, clientName, message, result.text, false);
+            }
             return NextResponse.json({
               reply: result.text,
               isHandoff: false,
               source: "groq_ai",
-              provider: candidate.label
+              provider: candidate.label,
+              crmSync: syncResult
             });
           }
-          console.warn(`[Failover IA] ${candidate.label} falhou (HTTP ${"status" in result ? result.status : "unknown"}). Tentando próximo candidato...`);
+          console.warn(`[Failover IA] ${candidate.label} falhou. Tentando próximo...`);
         }
       }
     }
 
-    // Fallback inteligente contextual caso nenhuma chave esteja configurada ou se todas atingirem a cota momentânea
+    // Fallback inteligente contextual caso nenhuma chave esteja configurada
     let fallbackReply = "";
     if (lowerMessage.includes("golpe") || lowerMessage.includes("seguro") || lowerMessage.includes("confiavel") || lowerMessage.includes("confiável") || lowerMessage.includes("taxa antecipada") || lowerMessage.includes("depósito")) {
       fallbackReply = `Compreendo sua preocupação. Na ${effectiveCompany} não cobramos nenhum valor antecipado. A contratação é 100% digital e segura, e o crédito é depositado diretamente em sua conta bancária. Posso auxiliar com uma simulação?`;
@@ -275,11 +396,17 @@ Base de conhecimento da empresa: ${effectiveKnowledge}`;
       fallbackReply = `Olá! Sou a ${effectiveName}, assistente da ${effectiveCompany}. Como posso ajudar você hoje? Tem interesse em consultar opções de FGTS ou Consignado?`;
     }
 
+    let syncResult = null;
+    if (clientPhone) {
+      syncResult = await syncConversationToCrm(clientPhone, clientName, message, fallbackReply, false);
+    }
+
     return NextResponse.json({
       reply: fallbackReply,
       isHandoff: false,
       source: "rule_engine",
       provider: "Motor de Regras Inteligente (Fallback)",
+      crmSync: syncResult,
       notice: pool.length > 0 
         ? "Cota momentânea atingida no pool gratuito. Resposta entregue pelo motor de regras."
         : "Dica: Adicione chaves gratuitas do Google Gemini ou Groq Cloud em /omnichannel para ativar o Pool de IAs Autônomas."

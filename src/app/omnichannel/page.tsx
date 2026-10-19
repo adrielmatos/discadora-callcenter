@@ -4,7 +4,8 @@ import React, { useState, useEffect, useRef } from "react";
 import { 
   MessageSquare, Save, CheckCircle2, Send, Smartphone, 
   ShieldCheck, Bot, Sparkles, User, Zap, RefreshCw, ArrowRight,
-  Radio, AlertCircle, ExternalLink, Clock, Layers, Cpu, Activity
+  Radio, AlertCircle, ExternalLink, Clock, Layers, Cpu, Activity,
+  Download, Copy, Check
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
@@ -17,7 +18,7 @@ interface ChatMessage {
 }
 
 export default function OmnichannelPage() {
-  const [activeTab, setActiveTab] = useState<"ia" | "simulator" | "whatsapp">("ia");
+  const [activeTab, setActiveTab] = useState<"ia" | "simulator" | "whatsapp" | "extension">("ia");
   const [loading, setLoading] = useState(true);
   const [saved, setSaved] = useState(false);
 
@@ -274,13 +275,13 @@ export default function OmnichannelPage() {
           {/* Navegação entre Abas */}
           <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200 text-xs">
             <button
-              onClick={() => setActiveTab("whatsapp")}
+              onClick={() => setActiveTab("extension")}
               className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-md font-semibold transition cursor-pointer ${
-                activeTab === "whatsapp" ? "bg-white text-blue-600 shadow-xs" : "text-slate-600 hover:text-slate-900"
+                activeTab === "extension" ? "bg-white text-emerald-600 shadow-xs font-bold" : "text-slate-600 hover:text-slate-900"
               }`}
             >
-              <Smartphone size={13} />
-              <span>WhatsApp & Disparos</span>
+              <ShieldCheck size={13} className="text-emerald-500" />
+              <span>Extensão WhatsApp Web</span>
             </button>
             <button
               onClick={() => setActiveTab("ia")}
@@ -289,7 +290,7 @@ export default function OmnichannelPage() {
               }`}
             >
               <Bot size={13} />
-              <span>Atendente IA 24h (Config)</span>
+              <span>Atendente Sofia (Config)</span>
             </button>
             <button
               onClick={() => setActiveTab("simulator")}
@@ -298,7 +299,16 @@ export default function OmnichannelPage() {
               }`}
             >
               <Sparkles size={13} className="text-emerald-500" />
-              <span>Simulador de Atendimento</span>
+              <span>Simulador</span>
+            </button>
+            <button
+              onClick={() => setActiveTab("whatsapp")}
+              className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-md font-semibold transition cursor-pointer ${
+                activeTab === "whatsapp" ? "bg-white text-blue-600 shadow-xs" : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              <Smartphone size={13} />
+              <span>WhatsApp & Disparos</span>
             </button>
           </div>
 
@@ -325,7 +335,30 @@ export default function OmnichannelPage() {
           )}
 
           {/* BARRA DE NAVEGAÇÃO PRINCIPAL DAS ABAS (DESTAQUE MÁXIMO) */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 bg-white p-2 rounded-2xl border border-slate-200/80 shadow-xs">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 bg-white p-2 rounded-2xl border border-slate-200/80 shadow-xs">
+            <button
+              type="button"
+              onClick={() => setActiveTab("extension")}
+              className={`p-3.5 rounded-xl text-left transition flex items-center space-x-3 cursor-pointer ${
+                activeTab === "extension"
+                  ? "bg-emerald-50/90 border-2 border-emerald-500 text-emerald-900 shadow-2xs ring-2 ring-emerald-100"
+                  : "hover:bg-slate-50 border-2 border-transparent text-slate-600"
+              }`}
+            >
+              <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                activeTab === "extension" ? "bg-emerald-600 text-white shadow-xs" : "bg-slate-100 text-slate-500"
+              }`}>
+                <ShieldCheck size={20} />
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center space-x-1.5">
+                  <span className="text-xs font-black text-slate-900">Extensão Web</span>
+                  <span className="text-[10px] bg-emerald-100 text-emerald-800 font-extrabold px-1.5 py-0.5 rounded">Zero Ban</span>
+                </div>
+                <p className="text-[11px] text-slate-500 truncate">No Chrome / Edge Oficial</p>
+              </div>
+            </button>
+
             <button
               type="button"
               onClick={() => setActiveTab("ia")}
@@ -354,12 +387,12 @@ export default function OmnichannelPage() {
               onClick={() => setActiveTab("simulator")}
               className={`p-3.5 rounded-xl text-left transition flex items-center space-x-3 cursor-pointer ${
                 activeTab === "simulator"
-                  ? "bg-emerald-50/90 border-2 border-emerald-500 text-emerald-900 shadow-2xs ring-2 ring-emerald-100"
+                  ? "bg-teal-50/90 border-2 border-teal-500 text-teal-900 shadow-2xs ring-2 ring-teal-100"
                   : "hover:bg-slate-50 border-2 border-transparent text-slate-600"
               }`}
             >
               <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-                activeTab === "simulator" ? "bg-emerald-600 text-white shadow-xs" : "bg-slate-100 text-slate-500"
+                activeTab === "simulator" ? "bg-teal-600 text-white shadow-xs" : "bg-slate-100 text-slate-500"
               }`}>
                 <Sparkles size={20} />
               </div>
@@ -395,6 +428,152 @@ export default function OmnichannelPage() {
               </div>
             </button>
           </div>
+
+          {/* ABA 0: EXTENSÃO WHATSAPP WEB OFICIAL (ANTI-BAN & CRM) */}
+          {activeTab === "extension" && (
+            <div className="space-y-6 animate-in fade-in">
+              {/* Card de Destaque Principal */}
+              <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 border border-emerald-500/30 rounded-3xl p-6 text-white shadow-xl relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-80 h-80 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none"></div>
+                
+                <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 relative z-10">
+                  <div className="space-y-1.5">
+                    <div className="flex items-center space-x-2">
+                      <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full flex items-center gap-1">
+                        <ShieldCheck size={12} className="text-emerald-400" />
+                        100% Anti-Ban Oficial
+                      </span>
+                      <span className="bg-blue-500/20 text-blue-300 border border-blue-500/40 text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full">
+                        Custo R$ 0,00
+                      </span>
+                    </div>
+                    <h2 className="text-xl font-bold text-white tracking-tight">
+                      Sofia AI • Piloto Automático WhatsApp Web Oficial
+                    </h2>
+                    <p className="text-slate-300 text-xs max-w-2xl leading-relaxed">
+                      A extensão opera silenciosamente dentro da sua aba legítima do <strong>web.whatsapp.com</strong>. Ela atende clientes 24h pautada estritamente nas leis financeiras (sem gírias e sem inventar taxas) e sincroniza automaticamente os contatos para o seu CRM da Discadora.
+                    </p>
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row gap-2 shrink-0">
+                    <a
+                      href="/sofia-whatsapp-web.zip"
+                      download="sofia-whatsapp-web.zip"
+                      className="bg-emerald-500 hover:bg-emerald-600 text-slate-950 px-4 py-2.5 rounded-xl font-black text-xs shadow-lg transition flex items-center justify-center gap-2 cursor-pointer"
+                    >
+                      <Download size={15} />
+                      <span>Baixar Extensão (.ZIP)</span>
+                    </a>
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText("C:\\Users\\vinic\\.gemini\\antigravity\\scratch\\discadora-callcenter\\extensions\\sofia-whatsapp-web");
+                        alert("Caminho da pasta copiado para a área de transferência!");
+                      }}
+                      className="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-3.5 py-2.5 rounded-xl font-bold text-xs transition flex items-center justify-center gap-1.5 cursor-pointer"
+                    >
+                      <Copy size={14} />
+                      <span>Copiar Caminho Local</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Passo a Passo de Ativação (Menos de 1 Minuto) */}
+              <div className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-xs space-y-5">
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900">Como Ativar no seu Navegador (Chrome ou Microsoft Edge)</h3>
+                  <p className="text-xs text-slate-500 mt-0.5">Siga estes 3 passos simples para começar a rodar em menos de 1 minuto:</p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="bg-slate-50 border border-slate-200/70 p-4 rounded-xl space-y-2">
+                    <div className="w-7 h-7 rounded-lg bg-blue-600 text-white flex items-center justify-center font-black text-xs">
+                      1
+                    </div>
+                    <h4 className="text-xs font-bold text-slate-900">Abra a Tela de Extensões</h4>
+                    <p className="text-[11px] text-slate-600 leading-relaxed">
+                      No Google Chrome, digite <code className="bg-slate-200 px-1 py-0.5 rounded text-[10px] font-mono">chrome://extensions</code> na barra de endereços (ou <code className="bg-slate-200 px-1 py-0.5 rounded text-[10px] font-mono">edge://extensions</code> se usar o Edge).
+                    </p>
+                  </div>
+
+                  <div className="bg-slate-50 border border-slate-200/70 p-4 rounded-xl space-y-2">
+                    <div className="w-7 h-7 rounded-lg bg-blue-600 text-white flex items-center justify-center font-black text-xs">
+                      2
+                    </div>
+                    <h4 className="text-xs font-bold text-slate-900">Ative o Modo do Desenvolvedor</h4>
+                    <p className="text-[11px] text-slate-600 leading-relaxed">
+                      No canto superior direito da página de extensões, ative a chavinha chamada <strong>"Modo do desenvolvedor"</strong>.
+                    </p>
+                  </div>
+
+                  <div className="bg-slate-50 border border-slate-200/70 p-4 rounded-xl space-y-2">
+                    <div className="w-7 h-7 rounded-lg bg-emerald-600 text-white flex items-center justify-center font-black text-xs">
+                      3
+                    </div>
+                    <h4 className="text-xs font-bold text-slate-900">Carregar sem Compactação</h4>
+                    <p className="text-[11px] text-slate-600 leading-relaxed">
+                      Clique no botão <strong>"Carregar sem compactação"</strong> e selecione a pasta da extensão descompactada. Pronto! O robô já estará pronto para uso.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Como Funciona a Integração com o CRM e Mineração */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-xs space-y-3">
+                  <div className="flex items-center space-x-2">
+                    <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center">
+                      <Bot size={18} />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold text-slate-900">Atendimento Automático em Tempo Real</h4>
+                      <span className="text-[10px] text-slate-500">Responde e atualiza o funil de leads</span>
+                    </div>
+                  </div>
+                  <ul className="text-xs text-slate-600 space-y-2">
+                    <li className="flex items-start gap-2">
+                      <CheckCircle2 size={14} className="text-emerald-500 shrink-0 mt-0.5" />
+                      <span><strong>Leitura de mensagens:</strong> Identifica novas mensagens não lidas no WhatsApp Web oficial.</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <CheckCircle2 size={14} className="text-emerald-500 shrink-0 mt-0.5" />
+                      <span><strong>Cálculo & Leis:</strong> Consulta a rota da Sofia sem alucinar taxas e com tom profissional.</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <CheckCircle2 size={14} className="text-emerald-500 shrink-0 mt-0.5" />
+                      <span><strong>CRM em 1 clique:</strong> Se o cliente não existir no CRM, ele é cadastrado na hora na coluna <em>Interessado</em> ou <em>Simulação</em>.</span>
+                    </li>
+                  </ul>
+                </div>
+
+                <div className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-xs space-y-3">
+                  <div className="flex items-center space-x-2">
+                    <div className="w-8 h-8 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center">
+                      <Sparkles size={18} />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold text-slate-900">Mineração de Conversas Antigas</h4>
+                      <span className="text-[10px] text-slate-500">Resgate de leads abandonados no WhatsApp</span>
+                    </div>
+                  </div>
+                  <ul className="text-xs text-slate-600 space-y-2">
+                    <li className="flex items-start gap-2">
+                      <CheckCircle2 size={14} className="text-blue-500 shrink-0 mt-0.5" />
+                      <span><strong>Botão 'Minerar' no WhatsApp:</strong> Abre qualquer conversa antiga e clica em <em>Minerar</em> no topo da tela.</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <CheckCircle2 size={14} className="text-blue-500 shrink-0 mt-0.5" />
+                      <span><strong>Diagnóstico IA:</strong> A Sofia descobre se o cliente queria FGTS, INSS ou Portabilidade e avalia a temperatura (Quente/Morno).</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <CheckCircle2 size={14} className="text-blue-500 shrink-0 mt-0.5" />
+                      <span><strong>Aparece no CRM:</strong> O lead entra no Kanban com tag colorida e diagnóstico pronto para o corretor fechar a venda.</span>
+                    </li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* ABA 1: WHATSAPP & DISPAROS */}
           {activeTab === "whatsapp" && (

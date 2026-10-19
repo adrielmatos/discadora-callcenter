@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Sofia AI - Painel</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+    body { width: 340px; background: #0f172a; color: #f8fafc; padding: 16px; font-size: 13px; }
+    .header { display: flex; align-items: center; justify-content: space-between; padding-bottom: 12px; border-bottom: 1px solid #1e293b; margin-bottom: 14px; }
+    .logo-area { display: flex; align-items: center; gap: 8px; }
+    .avatar { width: 32px; height: 32px; background: linear-gradient(135deg, #10b981, #059669); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 16px; color: #fff; box-shadow: 0 0 10px rgba(16, 185, 129, 0.4); }
+    .title { font-weight: 700; font-size: 14px; color: #fff; }
+    .subtitle { font-size: 10px; color: #94a3b8; }
+    .badge-status { font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 12px; background: #064e3b; color: #34d399; border: 1px solid #059669; }
+    
+    .card { background: #1e293b; border-radius: 8px; padding: 12px; margin-bottom: 12px; border: 1px solid #334155; }
+    .card-title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: #94a3b8; font-weight: 700; margin-bottom: 8px; }
+    
+    .switch-row { display: flex; align-items: center; justify-content: space-between; }
+    .switch-label { font-size: 13px; font-weight: 600; color: #e2e8f0; }
+    .switch-desc { font-size: 11px; color: #64748b; margin-top: 2px; }
+    
+    /* Toggle switch */
+    .switch { position: relative; display: inline-block; width: 44px; height: 24px; }
+    .switch input { opacity: 0; width: 0; height: 0; }
+    .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #475569; transition: .3s; border-radius: 24px; }
+    .slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background-color: white; transition: .3s; border-radius: 50%; }
+    input:checked + .slider { background-color: #10b981; }
+    input:checked + .slider:before { transform: translateX(20px); }
+
+    .input-group { margin-top: 8px; }
+    .input-group label { display: block; font-size: 11px; color: #94a3b8; margin-bottom: 4px; }
+    .input-group input { width: 100%; background: #0f172a; border: 1px solid #334155; border-radius: 6px; padding: 8px; color: #f8fafc; font-size: 12px; outline: none; }
+    .input-group input:focus { border-color: #10b981; }
+
+    .btn { width: 100%; padding: 10px; border-radius: 6px; font-weight: 600; font-size: 12px; cursor: pointer; border: none; transition: 0.2s; display: flex; align-items: center; justify-content: center; gap: 6px; margin-top: 8px; }
+    .btn-primary { background: #10b981; color: white; }
+    .btn-primary:hover { background: #059669; }
+    .btn-secondary { background: #334155; color: #e2e8f0; }
+    .btn-secondary:hover { background: #475569; }
+
+    .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+    .stat-box { background: #1e293b; border-radius: 6px; padding: 10px; text-align: center; border: 1px solid #334155; }
+    .stat-val { font-size: 18px; font-weight: 700; color: #10b981; }
+    .stat-label { font-size: 10px; color: #94a3b8; margin-top: 2px; }
+
+    .footer { text-align: center; font-size: 10px; color: #64748b; margin-top: 10px; }
+    .footer a { color: #38bdf8; text-decoration: none; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="logo-area">
+      <div class="avatar">S</div>
+      <div>
+        <div class="title">Sofia AI</div>
+        <div class="subtitle">Piloto Automático WhatsApp</div>
+      </div>
+    </div>
+    <div class="badge-status" id="statusBadge">Pronto</div>
+  </div>
+
+  <div class="card">
+    <div class="switch-row">
+      <div>
+        <div class="switch-label">Atendimento da Sofia</div>
+        <div class="switch-desc">Responde clientes automaticamente</div>
+      </div>
+      <label class="switch">
+        <input type="checkbox" id="sofiaActiveToggle" checked>
+        <span class="slider"></span>
+      </label>
+    </div>
+  </div>
+
+  <div class="stats-grid">
+    <div class="stat-box">
+      <div class="stat-val" id="repliedCount">0</div>
+      <div class="stat-label">Mensagens Hoje</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-val" id="leadsSyncedCount">0</div>
+      <div class="stat-label">Leads no CRM</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Mineração de Crédito</div>
+    <div style="font-size: 11px; color: #cbd5e1; margin-bottom: 8px;">
+      Analisa o histórico da conversa aberta no WhatsApp e identifica se há oportunidade de FGTS ou Consignado.
+    </div>
+    <button class="btn btn-primary" id="btnMineCurrentChat">
+      ⚡ Minerar e Enviar para CRM
+    </button>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Configurações de Conexão</div>
+    <div class="input-group">
+      <label>URL da sua Discadora / CRM:</label>
+      <input type="text" id="crmUrlInput" value="https://discadora-callcenter.vercel.app">
+    </div>
+    <button class="btn btn-secondary" id="btnSaveConfig">
+      Salvar Configuração
+    </button>
+  </div>
+
+  <button class="btn btn-secondary" id="btnOpenCrm">
+    📊 Abrir CRM da Discadora
+  </button>
+
+  <div class="footer">
+    Sofia AI Integrada • <a href="https://discadora-callcenter.vercel.app/omnichannel" target="_blank">A&K Soluções</a>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
