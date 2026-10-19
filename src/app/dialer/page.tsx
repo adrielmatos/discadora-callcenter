@@ -128,7 +128,8 @@ export default function DialerWorkspace() {
   const [duration, setDuration] = useState(0);
   const [scriptsList, setScriptsList] = useState<any[]>([]);
   const [selectedScriptProduct, setSelectedScriptProduct] = useState("");
-  const [productFilter] = useState("all");
+  const [productFilter, setProductFilter] = useState<"all" | "fgts" | "inss" | "consignado">("all");
+  const [productCounts, setProductCounts] = useState({ all: 0, fgts: 0, inss: 0, consignado: 0 });
   const [autoNextCountdown, setAutoNextCountdown] = useState<number | null>(null);
   const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [scheduleDate, setScheduleDate] = useState("");
@@ -175,12 +176,35 @@ export default function DialerWorkspace() {
     return `Lead qualificado com oportunidade de crédito consignado facilitado no ${bco}. Sem consulta ao SPC/Serasa.`;
   };
 
-  const fetchQueue = async (filter = productFilter) => {
-    let query = supabase.from("leads").select("*").eq("status", "pendente").order("id", { ascending: true });
+  const fetchProductCounts = async () => {
+    try {
+      const { data } = await supabase.from("leads").select("produto").eq("status", "pendente");
+      if (data) {
+        let fgts = 0, inss = 0, consignado = 0;
+        data.forEach(item => {
+          const p = (item.produto || "").toLowerCase();
+          if (p.includes("fgts")) fgts++;
+          else if (p.includes("inss") || p.includes("bpc") || p.includes("loas")) inss++;
+          else if (p.includes("consignado")) consignado++;
+        });
+        setProductCounts({
+          all: data.length,
+          fgts,
+          inss,
+          consignado
+        });
+      }
+    } catch (e) {
+      console.error("Erro ao carregar contagem de produtos:", e);
+    }
+  };
+
+  const fetchQueue = async (filter: "all" | "fgts" | "inss" | "consignado" = productFilter) => {
+    let query = supabase.from("leads").select("*").eq("status", "pendente");
     if (filter === "fgts") query = query.ilike("produto", "%fgts%");
     else if (filter === "inss") query = query.or("produto.ilike.%inss%,produto.ilike.%bpc%,produto.ilike.%loas%");
     else if (filter === "consignado") query = query.ilike("produto", "%consignado%");
-    const { data } = await query.limit(150);
+    const { data } = await query.order("id", { ascending: true }).limit(500);
     if (data) { setLeadsList(data); setCurrentLeadIndex(0); }
   };
 
@@ -360,6 +384,7 @@ export default function DialerWorkspace() {
   };
 
   useEffect(() => {
+    fetchProductCounts();
     fetchQueue("all");
     fetchScripts();
     fetchDnd();
@@ -631,6 +656,24 @@ export default function DialerWorkspace() {
             <span>{leadsRestantes} na fila</span>
           </div>
 
+          {/* Seletor de Carteira / Produto com Contagem Real */}
+          <div className="flex items-center gap-1.5 bg-slate-100 p-0.5 rounded-lg border border-slate-200 text-xs">
+            <select
+              value={productFilter}
+              onChange={(e) => {
+                const val = e.target.value as any;
+                setProductFilter(val);
+                fetchQueue(val);
+              }}
+              className="bg-white border border-slate-200 font-bold text-slate-800 text-[11px] rounded-md px-2 py-1 outline-none cursor-pointer hover:border-blue-400 transition"
+            >
+              <option value="all">📂 Todos os Produtos ({productCounts.all || leadsRestantes})</option>
+              <option value="fgts">⚡ Saque FGTS ({productCounts.fgts})</option>
+              <option value="inss">🏛️ INSS / BPC / Loas ({productCounts.inss})</option>
+              <option value="consignado">💳 Consignado Geral ({productCounts.consignado})</option>
+            </select>
+          </div>
+
           {autoNextCountdown !== null && (
             <span className="bg-blue-50 text-blue-700 border border-blue-200 px-2.5 py-1 rounded-lg text-[11px] font-bold animate-pulse flex items-center gap-1">
               <Zap size={11} className="fill-blue-600" />
@@ -772,6 +815,9 @@ export default function DialerWorkspace() {
                     <span className="flex items-center gap-1 text-[11px] font-semibold text-slate-700 bg-slate-100 px-2 py-0.5 rounded border border-slate-200/60">
                       <Building2 size={11} className="text-blue-600" />
                       {activeLead?.banco || "Banco Parceiro"}
+                    </span>
+                    <span className="flex items-center gap-1 text-[11px] font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200/60">
+                      🎯 {activeLead?.produto || "Consignado"}
                     </span>
                     <button
                       onClick={handleWhatsApp}
