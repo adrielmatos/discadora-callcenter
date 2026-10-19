@@ -339,7 +339,15 @@ ESTRATÉGIAS COMERCIAIS POR PERFIL:
 5. OBJEÇÃO DE GOLPE OU TAXA ANTECIPADA:
    - Tranquilize na hora: NUNCA cobramos taxa antecipada, a contratação é 100% digital e segura pelo Banco Central, e o crédito cai direto na conta dele.
 6. EMPRÉSTIMO NA DIÁRIA:
-   - Recuse com firmeza e educação; diga que trabalha apenas com crédito seguro autorizado pelo Banco Central e direcione para FGTS, conta de luz ou benefício.`;
+   - Recuse com firmeza e educação; diga que trabalha apenas com crédito seguro autorizado pelo Banco Central e direcione para FGTS, conta de luz ou benefício.
+7. DOCUMENTOS EXIGIDOS (TUDO 100% DIGITAL PELO CELULAR, SEM PAPELADA):
+   - FGTS: Apenas o seu CPF e chave PIX para receber (sem complicação)!
+   - INSS / BPC: Foto do RG ou CNH, comprovante de endereço e extrato do benefício.
+   - Servidor Público: RG/CNH, comprovante de residência e último contracheque.
+   - CLT (Crédito em Folha): RG/CNH, comprovante de endereço e último holerite.
+   - Conta de Luz: RG/CNH e a foto da última conta de energia em dia no seu nome.
+   - Portabilidade: RG/CNH e o extrato de empréstimos com o saldo devedor.
+   Se perguntarem no geral, diga que é super simples e pergunte qual é o perfil (FGTS, INSS, CLT ou Conta de Luz) para passar a listinha exata.`;
 
     // Se temos provedores no pool, balanceia a carga e faz rotação com failover instantâneo
     if (pool.length > 0) {
@@ -395,6 +403,8 @@ ESTRATÉGIAS COMERCIAIS POR PERFIL:
       fallbackReply = `Atendemos servidores federais (SIAPE) com as menores taxas do mercado no consignado em folha. Gostaria de consultar sua margem disponível hoje?`;
     } else if (lowerMessage.includes("prefeitura") || lowerMessage.includes("municip") || lowerMessage.includes("estado") || lowerMessage.includes("estadual")) {
       fallbackReply = `Atendemos servidores públicos estaduais e municipais com margem consignável. Deseja que o nosso especialista verifique as condições oficiais para você?`;
+    } else if (lowerMessage.includes("documento") || lowerMessage.includes("documentos") || lowerMessage.includes("doc") || lowerMessage.includes("o que precisa") || lowerMessage.includes("quais papeis") || lowerMessage.includes("papelada")) {
+      fallbackReply = `É tudo 100% digital pelo celular, sem papelada! No geral só precisa de RG/CNH e comprovante. Para qual opção você quer consultar (FGTS, INSS, CLT ou Conta de Luz)?`;
     } else if (lowerMessage.includes("golpe") || lowerMessage.includes("seguro") || lowerMessage.includes("confiavel") || lowerMessage.includes("confiável") || lowerMessage.includes("taxa antecipada") || lowerMessage.includes("depósito")) {
       fallbackReply = `Não cobramos nenhuma taxa antecipada. A contratação é 100% digital e o crédito cai direto na sua conta bancária. Posso fazer uma simulação gratuita para você?`;
     } else if (lowerMessage.includes("taxa") || lowerMessage.includes("juros") || lowerMessage.includes("quanto fica") || lowerMessage.includes("valor da parcela") || lowerMessage.includes("quanto pago")) {
