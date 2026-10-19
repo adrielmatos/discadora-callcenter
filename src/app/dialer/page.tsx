@@ -4,8 +4,9 @@ import React, { useState, useEffect, useRef } from "react";
 import {
   PhoneCall, PhoneOff, Check, X, Calendar, MessageSquare,
   Play, FastForward, User, AlertCircle, Calculator,
-  ShieldAlert, Sparkles, Building2, CheckCircle2, Zap, ChevronRight, Settings2,
-  Headphones, Mic, MicOff, Radio, Volume2, Hash, Phone
+  ShieldAlert, Sparkles, Building2, CheckCircle2, Zap, ChevronRight,
+  Headphones, Mic, MicOff, Radio, Volume2, Hash, Phone,
+  Clock, Bot, RefreshCw, Send, ExternalLink, CheckCheck
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { SoftphoneEngine, phoneAudio, SipConfig, SipRegStatus } from "@/lib/softphone";
@@ -110,6 +111,14 @@ interface Lead {
   status?: string;
 }
 
+interface WhatsAppInteraction {
+  id: number;
+  created_at: string;
+  clientMessage?: string;
+  sofiaMessage?: string;
+  raw: string;
+}
+
 export default function DialerWorkspace() {
   const [leadsList, setLeadsList] = useState<Lead[]>([]);
   const [currentLeadIndex, setCurrentLeadIndex] = useState(0);
@@ -126,12 +135,12 @@ export default function DialerWorkspace() {
   const [scheduleNotes, setScheduleNotes] = useState("");
   const [dndBlockedSet, setDndBlockedSet] = useState<Set<string>>(new Set());
   const [showCalc, setShowCalc] = useState(false);
-  const [calcTab, setCalcTab] = useState<"fgts" | "portabilidade" | "margem">("fgts");
-  const [calcSaldo, setCalcSaldo] = useState(2500);
-  const [calcParcela, setCalcParcela] = useState(380);
-  const [calcMargem, setCalcMargem] = useState(150);
   const [activeObjection, setActiveObjection] = useState<string | null>(null);
-  const [isToolbarOpen, setIsToolbarOpen] = useState(false);
+
+  // ─── ABAS CENTRAIS: Script vs Sofia WhatsApp ───────────────────────
+  const [activeTab, setActiveTab] = useState<"script" | "sofia">("script");
+  const [whatsappInteractions, setWhatsappInteractions] = useState<WhatsAppInteraction[]>([]);
+  const [loadingWhatsapp, setLoadingWhatsapp] = useState(false);
 
   // ─── ESTADOS DO SOFTPHONE WEBRTC (Fase 2) ─────────────────────────
   const [softphoneMode, setSoftphoneMode] = useState<"webrtc" | "smartphone">("webrtc");
@@ -188,6 +197,69 @@ export default function DialerWorkspace() {
     } catch (e) { console.error("Erro DND:", e); }
   };
 
+  // Parser das conversas do WhatsApp salvas no histórico de ligações
+  const parseWhatsappInteractions = (records: any[]): WhatsAppInteraction[] => {
+    return records
+      .filter(r => r.tabulacao && (r.tabulacao.includes("[WhatsApp") || r.tabulacao.toLowerCase().includes("whatsapp")))
+      .map(r => {
+        const tab = r.tabulacao;
+        let clientMsg = "";
+        let sofiaMsg = "";
+
+        const clientQuote = tab.match(/Cliente:\s*"([^"]+)"/i);
+        const sofiaQuote = tab.match(/Sofia:\s*"([^"]+)"/i);
+
+        if (clientQuote) {
+          clientMsg = clientQuote[1];
+        } else {
+          const clientSimple = tab.match(/Cliente:\s*(.+?)\s*\|\s*Sofia:/i);
+          if (clientSimple) clientMsg = clientSimple[1];
+        }
+
+        if (sofiaQuote) {
+          sofiaMsg = sofiaQuote[1];
+        } else {
+          const sofiaSimple = tab.match(/Sofia:\s*(.+)$/i);
+          if (sofiaSimple) sofiaMsg = sofiaSimple[1];
+        }
+
+        if (!clientMsg && !sofiaMsg) {
+          sofiaMsg = tab.replace(/\[WhatsApp Sofia\]/gi, "").replace(/\[WhatsApp\]/gi, "").trim();
+        }
+
+        return {
+          id: r.id,
+          created_at: r.created_at,
+          clientMessage: clientMsg,
+          sofiaMessage: sofiaMsg,
+          raw: tab
+        };
+      });
+  };
+
+  // Busca histórico de WhatsApp do lead ativo
+  const loadWhatsappHistory = async (leadId: number) => {
+    setLoadingWhatsapp(true);
+    try {
+      const { data } = await supabase
+        .from("historico_ligacoes")
+        .select("id, tabulacao, created_at")
+        .eq("lead_id", leadId)
+        .order("created_at", { ascending: true });
+
+      if (data) {
+        setWhatsappInteractions(parseWhatsappInteractions(data));
+      } else {
+        setWhatsappInteractions([]);
+      }
+    } catch (err) {
+      console.error("Erro ao carregar conversas do WhatsApp:", err);
+      setWhatsappInteractions([]);
+    } finally {
+      setLoadingWhatsapp(false);
+    }
+  };
+
   // Inicializa o Softphone WebRTC a partir das configurações do Supabase
   const initSoftphone = async () => {
     try {
@@ -238,6 +310,15 @@ export default function DialerWorkspace() {
     };
   }, []);
 
+  // Recarrega conversas do WhatsApp quando muda o lead
+  useEffect(() => {
+    if (activeLead?.id) {
+      loadWhatsappHistory(activeLead.id);
+    } else {
+      setWhatsappInteractions([]);
+    }
+  }, [activeLead?.id]);
+
   useEffect(() => {
     if (!activeLead || scriptsList.length === 0) return;
     const leadProduct = (activeLead.produto || "").toLowerCase().trim();
@@ -281,22 +362,25 @@ export default function DialerWorkspace() {
     return `${m}:${s}`;
   };
 
+  const formatMsgTime = (isoString?: string) => {
+    if (!isoString) return "";
+    const d = new Date(isoString);
+    return d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+  };
+
   // Disparo da Chamada: WebRTC nativo ou Ponte Smartphone
   const triggerCall = async (customNumber?: string) => {
     const targetNumber = customNumber || activeLead?.telefone;
     if (!targetNumber) return;
 
-    // Se estiver no Modo WebRTC e ramal estiver registrado no PABX
     if (softphoneMode === "webrtc" && softphoneRef.current && sipRegStatus === "registered") {
       setCallStatus("calling");
       const success = await softphoneRef.current.makeCall(targetNumber);
       if (!success) {
-        // Fallback gracioso para ponte celular se falhar áudio local
         window.location.href = `tel:+55${targetNumber.replace(/\D/g, "")}`;
         setTimeout(() => setCallStatus("talking"), 2000);
       }
     } else {
-      // Modo Smartphone / Ponte tel: padrão
       phoneAudio.startRinging();
       window.location.href = `tel:+55${targetNumber.replace(/\D/g, "")}`;
       setCallStatus("calling");
@@ -404,6 +488,16 @@ export default function DialerWorkspace() {
     window.open(`https://wa.me/55${cleanPhone}?text=${text}`, "_blank");
   };
 
+  const handleSendQuickProposal = () => {
+    if (!activeLead) return;
+    const cleanPhone = activeLead.telefone.replace(/\D/g, "");
+    const rawMargem = (activeLead.margem_disponivel || "").trim();
+    const isMargemZero = !rawMargem || rawMargem === "R$ 0,00" || rawMargem === "0";
+    const valorMsg = isMargemZero ? "condição especial aprovada" : `limite liberado de ${rawMargem}`;
+    const text = encodeURIComponent(`Olá, ${activeLead.nome}! Sou o Adriel da A&K Soluções Financeiras. A Sofia me passou sua ficha referente à ${valorMsg} no ${activeLead.banco || "banco conveniado"}. Gostaria de confirmar a liberação no seu PIX agora?`);
+    window.open(`https://wa.me/55${cleanPhone}?text=${text}`, "_blank");
+  };
+
   const currentScript = scriptsList.find(s => s.produto === selectedScriptProduct) || scriptsList[0] || {
     abertura: "Olá, [NOME], tudo bem? Aqui é o Adriel da A&K Soluções Financeiras.",
     motivo: "Estou em contato sobre as condições aprovadas no [BANCO].",
@@ -437,7 +531,7 @@ export default function DialerWorkspace() {
           <CheckCircle2 size={44} className="mx-auto text-emerald-500 mb-3" />
           <h2 className="text-lg font-bold text-slate-800">Fila Finalizada!</h2>
           <p className="text-xs text-slate-500 mt-1 mb-6">Todos os leads pendentes foram tabulados.</p>
-          <button onClick={() => fetchQueue("all")} className="w-full bg-blue-600 text-white py-2.5 rounded-lg text-xs font-bold hover:bg-blue-700 transition">
+          <button onClick={() => fetchQueue("all")} className="w-full bg-blue-600 text-white py-2.5 rounded-lg text-xs font-bold hover:bg-blue-700 transition cursor-pointer">
             Recarregar Fila
           </button>
         </div>
@@ -447,37 +541,48 @@ export default function DialerWorkspace() {
 
   const region = getRegionInfo(activeLead?.telefone);
 
-  // ─── RENDER PRINCIPAL ─────────────────────────────────────────────
+  // ─── RENDER PRINCIPAL ORGANIZADO & SEM POLUIÇÃO ────────────────────
   return (
-    <div className="flex-1 flex flex-col h-full bg-slate-50 text-slate-900 overflow-hidden font-sans relative">
+    <div className="flex-1 flex flex-col h-full bg-slate-50 text-slate-900 overflow-hidden font-sans">
 
       {/* Áudio Remoto Oculto para WebRTC */}
       <audio ref={remoteAudioRef} autoPlay playsInline className="hidden" />
 
-      {/* ── TOOLBAR EXPANSÍVEL (Desliza e empurra conteúdo) ────────── */}
-      <div className={`bg-white transition-all duration-300 ease-in-out flex flex-wrap items-center justify-between gap-3 shrink-0 overflow-hidden ${
-        isToolbarOpen ? "h-14 px-4 lg:px-6 border-b border-slate-200 opacity-100" : "h-0 opacity-0 border-transparent pointer-events-none"
-      }`}>
-        {/* Esquerda: contador + auto-next */}
+      {/* ── HEADER SUPERIOR FIXO & PROFISSIONAL (Zero botões flutuantes sobrepostos) ── */}
+      <header className="h-14 px-4 lg:px-6 bg-white border-b border-slate-200 flex items-center justify-between shrink-0 shadow-2xs z-10">
+        
+        {/* Esquerda: Identificação da Fila + Status Softphone */}
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-500">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse inline-block"></span>
-            <span>{leadsRestantes} lead{leadsRestantes !== 1 ? "s" : ""} na fila</span>
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
+              <PhoneCall size={15} />
+            </div>
+            <span className="text-xs font-extrabold text-slate-800 hidden sm:inline">Discador Ativo</span>
           </div>
+
+          <div className="h-4 w-px bg-slate-200 hidden sm:block" />
+
+          {/* Contador de Leads */}
+          <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-600 bg-slate-100 px-2.5 py-1 rounded-lg">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+            <span>{leadsRestantes} na fila</span>
+          </div>
+
           {autoNextCountdown !== null && (
-            <span className="bg-blue-50 text-blue-700 border border-blue-200 px-2.5 py-0.5 rounded-full text-[11px] font-bold animate-pulse">
-              ⚡ Discando em {autoNextCountdown}s
+            <span className="bg-blue-50 text-blue-700 border border-blue-200 px-2.5 py-1 rounded-lg text-[11px] font-bold animate-pulse flex items-center gap-1">
+              <Zap size={11} className="fill-blue-600" />
+              Discando em {autoNextCountdown}s
             </span>
           )}
 
-          {/* Status do Softphone WebRTC */}
-          <div className="hidden sm:flex items-center gap-2 pl-2 border-l border-slate-200">
-            <span className={`inline-flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${
+          {/* Status do Softphone */}
+          <div className="hidden md:flex items-center gap-2 pl-1">
+            <span className={`inline-flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 rounded-lg border ${
               sipRegStatus === "registered"
                 ? "bg-emerald-50 text-emerald-700 border-emerald-200"
                 : sipRegStatus === "connecting"
                 ? "bg-amber-50 text-amber-700 border-amber-200 animate-pulse"
-                : "bg-slate-100 text-slate-600 border-slate-200"
+                : "bg-slate-50 text-slate-600 border-slate-200"
             }`}>
               <span className={`w-1.5 h-1.5 rounded-full ${
                 sipRegStatus === "registered" ? "bg-emerald-500" : sipRegStatus === "connecting" ? "bg-amber-500" : "bg-slate-400"
@@ -489,14 +594,14 @@ export default function DialerWorkspace() {
                 : "Modo Smartphone"}
             </span>
 
-            {/* Alternador de Modo de Discagem */}
+            {/* Alternador WebRTC vs Celular */}
             <div className="flex items-center bg-slate-100 rounded-lg p-0.5 border border-slate-200 text-[10px]">
               <button
                 onClick={() => setSoftphoneMode("webrtc")}
                 className={`px-2 py-0.5 rounded-md font-bold transition flex items-center gap-1 cursor-pointer ${
                   softphoneMode === "webrtc" ? "bg-white text-blue-700 shadow-2xs" : "text-slate-500"
                 }`}
-                title="Discar usando fone de ouvido WebRTC via PABX"
+                title="Discar usando fone WebRTC via PABX"
               >
                 <Headphones size={11} />
                 <span>WebRTC</span>
@@ -506,7 +611,7 @@ export default function DialerWorkspace() {
                 className={`px-2 py-0.5 rounded-md font-bold transition flex items-center gap-1 cursor-pointer ${
                   softphoneMode === "smartphone" ? "bg-white text-blue-700 shadow-2xs" : "text-slate-500"
                 }`}
-                title="Discar usando aplicativo do smartphone / link tel:"
+                title="Discar usando aplicativo móvel ou link tel:"
               >
                 <Phone size={11} />
                 <span>Celular</span>
@@ -515,139 +620,100 @@ export default function DialerWorkspace() {
           </div>
         </div>
 
-        {/* Direita: simulador + teclado manual + modo power + fechar */}
+        {/* Direita: Simulador + Teclado DTMF + Modo Manual/Power */}
         <div className="flex items-center gap-2">
           {/* Teclado Manual */}
           <button
             onClick={() => setIsKeypadOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 hover:text-blue-600 hover:border-blue-200 transition cursor-pointer shadow-2xs"
             title="Abrir teclado numérico DTMF ou discar número manual"
-            className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 transition cursor-pointer"
           >
             <Hash size={13} className="text-blue-600" />
-            <span>Teclado</span>
+            <span className="hidden sm:inline">Teclado</span>
           </button>
 
+          {/* Calculadora Financeira (FinceptTerminal) */}
           <button
-            onClick={() => setShowCalc(!showCalc)}
-            title="Simulador de FGTS, Portabilidade e Margem"
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition cursor-pointer ${
-              showCalc ? "bg-blue-600 text-white border-blue-600" : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
-            }`}
+            onClick={() => setShowCalc(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 hover:text-blue-600 hover:border-blue-200 transition cursor-pointer shadow-2xs"
+            title="Simulador Completo FGTS, Portabilidade e Margem"
           >
-            <Calculator size={13} />
-            Simulador
+            <Calculator size={13} className="text-blue-600" />
+            <span className="hidden sm:inline">Simulador</span>
           </button>
 
-          <div className="flex items-center bg-slate-100 rounded-lg border border-slate-200 p-0.5 text-xs mr-2">
+          {/* Modo de Discagem: Manual vs Power */}
+          <div className="flex items-center bg-slate-100 rounded-lg border border-slate-200 p-0.5 text-xs">
             <button
               onClick={() => { setIsPowerDialing(false); setAutoNextCountdown(null); }}
-              title="Manual: você decide quando ligar para cada lead"
-              className={`px-3 py-1 rounded-md font-semibold transition cursor-pointer ${!isPowerDialing ? "bg-white text-blue-600 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
+              title="Manual: você decide quando ligar"
+              className={`px-2.5 py-1 rounded-md font-bold transition cursor-pointer ${
+                !isPowerDialing ? "bg-white text-blue-600 shadow-2xs" : "text-slate-500 hover:text-slate-700"
+              }`}
             >
               Manual
             </button>
             <button
               onClick={() => setIsPowerDialing(true)}
-              title="Auto-Pular: após tabular, passa automaticamente para o próximo lead e disca sozinho"
-              className={`flex items-center gap-1 px-3 py-1 rounded-md font-semibold transition cursor-pointer ${isPowerDialing ? "bg-white text-blue-600 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
+              title="Power: avança e disca automaticamente"
+              className={`flex items-center gap-1 px-2.5 py-1 rounded-md font-bold transition cursor-pointer ${
+                isPowerDialing ? "bg-white text-blue-600 shadow-2xs" : "text-slate-500 hover:text-slate-700"
+              }`}
             >
-              <Play size={10} />
+              <Play size={10} className="fill-current" />
               Power
             </button>
           </div>
-
-          <button 
-            onClick={() => setIsToolbarOpen(false)}
-            className="w-7 h-7 flex items-center justify-center rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-800 transition cursor-pointer"
-            title="Ocultar barra"
-          >
-            <X size={14} />
-          </button>
         </div>
-      </div>
+      </header>
 
-      {/* ── BODY: grid 2 colunas ──────────────────────────────────────── */}
-      <div className="flex-1 flex flex-col lg:flex-row overflow-hidden relative">
+      {/* ── CORPO PRINCIPAL (2 Colunas Limpas) ───────────────────────── */}
+      <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
         
-        {/* BOTÃO FLUTUANTE DE AJUSTES & TECLADO & SIMULADOR (Aparece quando a barra está fechada) */}
-        <div className={`absolute top-3 right-4 lg:right-6 z-20 flex items-center gap-2 transition-all duration-300 ${isToolbarOpen ? 'scale-0 opacity-0 pointer-events-none' : 'scale-100 opacity-100'}`}>
-          <button
-            onClick={() => setShowCalc(!showCalc)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border shadow-xs hover:shadow-md transition cursor-pointer ${
-              showCalc
-                ? "bg-blue-600 text-white border-blue-600"
-                : "bg-white border-slate-200 text-slate-700 hover:text-blue-600 hover:border-blue-200"
-            }`}
-            title="Calculadora Financeira (FGTS, Portabilidade e Margem)"
-          >
-            <Calculator size={13} className={showCalc ? "text-white" : "text-blue-600"} />
-            <span className="text-[11px] font-bold">Simulador</span>
-          </button>
-
-          <button
-            onClick={() => setIsKeypadOpen(true)}
-            className="flex items-center gap-1 px-3 py-1.5 rounded-full bg-white border border-slate-200 text-slate-700 shadow-xs hover:shadow-md hover:text-blue-600 hover:border-blue-200 transition cursor-pointer"
-            title="Abrir teclado numérico DTMF"
-          >
-            <Hash size={13} className="text-blue-600" />
-            <span className="text-[11px] font-bold">Teclado</span>
-          </button>
-
-          <button 
-            onClick={() => setIsToolbarOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white border border-slate-200 text-slate-600 shadow-xs hover:shadow-md hover:text-blue-600 hover:border-blue-200 transition cursor-pointer"
-            title="Abrir ajustes da fila"
-          >
-            <Settings2 size={14} />
-            <span className="text-[11px] font-bold">Ajustes</span>
-          </button>
-        </div>
-
-        {/* ── COLUNA ESQUERDA: lead + script ─────────────────────────── */}
-        <div className="flex-1 flex flex-col overflow-y-auto">
+        {/* ── COLUNA ESQUERDA: Ficha do Lead + Abas Centrais ───────────── */}
+        <div className="flex-1 flex flex-col overflow-y-auto border-r border-slate-200">
 
           {/* DND alerta */}
           {isDndBlocked && (
             <div className="mx-4 mt-3 bg-rose-50 border border-rose-200 text-rose-800 px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 animate-pulse">
               <ShieldAlert size={14} className="text-rose-500" />
-              ATENÇÃO: Este contato está cadastrado no Não Perturbe (DND / Blacklist)
+              ATENÇÃO: Este contato está cadastrado no Não Perturbe (DND / Bloqueio)
             </div>
           )}
 
-          {/* ── CARD DO LEAD ────────────────────────────────────────── */}
-          <div className="mx-4 mt-3 bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-
-            {/* Banner de oportunidade */}
-            <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-4 py-2.5 flex items-center justify-between">
-              <div className="flex items-center gap-2 text-white text-xs">
+          {/* ── CARD DO LEAD ATIVO (Limpo e compacto) ────────────────── */}
+          <div className="mx-4 mt-3 bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden shrink-0">
+            {/* Banner de diagnóstico */}
+            <div className="bg-gradient-to-r from-blue-600 to-indigo-700 px-4 py-2 flex items-center justify-between">
+              <div className="flex items-center gap-2 text-white text-xs min-w-0">
                 <Sparkles size={13} className="text-blue-200 shrink-0" />
-                <span className="font-medium text-blue-100 leading-snug">{getLeadDiagnosis(activeLead)}</span>
+                <span className="font-medium text-blue-50 truncate leading-snug">{getLeadDiagnosis(activeLead)}</span>
               </div>
-              <span className="text-[10px] font-extrabold uppercase tracking-wider text-blue-600 bg-white px-2.5 py-0.5 rounded-full shrink-0 ml-3">
-                Alta Conversão
+              <span className="text-[10px] font-extrabold uppercase tracking-wider text-blue-700 bg-white px-2.5 py-0.5 rounded-full shrink-0 ml-2">
+                Pré-Qualificado
               </span>
             </div>
 
-            {/* Dados do lead */}
-            <div className="px-5 py-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-              <div className="flex items-center gap-4">
-                {/* Avatar inicial */}
-                <div className="w-11 h-11 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center font-extrabold text-lg border border-slate-200 shrink-0">
-                  {activeLead?.nome?.charAt(0)}
+            {/* Identificação e Margem */}
+            <div className="p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div className="flex items-center gap-3.5 min-w-0">
+                <div className="w-11 h-11 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center font-black text-lg border border-blue-200/60 shrink-0">
+                  {activeLead?.nome?.charAt(0) || "C"}
                 </div>
-                <div>
-                  <h2 className="text-base font-extrabold text-slate-900 leading-tight">{activeLead?.nome}</h2>
+                <div className="min-w-0">
+                  <h2 className="text-base font-extrabold text-slate-900 leading-tight truncate">{activeLead?.nome}</h2>
                   <div className="flex flex-wrap items-center gap-2 mt-1">
-                    <span className="font-mono text-[11px] text-slate-500 bg-slate-100 px-2 py-0.5 rounded">
+                    <span className="font-mono text-[11px] text-slate-600 bg-slate-100 px-2 py-0.5 rounded border border-slate-200/60">
                       {activeLead?.cpf || "CPF Indisponível"}
                     </span>
-                    <span className="flex items-center gap-1 text-[11px] font-semibold text-slate-600 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
-                      <Building2 size={11} className="text-blue-500" />
+                    <span className="flex items-center gap-1 text-[11px] font-semibold text-slate-700 bg-slate-100 px-2 py-0.5 rounded border border-slate-200/60">
+                      <Building2 size={11} className="text-blue-600" />
                       {activeLead?.banco || "Banco Parceiro"}
                     </span>
                     <button
                       onClick={handleWhatsApp}
-                      className="flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded hover:bg-emerald-100 transition cursor-pointer"
+                      className="flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded hover:bg-emerald-100 transition cursor-pointer"
+                      title="Abrir WhatsApp direto do lead"
                     >
                       <MessageSquare size={11} />
                       WhatsApp
@@ -656,160 +722,266 @@ export default function DialerWorkspace() {
                 </div>
               </div>
 
-              {/* Margem */}
-              <div className="text-center sm:text-right shrink-0 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2">
+              {/* Card de Margem / Limite */}
+              <div className="text-left sm:text-right shrink-0 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 self-stretch sm:self-auto flex sm:flex-col justify-between items-center sm:items-end">
                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Margem / Limite</span>
-                <span className="text-2xl font-extrabold text-slate-900 tracking-tight">
+                <span className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
                   {activeLead?.margem_disponivel || "R$ 0,00"}
                 </span>
               </div>
             </div>
-
-            {/* Simulador expansível */}
-            {showCalc && (
-              <div className="mx-4 mb-4 pt-4 border-t border-slate-100 bg-slate-50 rounded-xl p-4 text-xs space-y-3">
-                <div className="flex space-x-2 border-b border-slate-200 pb-2">
-                  {[["fgts", "Saque FGTS"], ["portabilidade", "Portabilidade c/ Troco"], ["margem", "Novo Consignado"]].map(([tab, label]) => (
-                    <button key={tab} type="button" onClick={() => setCalcTab(tab as any)}
-                      className={`px-3 py-1 rounded-lg font-bold text-xs transition cursor-pointer ${calcTab === tab ? "bg-blue-600 text-white" : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-100"}`}>
-                      {label}
-                    </button>
-                  ))}
-                </div>
-                {calcTab === "fgts" && (
-                  <div className="space-y-2">
-                    <div className="flex justify-between font-bold text-slate-700">
-                      <span>Saldo FGTS:</span>
-                      <span className="text-blue-600">R$ {calcSaldo.toLocaleString("pt-BR")}</span>
-                    </div>
-                    <input type="range" min="500" max="30000" step="500" value={calcSaldo} onChange={e => setCalcSaldo(Number(e.target.value))} className="w-full accent-blue-600" />
-                    <div className="flex justify-between items-center">
-                      <span className="text-slate-400">Mín: R$ 500</span>
-                      <div className="bg-emerald-50 border border-emerald-200 px-3 py-1 rounded-lg text-emerald-700 font-bold">
-                        Liberado: R$ {(calcSaldo * 0.65).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
-                      </div>
-                      <span className="text-slate-400">Máx: R$ 30.000</span>
-                    </div>
-                  </div>
-                )}
-                {calcTab === "portabilidade" && (
-                  <div className="space-y-2">
-                    <div className="flex justify-between font-bold text-slate-700">
-                      <span>Parcela atual:</span>
-                      <span className="text-blue-600">R$ {calcParcela.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
-                    </div>
-                    <input type="range" min="80" max="2000" step="20" value={calcParcela} onChange={e => setCalcParcela(Number(e.target.value))} className="w-full accent-blue-600" />
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="bg-white border border-slate-200 p-2.5 rounded-lg">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase block">Redução da Parcela</span>
-                        <p className="text-sm font-bold text-blue-600">R$ {(calcParcela * 0.78).toFixed(2)}/mês</p>
-                        <span className="text-[10px] text-emerald-600">Economia de R$ {(calcParcela * 0.22).toFixed(2)}/mês</span>
-                      </div>
-                      <div className="bg-emerald-50 border border-emerald-200 p-2.5 rounded-lg">
-                        <span className="text-[10px] font-bold text-emerald-600 uppercase block">Troco em Dinheiro</span>
-                        <p className="text-sm font-extrabold text-emerald-700">R$ {(calcParcela * 8.5).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</p>
-                        <span className="text-[10px] text-emerald-600">Direto na conta</span>
-                      </div>
-                    </div>
-                  </div>
-                )}
-                {calcTab === "margem" && (
-                  <div className="space-y-2">
-                    <div className="flex justify-between font-bold text-slate-700">
-                      <span>Margem consignável:</span>
-                      <span className="text-blue-600">R$ {calcMargem.toLocaleString("pt-BR")}</span>
-                    </div>
-                    <input type="range" min="30" max="1500" step="10" value={calcMargem} onChange={e => setCalcMargem(Number(e.target.value))} className="w-full accent-blue-600" />
-                    <div className="flex justify-between items-center">
-                      <span className="text-slate-400">Prazo: 84x (INSS)</span>
-                      <div className="bg-blue-50 border border-blue-200 px-3 py-1 rounded-lg text-blue-700 font-bold">
-                        Total: R$ {(calcMargem * 32.5).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
           </div>
 
-          {/* ── SCRIPT DE ATENDIMENTO ────────────────────────────────── */}
-          <div className="mx-4 mt-3 mb-4 bg-white rounded-2xl border border-slate-200 shadow-sm flex flex-col overflow-hidden flex-1">
+          {/* ── SISTEMA DE ABAS CENTRAIS: Script vs Sofia WhatsApp ───── */}
+          <div className="mx-4 mt-3 mb-4 bg-white rounded-2xl border border-slate-200 shadow-2xs flex-1 flex flex-col overflow-hidden min-h-[380px]">
+            
+            {/* Header das Abas */}
+            <div className="border-b border-slate-200 px-4 bg-slate-50/70 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("script")}
+                  className={`py-3 px-3 text-xs font-extrabold flex items-center gap-2 border-b-2 transition cursor-pointer ${
+                    activeTab === "script"
+                      ? "border-blue-600 text-blue-700 bg-white shadow-2xs"
+                      : "border-transparent text-slate-500 hover:text-slate-800"
+                  }`}
+                >
+                  <span>📜 Script de Ligação</span>
+                </button>
 
-            {/* Barra de Objeções — UMA linha, scroll horizontal */}
-            <div className="px-4 py-2.5 bg-amber-50 border-b border-amber-200 flex items-center gap-2 shrink-0">
-              <div className="flex items-center gap-1 text-amber-800 text-xs font-bold shrink-0">
-                <Zap size={13} className="text-amber-500 fill-amber-400" />
-                <span>Objeções:</span>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("sofia")}
+                  className={`py-3 px-3 text-xs font-extrabold flex items-center gap-2 border-b-2 transition cursor-pointer ${
+                    activeTab === "sofia"
+                      ? "border-emerald-600 text-emerald-700 bg-white shadow-2xs"
+                      : "border-transparent text-slate-500 hover:text-slate-800"
+                  }`}
+                >
+                  <Bot size={14} className={activeTab === "sofia" ? "text-emerald-600" : "text-slate-400"} />
+                  <span>Conversa Sofia (WhatsApp)</span>
+                  {whatsappInteractions.length > 0 ? (
+                    <span className="bg-emerald-100 text-emerald-800 border border-emerald-300 px-1.5 py-0.2 rounded-full text-[10px] font-black">
+                      {whatsappInteractions.length}
+                    </span>
+                  ) : (
+                    <span className="bg-slate-200/80 text-slate-500 px-1.5 py-0.2 rounded-full text-[10px] font-semibold">
+                      0
+                    </span>
+                  )}
+                </button>
               </div>
-              <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none flex-nowrap min-w-0">
-                {OBJECTION_LIST.map((obj) => {
-                  const isActive = activeObjection === obj.id;
-                  return (
-                    <button key={obj.id} type="button" onClick={() => setActiveObjection(isActive ? null : obj.id)}
-                      className={`whitespace-nowrap text-[11px] px-2.5 py-1 rounded-full font-medium transition shrink-0 cursor-pointer ${
-                        isActive ? "bg-amber-600 text-white font-bold ring-2 ring-amber-400" : "bg-white text-amber-900 border border-amber-200 hover:bg-amber-100"
-                      }`}>
-                      {obj.label}
-                    </button>
-                  );
-                })}
-              </div>
+
+              {/* Botão recarregar dados da aba atual */}
+              {activeTab === "sofia" && (
+                <button
+                  onClick={() => activeLead?.id && loadWhatsappHistory(activeLead.id)}
+                  title="Atualizar mensagens do WhatsApp"
+                  className="text-slate-400 hover:text-emerald-600 transition p-1.5 rounded-lg hover:bg-slate-100 cursor-pointer"
+                >
+                  <RefreshCw size={13} className={loadingWhatsapp ? "animate-spin text-emerald-600" : ""} />
+                </button>
+              )}
             </div>
 
-            {/* Resposta da objeção ativa */}
-            {activeObjection && (
-              <div className="mx-4 mt-3 p-3.5 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 shrink-0">
-                <div className="flex items-center justify-between font-bold mb-1.5">
-                  <span className="flex items-center gap-1">
-                    <Zap size={12} className="text-amber-500 fill-amber-500" />
-                    {OBJECTION_LIST.find(o => o.id === activeObjection)?.label}
-                  </span>
-                  <button onClick={() => setActiveObjection(null)} className="text-amber-700 hover:text-amber-900 cursor-pointer">
-                    <X size={14} />
-                  </button>
+            {/* ── CONTEÚDO DA ABA 1: SCRIPT DE LIGAÇÃO ────────────────── */}
+            {activeTab === "script" && (
+              <div className="flex-1 flex flex-col overflow-hidden">
+                {/* Objeções Rápidas em Pílulas */}
+                <div className="px-4 py-2 bg-amber-50/70 border-b border-amber-200/60 flex items-center gap-2 shrink-0">
+                  <div className="flex items-center gap-1 text-amber-800 text-[11px] font-extrabold shrink-0">
+                    <Zap size={12} className="text-amber-500 fill-amber-400" />
+                    <span>Objeções:</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none flex-nowrap min-w-0 py-0.5">
+                    {OBJECTION_LIST.map((obj) => {
+                      const isActive = activeObjection === obj.id;
+                      return (
+                        <button
+                          key={obj.id}
+                          type="button"
+                          onClick={() => setActiveObjection(isActive ? null : obj.id)}
+                          className={`whitespace-nowrap text-[11px] px-2.5 py-1 rounded-full font-medium transition shrink-0 cursor-pointer ${
+                            isActive
+                              ? "bg-amber-600 text-white font-bold ring-2 ring-amber-400 shadow-2xs"
+                              : "bg-white text-amber-900 border border-amber-200/80 hover:bg-amber-100"
+                          }`}
+                        >
+                          {obj.label}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
-                <p className="text-sm font-medium leading-snug text-amber-950">
-                  "{renderScriptText(OBJECTION_LIST.find(o => o.id === activeObjection)?.resposta || "")}"
-                </p>
+
+                {/* Resposta da Objeção Selecionada */}
+                {activeObjection && (
+                  <div className="mx-4 mt-3 p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 shrink-0">
+                    <div className="flex items-center justify-between font-bold mb-1">
+                      <span className="flex items-center gap-1.5">
+                        <Zap size={12} className="text-amber-500 fill-amber-500" />
+                        {OBJECTION_LIST.find(o => o.id === activeObjection)?.label}
+                      </span>
+                      <button onClick={() => setActiveObjection(null)} className="text-amber-700 hover:text-amber-950 cursor-pointer">
+                        <X size={14} />
+                      </button>
+                    </div>
+                    <p className="text-xs sm:text-sm font-medium leading-snug text-amber-950">
+                      "{renderScriptText(OBJECTION_LIST.find(o => o.id === activeObjection)?.resposta || "")}"
+                    </p>
+                  </div>
+                )}
+
+                {/* 4 Etapas do Script */}
+                <div className="p-4 overflow-y-auto space-y-2.5 flex-1">
+                  {[
+                    { num: "1", label: "Abertura", text: currentScript.abertura, color: "blue" },
+                    { num: "2", label: "Motivo da Ligação", text: currentScript.motivo, color: "slate" },
+                    ...(currentScript.qualificacao ? [{ num: "3", label: "Qualificação", text: currentScript.qualificacao, color: "slate" }] : []),
+                    { num: currentScript.qualificacao ? "4" : "3", label: "Fechamento & Proposta", text: currentScript.fechamento, color: "emerald" },
+                  ].map((step) => (
+                    <div
+                      key={step.num}
+                      className={`p-3 rounded-xl border text-xs ${
+                        step.color === "blue" ? "bg-blue-50/50 border-blue-100" :
+                        step.color === "emerald" ? "bg-emerald-50/50 border-emerald-100" :
+                        "bg-slate-50 border-slate-100"
+                      }`}
+                    >
+                      <span className={`text-[10px] font-extrabold uppercase tracking-wider block mb-1 ${
+                        step.color === "blue" ? "text-blue-600" : step.color === "emerald" ? "text-emerald-600" : "text-slate-400"
+                      }`}>
+                        {step.num}. {step.label}
+                      </span>
+                      <p className={`text-xs sm:text-sm font-medium leading-relaxed ${
+                        step.color === "blue" ? "text-blue-950" : step.color === "emerald" ? "text-emerald-950" : "text-slate-800"
+                      }`}>
+                        "{renderScriptText(step.text)}"
+                      </p>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
 
-            {/* Script de 4 etapas */}
-            <div className="p-5 overflow-y-auto space-y-3 flex-1">
-              {[
-                { num: "1", label: "Abertura", text: currentScript.abertura, color: "blue" },
-                { num: "2", label: "Motivo da Ligação", text: currentScript.motivo, color: "slate" },
-                ...(currentScript.qualificacao ? [{ num: "3", label: "Qualificação", text: currentScript.qualificacao, color: "slate" }] : []),
-                { num: currentScript.qualificacao ? "4" : "3", label: "Fechamento & Envio de Proposta", text: currentScript.fechamento, color: "emerald" },
-              ].map((step) => (
-                <div key={step.num} className={`p-3.5 rounded-xl border text-xs ${
-                  step.color === "blue" ? "bg-blue-50/60 border-blue-100" :
-                  step.color === "emerald" ? "bg-emerald-50/60 border-emerald-100" :
-                  "bg-slate-50 border-slate-100"
-                }`}>
-                  <span className={`text-[10px] font-extrabold uppercase tracking-wider block mb-1 ${
-                    step.color === "blue" ? "text-blue-600" : step.color === "emerald" ? "text-emerald-600" : "text-slate-400"
-                  }`}>
-                    {step.num}. {step.label}
-                  </span>
-                  <p className={`text-sm font-medium leading-relaxed ${
-                    step.color === "blue" ? "text-blue-900" : step.color === "emerald" ? "text-emerald-900" : "text-slate-800"
-                  }`}>
-                    "{renderScriptText(step.text)}"
-                  </p>
-                </div>
-              ))}
-            </div>
+            {/* ── CONTEÚDO DA ABA 2: CONVERSA SOFIA (WHATSAPP) ─────────── */}
+            {activeTab === "sofia" && (
+              <div className="flex-1 flex flex-col overflow-hidden p-4">
+                {loadingWhatsapp ? (
+                  <div className="flex-1 flex items-center justify-center text-xs text-slate-400 gap-2">
+                    <RefreshCw size={14} className="animate-spin text-emerald-600" />
+                    <span>Carregando conversas do WhatsApp da Sofia...</span>
+                  </div>
+                ) : whatsappInteractions.length === 0 ? (
+                  // Estado Vazio Limpo (Sem Poluição)
+                  <div className="flex-1 flex flex-col items-center justify-center p-6 text-center bg-slate-50/60 rounded-xl border border-dashed border-slate-200">
+                    <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center mb-2.5 shadow-2xs border border-emerald-100">
+                      <MessageSquare size={24} />
+                    </div>
+                    <h3 className="text-sm font-bold text-slate-800">Nenhuma conversa prévia no WhatsApp</h3>
+                    <p className="text-xs text-slate-500 max-w-sm mt-1 mb-4 leading-relaxed">
+                      A Sofia ainda não conversou com {activeLead?.nome || "este lead"} no WhatsApp. Você pode ligar diretamente ou enviar uma abordagem inicial agora.
+                    </p>
+                    <button
+                      onClick={handleWhatsApp}
+                      className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition flex items-center gap-2 shadow-2xs cursor-pointer"
+                    >
+                      <MessageSquare size={13} />
+                      <span>Iniciar Abordagem no WhatsApp com Sofia</span>
+                    </button>
+                  </div>
+                ) : (
+                  // Chat estilo WhatsApp do Lead com a Sofia
+                  <div className="flex-1 flex flex-col overflow-hidden">
+                    {/* Alerta de Lead Quente */}
+                    <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 px-3.5 py-2 rounded-xl text-xs font-bold flex items-center justify-between shrink-0 mb-3">
+                      <div className="flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                        <span>🔥 LEAD QUENTE: Cliente já conversou com a Sofia no WhatsApp!</span>
+                      </div>
+                      <span className="text-[10px] font-bold text-emerald-700 bg-white px-2 py-0.5 rounded border border-emerald-200">
+                        {whatsappInteractions.length} interação(ões)
+                      </span>
+                    </div>
+
+                    {/* Lista de Mensagens Balões */}
+                    <div className="flex-1 overflow-y-auto space-y-3 p-3 bg-slate-100/70 rounded-xl border border-slate-200">
+                      {whatsappInteractions.map((item) => (
+                        <div key={item.id} className="space-y-2">
+                          {/* Balão do Cliente (Esquerda) */}
+                          {item.clientMessage && (
+                            <div className="flex justify-start">
+                              <div className="max-w-[85%] bg-white rounded-2xl rounded-tl-xs p-3 shadow-2xs border border-slate-200 text-xs">
+                                <span className="text-[10px] font-bold text-slate-400 block mb-1">
+                                  {activeLead?.nome || "Cliente"}
+                                </span>
+                                <p className="text-slate-800 font-medium leading-relaxed">{item.clientMessage}</p>
+                                <span className="text-[9px] text-slate-400 block text-right mt-1">
+                                  {formatMsgTime(item.created_at)}
+                                </span>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Balão da Sofia (Direita) */}
+                          {item.sofiaMessage && (
+                            <div className="flex justify-end">
+                              <div className="max-w-[85%] bg-emerald-50 border border-emerald-200 rounded-2xl rounded-tr-xs p-3 shadow-2xs text-xs">
+                                <div className="flex items-center justify-between gap-2 mb-1">
+                                  <span className="text-[10px] font-bold text-emerald-700 flex items-center gap-1">
+                                    <Bot size={11} /> Sofia (IA A&K)
+                                  </span>
+                                </div>
+                                <p className="text-slate-900 font-medium leading-relaxed">{item.sofiaMessage}</p>
+                                <div className="flex items-center justify-end gap-1 mt-1 text-[9px] text-emerald-700 font-medium">
+                                  <span>{formatMsgTime(item.created_at)}</span>
+                                  <CheckCheck size={12} className="text-blue-500" />
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Ações Rápidas do WhatsApp */}
+                    <div className="pt-3 flex flex-wrap items-center justify-between gap-2 shrink-0">
+                      <div className="text-[11px] text-slate-500 font-medium flex items-center gap-1">
+                        <Bot size={13} className="text-emerald-600" />
+                        <span>Sincronizado automaticamente via Sofia IA</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={handleSendQuickProposal}
+                          className="px-3 py-1.5 rounded-lg bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <Send size={12} />
+                          <span>Mandar Proposta no Zap</span>
+                        </button>
+                        <button
+                          onClick={handleWhatsApp}
+                          className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 text-xs font-bold transition flex items-center gap-1.5 shadow-2xs cursor-pointer"
+                        >
+                          <ExternalLink size={12} />
+                          <span>Abrir WhatsApp Web</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
-        {/* ── COLUNA DIREITA: telefone + ações de chamada ────────────── */}
+        {/* ── COLUNA DIREITA: Telefone + Controles de Chamada ─────────── */}
         <div className="w-full lg:w-80 bg-white border-t lg:border-t-0 lg:border-l border-slate-200 flex flex-col p-5 shrink-0 justify-between">
-
-          {/* Número + localização + indicador de canal */}
+          
+          {/* Header do Telefone + Localização */}
           <div className="text-center pb-4 border-b border-slate-100">
-            <div className="flex items-center justify-center gap-1.5 mb-1">
-              <span className={`text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full border ${
+            <div className="flex items-center justify-center gap-1.5 mb-1.5">
+              <span className={`text-[10px] font-bold uppercase tracking-widest px-2.5 py-0.5 rounded-full border ${
                 softphoneMode === "webrtc" && sipRegStatus === "registered"
                   ? "bg-emerald-50 text-emerald-700 border-emerald-200"
                   : "bg-blue-50 text-blue-700 border-blue-200"
@@ -818,44 +990,48 @@ export default function DialerWorkspace() {
               </span>
             </div>
 
-            <p className="text-3xl font-mono font-extrabold text-slate-900 tracking-tight">
+            <p className="text-2xl sm:text-3xl font-mono font-black text-slate-900 tracking-tight">
               {formatPhone(activeLead?.telefone) || "(00) 00000-0000"}
             </p>
 
             {activeLead?.telefone && (
               <div className="mt-1 flex items-center justify-center gap-1.5 text-[11px] text-slate-500 font-medium">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse inline-block"></span>
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
                 <span>📍 {region.uf} ({region.ddd}) • {region.regiao}</span>
               </div>
             )}
           </div>
 
-          {/* Ações e Estados de Chamada */}
+          {/* Área de Estados da Chamada */}
           <div className="flex-1 flex flex-col justify-center gap-4 py-4">
 
+            {/* ESTADO 1: IDLE (Pronto para Chamar) */}
             {callStatus === "idle" && (
               <>
-                {/* Qualificar SDR */}
-                <button onClick={handleQualifySdr}
-                  className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 px-4 rounded-xl font-bold text-xs flex items-center justify-center gap-2 shadow-sm transition cursor-pointer">
+                <button
+                  onClick={handleQualifySdr}
+                  className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 px-4 rounded-xl font-bold text-xs flex items-center justify-center gap-2 shadow-sm transition cursor-pointer"
+                >
                   <Check size={14} className="stroke-[3]" />
-                  Qualificar SDR ➔ Esteira
+                  <span>Qualificar SDR ➔ Esteira</span>
                 </button>
 
-                {/* Botão CHAMAR */}
-                <button onClick={handleStartCall}
+                <button
+                  onClick={handleStartCall}
                   className={`w-full py-5 rounded-2xl text-white flex flex-col items-center justify-center font-bold shadow-md hover:scale-[1.02] transition-all cursor-pointer ${
                     isDndBlocked ? "bg-amber-500 hover:bg-amber-600" : "bg-blue-600 hover:bg-blue-700"
-                  }`}>
+                  }`}
+                >
                   <PhoneCall size={32} className="mb-1.5" />
-                  <span className="text-sm uppercase tracking-wider">{isDndBlocked ? "Chamar (DND!)" : "Chamar"}</span>
+                  <span className="text-sm uppercase tracking-wider">{isDndBlocked ? "Chamar (DND!)" : "Ligar Agora"}</span>
                 </button>
               </>
             )}
 
+            {/* ESTADO 2: CALLING (Chamando / Conectando) */}
             {callStatus === "calling" && (
               <div className="text-center space-y-3 bg-blue-50/60 p-5 rounded-2xl border border-blue-200/60">
-                <div className="w-14 h-14 rounded-full border-4 border-blue-600 border-t-transparent animate-spin mx-auto"></div>
+                <div className="w-12 h-12 rounded-full border-4 border-blue-600 border-t-transparent animate-spin mx-auto"></div>
                 <div>
                   <p className="text-xs font-bold text-blue-900">
                     {softphoneMode === "webrtc" && sipRegStatus === "registered"
@@ -874,9 +1050,9 @@ export default function DialerWorkspace() {
               </div>
             )}
 
+            {/* ESTADO 3: TALKING (Em Conversação Ativa) */}
             {callStatus === "talking" && (
               <div className="space-y-3">
-                {/* Painel Em Ligação com Cronômetro */}
                 <div className="bg-slate-900 text-white p-5 rounded-2xl text-center shadow-md relative overflow-hidden">
                   <div className="flex items-center justify-center space-x-1.5 text-[10px] font-bold text-emerald-400 uppercase tracking-widest mb-1">
                     <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
@@ -884,14 +1060,12 @@ export default function DialerWorkspace() {
                   </div>
                   <p className="text-4xl font-mono font-black text-white tracking-wider">{formatTime(duration)}</p>
 
-                  {/* Indicador de Canal */}
                   <div className="mt-2 flex items-center justify-center gap-1 text-[10px] text-slate-400 font-semibold">
                     <Radio size={12} className="text-emerald-400" />
                     <span>{softphoneMode === "webrtc" ? "Áudio WebRTC Ativo" : "Linha Celular"}</span>
                   </div>
                 </div>
 
-                {/* Controles de Chamada Ativa (Mudo, Teclado URA, Encerrar) */}
                 <div className="grid grid-cols-2 gap-2">
                   <button
                     onClick={handleToggleMute}
@@ -914,14 +1088,17 @@ export default function DialerWorkspace() {
                   </button>
                 </div>
 
-                <button onClick={handleEndCall}
-                  className="w-full bg-rose-600 hover:bg-rose-700 text-white py-3.5 rounded-xl text-xs font-bold flex items-center justify-center gap-2 shadow-sm transition cursor-pointer">
+                <button
+                  onClick={handleEndCall}
+                  className="w-full bg-rose-600 hover:bg-rose-700 text-white py-3.5 rounded-xl text-xs font-bold flex items-center justify-center gap-2 shadow-sm transition cursor-pointer"
+                >
                   <PhoneOff size={16} />
                   <span>Desligar Chamada</span>
                 </button>
               </div>
             )}
 
+            {/* ESTADO 4: WRAPUP (Classificar Tabulação) */}
             {callStatus === "wrapup" && (
               <div className="space-y-1.5">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-2 text-center">Classificar Resultado</span>
@@ -935,8 +1112,11 @@ export default function DialerWorkspace() {
                   { label: "🚫 Sem Interesse", status: "Não interessado", cls: "bg-slate-50 text-slate-600 border-slate-200" },
                   { label: "⚠️ Sem Perfil / Saldo", status: "Sem perfil", cls: "bg-slate-50 text-slate-600 border-slate-200" },
                 ].map(({ label, status, cls }) => (
-                  <button key={status} onClick={() => handleDisposition(status)}
-                    className={`w-full text-left px-3 py-2 border rounded-lg font-medium text-xs flex justify-between items-center transition hover:brightness-95 cursor-pointer ${cls}`}>
+                  <button
+                    key={status}
+                    onClick={() => handleDisposition(status)}
+                    className={`w-full text-left px-3 py-2 border rounded-lg font-medium text-xs flex justify-between items-center transition hover:brightness-95 cursor-pointer ${cls}`}
+                  >
                     <span>{label}</span>
                     <ChevronRight size={13} className="opacity-40" />
                   </button>
@@ -945,12 +1125,14 @@ export default function DialerWorkspace() {
             )}
           </div>
 
-          {/* Pular lead */}
+          {/* Pular Lead */}
           {callStatus === "idle" && (
-            <button onClick={() => saveCallRecord("Pulado")}
-              className="w-full py-2 text-slate-400 hover:text-slate-600 text-xs font-semibold flex items-center justify-center gap-1.5 transition border-t border-slate-100 pt-3 cursor-pointer">
+            <button
+              onClick={() => saveCallRecord("Pulado")}
+              className="w-full py-2 text-slate-400 hover:text-slate-600 text-xs font-semibold flex items-center justify-center gap-1.5 transition border-t border-slate-100 pt-3 cursor-pointer"
+            >
               <FastForward size={12} />
-              Pular Lead
+              <span>Pular Lead</span>
             </button>
           )}
         </div>
@@ -967,28 +1149,43 @@ export default function DialerWorkspace() {
             <div className="space-y-3">
               <div>
                 <label className="text-[11px] font-bold text-slate-600 block mb-1">Data:</label>
-                <input type="date" value={scheduleDate} onChange={e => setScheduleDate(e.target.value)}
-                  className="w-full border border-slate-200 p-2 rounded-lg text-xs outline-none focus:border-blue-400" />
+                <input
+                  type="date"
+                  value={scheduleDate}
+                  onChange={e => setScheduleDate(e.target.value)}
+                  className="w-full border border-slate-200 p-2 rounded-lg text-xs outline-none focus:border-blue-400"
+                />
               </div>
               <div>
                 <label className="text-[11px] font-bold text-slate-600 block mb-1">Horário:</label>
-                <input type="time" value={scheduleTime} onChange={e => setScheduleTime(e.target.value)}
-                  className="w-full border border-slate-200 p-2 rounded-lg text-xs outline-none focus:border-blue-400" />
+                <input
+                  type="time"
+                  value={scheduleTime}
+                  onChange={e => setScheduleTime(e.target.value)}
+                  className="w-full border border-slate-200 p-2 rounded-lg text-xs outline-none focus:border-blue-400"
+                />
               </div>
               <div>
                 <label className="text-[11px] font-bold text-slate-600 block mb-1">Anotações:</label>
-                <textarea placeholder="Ex: Ligar após as 14h, quer fechar com margem de R$ 500"
-                  value={scheduleNotes} onChange={e => setScheduleNotes(e.target.value)}
-                  className="w-full border border-slate-200 p-2 rounded-lg text-xs h-16 outline-none focus:border-blue-400" />
+                <textarea
+                  placeholder="Ex: Ligar após as 14h, quer fechar com margem de R$ 500"
+                  value={scheduleNotes}
+                  onChange={e => setScheduleNotes(e.target.value)}
+                  className="w-full border border-slate-200 p-2 rounded-lg text-xs h-16 outline-none focus:border-blue-400"
+                />
               </div>
             </div>
             <div className="flex gap-2 pt-1">
-              <button onClick={() => setShowScheduleModal(false)}
-                className="flex-1 py-2 text-xs font-semibold text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50 transition cursor-pointer">
+              <button
+                onClick={() => setShowScheduleModal(false)}
+                className="flex-1 py-2 text-xs font-semibold text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50 transition cursor-pointer"
+              >
                 Cancelar
               </button>
-              <button onClick={confirmScheduleReturn}
-                className="flex-1 py-2 text-xs font-bold text-white bg-amber-500 hover:bg-amber-600 rounded-lg transition cursor-pointer">
+              <button
+                onClick={confirmScheduleReturn}
+                className="flex-1 py-2 text-xs font-bold text-white bg-amber-500 hover:bg-amber-600 rounded-lg transition cursor-pointer"
+              >
                 Salvar
               </button>
             </div>
