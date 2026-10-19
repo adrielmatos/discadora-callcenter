@@ -200,16 +200,16 @@ export async function POST(req: NextRequest) {
       });
     });
 
-    const systemInstruction = `Você é ${effectiveName}, assistente virtual da ${effectiveCompany}.
-Você conversa no WhatsApp como uma pessoa de verdade da equipe: de forma curta, direta, simpática e humanizada.
+    const systemInstruction = `Você é ${effectiveName}, assistente virtual de atendimento da ${effectiveCompany}.
+Seu objetivo é prestar um atendimento formal, polido, humanizado e direto pelo WhatsApp, sem o uso de gírias.
 
-REGRAS OBRIGATÓRIAS DE COMUNICAÇÃO:
-1. RESPOSTAS CURTAS E DIRETAS: Escreva no MÁXIMO 1 a 2 frases curtas (estilo mensagem rápida de WhatsApp). NUNCA mande textão, blocos de texto ou parágrafos formais.
-2. NUNCA INVENTE TAXAS OU VALORES: Jamais informe porcentagens de juros ou parcelas. Diga com naturalidade que a taxa e o valor exato dependem da consulta de margem no sistema do banco, e se o cliente quer que o especialista consulte pra ele sem compromisso.
-3. SEGURANÇA: Se perguntarem sobre segurança ou taxa antecipada: "Jamais cobramos taxa adiantada! O dinheiro cai direto na sua conta e o contrato é 100% digital e seguro."
-4. TOM NATURAL: Fale de forma acolhedora e prestativa ("Oi, tudo bem? 😊", "Com certeza!", "Pode deixar!").
-5. SEMPRE TERMINE COM UMA PERGUNTA CURTA para avançar a conversa (ex: "Qual o seu nome?", "Gostaria que eu peça pro especialista consultar seu valor agora?", "É FGTS ou INSS?").
-Base de conhecimento: ${effectiveKnowledge}`;
+DIRETRIZES DE COMUNICAÇÃO:
+1. FORMAL, POLIDO E HUMANIZADO: Trate o cliente com respeito, cordialidade e profissionalismo (ex: "Olá! Como posso ajudar?", "Com certeza", "Compreendo perfeitamente"). Não utilize gírias ou informalidades excessivas (evite termos como "sabe?", "rapidinho", "pra", "lá no banco").
+2. CONCISO E DIRETO: Escreva no MÁXIMO 2 frases claras e objetivas. Mantenha a resposta ágil e fácil de ler no WhatsApp, sem blocos extensos de texto.
+3. PRESERVAÇÃO DE DADOS (NÃO INVENTAR TAXAS): Jamais informe taxas percentuais fixas ou valores de parcelas. Explique com educação que as taxas e limites exatos dependem da consulta de margem no sistema dos bancos parceiros, e ofereça a consulta gratuita feita pelo nosso especialista da equipe.
+4. SEGURANÇA E TRANSPARÊNCIA: Sempre que houver dúvida sobre segurança ou cobrança: "Não cobramos nenhum valor antecipado. Todo o processo é 100% digital e seguro, com o crédito depositado diretamente em sua conta."
+5. CONDUÇÃO ATIVA: Finalize sempre com uma pergunta cordial e objetiva (ex: "Gostaria que o nosso especialista faça uma consulta sem compromisso para você?", "Qual é o seu nome, por gentileza?").
+Base de conhecimento da empresa: ${effectiveKnowledge}`;
 
     // Se temos provedores no pool, balanceia a carga e faz rotação com failover instantâneo
     if (pool.length > 0) {
@@ -247,17 +247,17 @@ Base de conhecimento: ${effectiveKnowledge}`;
     // Fallback inteligente contextual caso nenhuma chave esteja configurada ou se todas atingirem a cota momentânea
     let fallbackReply = "";
     if (lowerMessage.includes("golpe") || lowerMessage.includes("seguro") || lowerMessage.includes("confiavel") || lowerMessage.includes("confiável") || lowerMessage.includes("taxa antecipada") || lowerMessage.includes("depósito")) {
-      fallbackReply = `Pode ficar tranquilo(a)! Na ${effectiveCompany} nós NUNCA cobramos nada antecipado. O dinheiro cai direto na sua conta e o contrato é 100% digital e seguro. Posso te ajudar com uma simulação?`;
+      fallbackReply = `Compreendo sua preocupação. Na ${effectiveCompany} não cobramos nenhum valor antecipado. A contratação é 100% digital e segura, e o crédito é depositado diretamente em sua conta bancária. Posso auxiliar com uma simulação?`;
     } else if (lowerMessage.includes("taxa") || lowerMessage.includes("juros") || lowerMessage.includes("quanto fica") || lowerMessage.includes("valor da parcela") || lowerMessage.includes("quanto pago")) {
-      fallbackReply = `A taxa e o valor liberado variam de acordo com a sua margem no banco. Se quiser, já peço pro nosso especialista consultar certinho pra você no sistema. Qual o seu nome?`;
+      fallbackReply = `As taxas e condições dependem da análise oficial da sua margem junto aos bancos parceiros. Se desejar, posso solicitar que o nosso especialista realize uma consulta personalizada para você agora mesmo. Qual é o seu nome, por gentileza?`;
     } else if (lowerMessage.includes("fgts") || lowerMessage.includes("aniversario") || lowerMessage.includes("aniversário")) {
-      fallbackReply = `Fazemos sim a antecipação do FGTS, cai via PIX na sua conta e não consulta SPC/Serasa! Quer que eu peça pro especialista ver seu saldo liberado?`;
+      fallbackReply = `Trabalhamos com a antecipação do Saque-Aniversário do FGTS, sem consulta ao SPC ou Serasa e com liberação rápida via PIX. Gostaria que o nosso especialista verifique o saldo disponível para você?`;
     } else if (lowerMessage.includes("portabilidade") || lowerMessage.includes("troco") || lowerMessage.includes("reduzir")) {
-      fallbackReply = `Com a portabilidade tentamos reduzir sua taxa e liberar troco em dinheiro na conta, sem aumentar sua parcela! Gostaria de consultar?`;
+      fallbackReply = `Com a portabilidade de crédito, buscamos reduzir a taxa do seu contrato atual e liberar troco em dinheiro em sua conta, sem alterar o valor da sua parcela. Deseja realizar uma consulta?`;
     } else if (lowerMessage.includes("inss") || lowerMessage.includes("bpc") || lowerMessage.includes("loas") || lowerMessage.includes("aposentado")) {
-      fallbackReply = `Atendemos aposentados e BPC/LOAS com as melhores condições do INSS! Quer que eu consulte a sua margem disponível hoje?`;
+      fallbackReply = `Atendemos aposentados, pensionistas e beneficiários BPC/LOAS com as melhores condições de crédito consignado. Gostaria que verificássemos a sua margem disponível hoje?`;
     } else {
-      fallbackReply = `Oi! Sou a ${effectiveName} da ${effectiveCompany} 😊 Como posso te ajudar hoje? Você tem interesse em FGTS ou Consignado?`;
+      fallbackReply = `Olá! Sou a ${effectiveName}, assistente da ${effectiveCompany}. Como posso ajudar você hoje? Tem interesse em consultar opções de FGTS ou Consignado?`;
     }
 
     return NextResponse.json({
