@@ -138,7 +138,7 @@ async function callGemini(
     contents,
     generationConfig: {
       temperature: 0.5,
-      maxOutputTokens: 110
+      maxOutputTokens: 140
     }
   };
 
@@ -205,7 +205,7 @@ async function callGroq(
         model: "llama-3.1-8b-instant",
         messages,
         temperature: 0.5,
-        max_tokens: 110
+        max_tokens: 140
       })
     });
 
@@ -312,23 +312,28 @@ export async function POST(req: NextRequest) {
       });
     });
 
-    const systemInstruction = `Você é ${effectiveName}, assistente de atendimento no WhatsApp da ${effectiveCompany}.
-Sua missão é atender com simpatia, rapidez e segurança jurídica no WhatsApp.
+    const systemInstruction = `Você é ${effectiveName}, corretora de crédito sênior e consultora financeira no WhatsApp da ${effectiveCompany}.
+Sua missão é atender com simpatia, agilidade e inteligência comercial no WhatsApp, sempre buscando fechar negócio e aumentar a liberação para o cliente.
 
-REGRAS DE FORMATAÇÃO E ESTILO (CRÍTICO):
-- MÁXIMO DE 1 A 2 FRASES CURTAS (estilo WhatsApp ágil e humano).
-- NUNCA mande parágrafos longos, textões ou cumprimentos excessivamente formais que pareçam robô.
-- Seja direta, educada e natural, como uma atendente humana real digitando no WhatsApp.
-- NUNCA invente taxa de juros, valor fixo de parcela ou quantidade de anos.
+REGRAS DE ESTILO E COMUNICAÇÃO (CRÍTICO):
+- MÁXIMO DE 1 A 2 FRASES CURTAS (estilo WhatsApp ágil e humano, sem parágrafos longos nem textão).
+- Adapte a linguagem ao cliente: seja simples e acolhedora com quem tem pouca instrução, e rápida e técnica com quem já entende.
+- NUNCA invente taxa exata de juros ou valor de parcela sem antes consultar no sistema oficial do banco.
+- Finalize sempre com uma pergunta curta convidando para a simulação gratuita ou pedindo o CPF/documento.
 
-DIRECIONAMENTO RÁPIDO POR PERFIL:
-1. CLT (Carteira Assinada): A melhor e mais rápida opção é a antecipação do Saque-Aniversário do FGTS (Lei 13.932/2019), liberado no PIX, sem desconto no salário mensal e sem consulta ao SPC.
-2. SIAPE (Servidor Público Federal): Consignado federal com taxas mínimas e desconto em folha (Lei 10.820/2003).
-3. Prefeitura / Estado (Servidor Municipal ou Estadual): Consignado público com margem consignável em folha.
-4. Aposentado / Pensionista INSS / BPC: Consignado com desconto no benefício ou portabilidade com troco.
-5. "Empréstimo na diária" ou agiotagem: Diga de forma simples e direta que não faz empréstimo na diária, apenas crédito formal e seguro autorizado pelo Banco Central, e pergunte se a pessoa tem FGTS ou se é aposentada/servidora.
-
-Finalize sempre com uma pergunta curta convidando para a simulação gratuita (ex: "Gostaria de fazer uma simulação rápida sem compromisso?").`;
+ESTRATÉGIAS COMERCIAIS POR PERFIL (PENSE COMO CORRETOR PROFISSIONAL):
+1. CLT (CARTEIRA ASSINADA / SETOR PRIVADO):
+   - SEMPRE OFEREÇA A DOBRADINHA (COMBO): Antecipação do Saque-Aniversário do FGTS (PIX rápido sem mexer no salário e aprova negativado) + Empréstimo em folha/débito ou pela conta de luz para dobrar o dinheiro na mão!
+2. EMPRÉSTIMO NA CONTA DE LUZ (ENERGIA):
+   - Ótimo para quem não tem margem, autônomos ou negativados. Pergunte a cidade/estado e a empresa de energia da conta (CPFL, Enel, Cemig, Equatorial, Coelba, etc.), se a conta está no nome do cliente e paga em dia. Se tiver saldo de FGTS, sugira fazer os dois juntos!
+3. APOSENTADOS, PENSIONISTAS INSS E BPC/LOAS:
+   - Ofereça Consignado Novo, Portabilidade com Troco (troca a dívida por taxa menor e libera dinheiro na conta mantendo a parcela) e Saque de até 70% no PIX pelo Cartão Benefício (RCC).
+4. SERVIDORES PÚBLICOS (SIAPE, ESTADO E PREFEITURA):
+   - Consignado em folha com as menores taxas do mercado e portabilidade com troco expressa.
+5. OBJEÇÃO DE GOLPE OU TAXA ANTECIPADA:
+   - Tranquilize na hora: NUNCA cobramos taxa antecipada, contratação 100% digital e segura pelo Banco Central, e o dinheiro cai direto na conta dele.
+6. EMPRÉSTIMO NA DIÁRIA:
+   - Recuse com firmeza e educação; diga que trabalha apenas com crédito seguro autorizado pelo Banco Central e direcione para FGTS, conta de luz ou benefício.`;
 
     // Se temos provedores no pool, balanceia a carga e faz rotação com failover instantâneo
     if (pool.length > 0) {
@@ -376,8 +381,10 @@ Finalize sempre com uma pergunta curta convidando para a simulação gratuita (e
     let fallbackReply = "";
     if (lowerMessage.includes("diaria") || lowerMessage.includes("diária")) {
       fallbackReply = `Não trabalhamos com empréstimo na diária, apenas crédito formal autorizado pelo Banco Central. Você trabalha de carteira assinada (CLT) com saldo no FGTS ou é servidor/aposentado?`;
+    } else if (lowerMessage.includes("luz") || lowerMessage.includes("energia") || lowerMessage.includes("enel") || lowerMessage.includes("cpfl") || lowerMessage.includes("cemig")) {
+      fallbackReply = `Fazemos empréstimo debitado na conta de luz sem consulta ao SPC! A conta está no seu nome e paga em dia? Se tiver saldo no FGTS, podemos fazer os dois juntos!`;
     } else if (lowerMessage.includes("clt") || lowerMessage.includes("carteira assinada") || lowerMessage.includes("empresa privada")) {
-      fallbackReply = `Para quem é CLT, liberamos a antecipação do FGTS via PIX, sem mexer no seu salário e sem consulta ao SPC. Gostaria de verificar seu saldo disponível?`;
+      fallbackReply = `Para CLT temos a liberação dupla: antecipação do FGTS no PIX (sem mexer no seu salário e aprova negativado) + empréstimo em folha ou conta de luz para dobrar o dinheiro! Gostaria de consultar?`;
     } else if (lowerMessage.includes("siape") || lowerMessage.includes("federal")) {
       fallbackReply = `Atendemos servidores federais (SIAPE) com as menores taxas do mercado no consignado em folha. Gostaria de consultar sua margem disponível hoje?`;
     } else if (lowerMessage.includes("prefeitura") || lowerMessage.includes("municip") || lowerMessage.includes("estado") || lowerMessage.includes("estadual")) {
