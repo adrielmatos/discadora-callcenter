@@ -6,7 +6,7 @@ import {
   Play, FastForward, User, AlertCircle, Calculator,
   ShieldAlert, Sparkles, Building2, CheckCircle2, Zap, ChevronRight,
   Headphones, Mic, MicOff, Radio, Volume2, Hash, Phone,
-  Clock, Bot, RefreshCw, Send, ExternalLink, CheckCheck, PauseCircle, PlayCircle
+  Clock, Bot, RefreshCw, Send, ExternalLink, CheckCheck, PauseCircle, PlayCircle, Shuffle
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { SoftphoneEngine, phoneAudio, SipConfig, SipRegStatus } from "@/lib/softphone";
@@ -199,13 +199,29 @@ export default function DialerWorkspace() {
     }
   };
 
+  // Algoritmo Fisher-Yates para embaralhar a lista aleatoriamente
+  const shuffleArray = <T,>(array: T[]): T[] => {
+    const arr = [...array];
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr;
+  };
+
   const fetchQueue = async (filter: "all" | "fgts" | "inss" | "consignado" = productFilter) => {
     let query = supabase.from("leads").select("*").eq("status", "pendente");
     if (filter === "fgts") query = query.ilike("produto", "%fgts%");
     else if (filter === "inss") query = query.or("produto.ilike.%inss%,produto.ilike.%bpc%,produto.ilike.%loas%");
     else if (filter === "consignado") query = query.ilike("produto", "%consignado%");
     const { data } = await query.order("id", { ascending: true }).limit(500);
-    if (data) { setLeadsList(data); setCurrentLeadIndex(0); }
+    if (data) {
+      // Modo Geral: sobe a lista 100% aleatória misturando FGTS, INSS e Consignado
+      // Modo Específico: mantém focado na carteira selecionada
+      const finalQueue = filter === "all" ? shuffleArray(data) : data;
+      setLeadsList(finalQueue);
+      setCurrentLeadIndex(0);
+    }
   };
 
   const fetchScripts = async () => {
@@ -657,7 +673,7 @@ export default function DialerWorkspace() {
           </div>
 
           {/* Seletor de Carteira / Produto com Contagem Real */}
-          <div className="flex items-center gap-1.5 bg-slate-100 p-0.5 rounded-lg border border-slate-200 text-xs">
+          <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-lg border border-slate-200 text-xs">
             <select
               value={productFilter}
               onChange={(e) => {
@@ -667,11 +683,22 @@ export default function DialerWorkspace() {
               }}
               className="bg-white border border-slate-200 font-bold text-slate-800 text-[11px] rounded-md px-2 py-1 outline-none cursor-pointer hover:border-blue-400 transition"
             >
-              <option value="all">📂 Todos os Produtos ({productCounts.all || leadsRestantes})</option>
-              <option value="fgts">⚡ Saque FGTS ({productCounts.fgts})</option>
-              <option value="inss">🏛️ INSS / BPC / Loas ({productCounts.inss})</option>
-              <option value="consignado">💳 Consignado Geral ({productCounts.consignado})</option>
+              <option value="all">🔀 Todos (Fila Aleatória • {productCounts.all || leadsRestantes})</option>
+              <option value="fgts">⚡ Apenas Saque FGTS ({productCounts.fgts})</option>
+              <option value="inss">🏛️ Apenas INSS / BPC / Loas ({productCounts.inss})</option>
+              <option value="consignado">💳 Apenas Consignado Geral ({productCounts.consignado})</option>
             </select>
+
+            {productFilter === "all" && (
+              <button
+                type="button"
+                onClick={() => fetchQueue("all")}
+                title="Embaralhar novamente a fila aleatória"
+                className="p-1 rounded text-slate-500 hover:text-blue-600 hover:bg-slate-200 transition cursor-pointer"
+              >
+                <Shuffle size={12} />
+              </button>
+            )}
           </div>
 
           {autoNextCountdown !== null && (
