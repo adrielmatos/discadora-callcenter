@@ -1,0 +1,7 @@
+title = "Discadora Call Center Gitleaks Policy"
+
+[allowlist]
+description = "Chaves públicas/anon do Supabase são seguras para o navegador e não são service_role."
+regexes = [
+  '''sb_publishable_[A-Za-z0-9_-]+'''
+]
