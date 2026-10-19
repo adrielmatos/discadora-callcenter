@@ -1,7 +1,7 @@
 /**
- * Sofia AI - Assistente de Crédito & CRM para WhatsApp Web Oficial (v1.1.0)
+ * Sofia AI - Assistente de Crédito & CRM para WhatsApp Web Oficial (v1.2.0)
  * Opera diretamente na interface legítima do WhatsApp Web
- * Compatível com novas atualizações de layout do WhatsApp Web (2024-2026)
+ * Compatível com arquitetura moderna do WhatsApp Web (React 18 / Lexical / Virtual DOM)
  */
 
 (function () {
@@ -12,7 +12,7 @@
   let isBatchMining = false;
   const pausedChats = new Set(); // Chats pausados por transbordo humano
 
-  console.log("[Sofia AI] Extensão iniciada no WhatsApp Web.");
+  console.log("[Sofia AI v1.2.0] Extensão iniciada no WhatsApp Web.");
 
   // Carrega configurações salvas no chrome.storage
   if (window.chrome && chrome.storage && chrome.storage.local) {
@@ -42,6 +42,569 @@
     });
   }
 
+  // Toast de notificação persistente e visual dentro do WhatsApp Web
+  function showInAppNotification(msg, isError = false) {
+    let toast = document.getElementById("sofia-notification-toast");
+    if (!toast) {
+      toast = document.createElement("div");
+      toast.id = "sofia-notification-toast";
+      document.body.appendChild(toast);
+    }
+
+    toast.style.cssText = `
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      z-index: 9999999;
+      background: ${isError ? "#881337" : "#064e3b"};
+      color: #ffffff;
+      padding: 12px 20px;
+      border-radius: 10px;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+      border: 1px solid ${isError ? "#f43f5e" : "#10b981"};
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-size: 13px;
+      font-weight: 600;
+      max-width: 420px;
+      line-height: 1.4;
+      pointer-events: none;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      opacity: 1;
+      transform: translateY(0);
+    `;
+    toast.textContent = msg;
+
+    if (toast._timer) clearTimeout(toast._timer);
+    toast._timer = setTimeout(() => {
+      toast.style.opacity = "0";
+      toast.style.transform = "translateY(10px)";
+    }, 4500);
+  }
+
+  // Gera telefone virtual consistente caso o contato esteja salvo apenas por nome
+  function generateDeterministicPhone(name) {
+    let hash = 0;
+    const str = String(name || "cliente_whatsapp").trim().toLowerCase();
+    for (let i = 0; i < str.length; i++) {
+      hash = (hash << 5) - hash + str.charCodeAt(i);
+      hash |= 0;
+    }
+    const posHash = Math.abs(hash) % 90000000;
+    return `55119${String(posHash).padStart(8, "0")}`;
+  }
+
+  // Dispara cliques com ponteiro simulando interação humana exata (compatível com React 18)
+  function simulateRealPointerClick(element) {
+    if (!element) return;
+    try {
+      element.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    } catch (e) {}
+
+    const rect = element.getBoundingClientRect();
+    const clientX = rect.left + Math.max(10, rect.width / 2);
+    const clientY = rect.top + Math.max(10, rect.height / 2);
+
+    const eventList = ["pointerdown", "mousedown", "pointerup", "mouseup", "click"];
+    for (const type of eventList) {
+      const isPointer = type.startsWith("pointer");
+      const EventClass = isPointer && window.PointerEvent ? window.PointerEvent : MouseEvent;
+      const ev = new EventClass(type, {
+        view: window,
+        bubbles: true,
+        cancelable: true,
+        clientX: clientX,
+        clientY: clientY,
+        buttons: 1,
+        pointerId: 1,
+        pointerType: "mouse",
+        isPrimary: true
+      });
+      element.dispatchEvent(ev);
+    }
+  }
+
+  // Extrai nome e última mensagem diretamente do card lateral no #pane-side
+  function extractSidebarCardData(item) {
+    if (!item) return null;
+
+    let name = "";
+    let lastSnippet = "";
+
+    // 1. Título do contato
+    const titleEl = item.querySelector(
+      "span[data-testid='cell-frame-title'] span, " +
+      "div[data-testid='cell-frame-title'] span, " +
+      "span[title], " +
+      "span[dir='auto']"
+    );
+    if (titleEl) {
+      name = (titleEl.getAttribute("title") || titleEl.innerText || "").trim();
+    }
+
+    // 2. Prévia da última mensagem
+    const snippetEl = item.querySelector(
+      "span[data-testid='last-msg-status'] ~ span, " +
+      "span.selectable-text, " +
+      "span[dir='ltr'], " +
+      "div[data-testid='cell-frame-secondary'] span"
+    );
+    if (snippetEl) {
+      lastSnippet = (snippetEl.getAttribute("title") || snippetEl.innerText || "").trim();
+    } else {
+      // Pega todos os spans e pega o mais longo que não seja o nome
+      const allSpans = Array.from(item.querySelectorAll("span"));
+      for (const s of allSpans) {
+        const txt = (s.innerText || "").trim();
+        if (txt && txt !== name && txt.length > 3 && !txt.match(/^\d{1,2}:\d{2}$/)) {
+          lastSnippet = txt;
+          break;
+        }
+      }
+    }
+
+    if (!name && !lastSnippet) return null;
+
+    const digits = (name || "").replace(/\D/g, "");
+    const finalPhone = digits.length >= 8 ? digits : generateDeterministicPhone(name || "Contato");
+    const finalName = name || `Cliente WhatsApp (${finalPhone.slice(-4)})`;
+
+    return {
+      name: finalName,
+      phone: finalPhone,
+      snippet: lastSnippet || "Conversa ativa no WhatsApp Web"
+    };
+  }
+
+  // Detecta informações do contato ativo na tela aberta (#main)
+  function getActiveContactInfo() {
+    let name = "";
+    let phone = "";
+
+    const mainPanel = document.querySelector("#main");
+    if (!mainPanel) {
+      // Se #main não estiver aberto, tenta verificar se algum card está selecionado na lateral
+      const selectedSidebarItem = document.querySelector(
+        "#pane-side div[aria-selected='true'], " +
+        "#pane-side div[data-testid='cell-frame-container'][class*='active']"
+      );
+      if (selectedSidebarItem) {
+        const cardData = extractSidebarCardData(selectedSidebarItem);
+        if (cardData) return cardData;
+      }
+      return null;
+    }
+
+    // 1. Inspeciona o cabeçalho do painel #main
+    const chatHeader = mainPanel.querySelector("header");
+    if (chatHeader) {
+      const titleEl = chatHeader.querySelector(
+        "span[data-testid='conversation-info-header-chat-title'], " +
+        "div[role='button'] span[dir='auto'], " +
+        "h2, " +
+        "span[dir='auto'][title], " +
+        "span[title], " +
+        "span[dir='auto']"
+      );
+      if (titleEl) {
+        const rawTitle = (titleEl.getAttribute("title") || titleEl.innerText || "").trim();
+        if (rawTitle && !rawTitle.toLowerCase().includes("online") && !rawTitle.toLowerCase().includes("visto por")) {
+          name = rawTitle;
+        }
+      }
+
+      // Procura número explícito no subtítulo (ex: "+55 11 98765-4321")
+      const subTitleEl = chatHeader.querySelector("span[title*='+'], span[title*='55'], span[dir='auto']:not(:first-child)");
+      if (subTitleEl) {
+        const text = subTitleEl.innerText || subTitleEl.getAttribute("title") || "";
+        const digits = text.replace(/\D/g, "");
+        if (digits.length >= 10 && digits.startsWith("55")) {
+          phone = digits;
+        }
+      }
+    }
+
+    // 2. Extrai telefone internacional diretamente das mensagens do #main
+    if (!phone) {
+      const msgNodes = mainPanel.querySelectorAll("div[data-id]");
+      for (const msg of Array.from(msgNodes)) {
+        const dataId = msg.getAttribute("data-id") || "";
+        const match = dataId.match(/_(\d{10,15})@(c\.us|s\.whatsapp\.net)/);
+        if (match && match[1]) {
+          phone = match[1];
+          break;
+        }
+      }
+    }
+
+    // 3. Se o nome for o próprio número de telefone
+    const digitsInName = (name || "").replace(/\D/g, "");
+    if (digitsInName.length >= 10 && !phone) {
+      phone = digitsInName;
+    }
+
+    // Se encontramos nome ou telefone, finaliza com dados válidos
+    if (name || phone) {
+      const finalPhone = phone || (digitsInName.length >= 8 ? digitsInName : generateDeterministicPhone(name));
+      const finalName = name || `Cliente (${finalPhone.slice(-4)})`;
+      return { name: finalName, phone: finalPhone };
+    }
+
+    return null;
+  }
+
+  // Extrai mensagens da conversa atual no painel #main
+  function extractActiveChatMessages() {
+    const messages = [];
+    const mainPanel = document.querySelector("#main");
+    if (!mainPanel) return messages;
+
+    const messageNodes = mainPanel.querySelectorAll(
+      "div[data-id], " +
+      "div[data-testid='msg-container'], " +
+      "div[role='row'], " +
+      "div[class*='message-in'], " +
+      "div[class*='message-out'], " +
+      ".message-in, " +
+      ".message-out"
+    );
+
+    messageNodes.forEach((node) => {
+      const textEl = node.querySelector(
+        ".copyable-text span, " +
+        ".selectable-text, " +
+        "[data-testid='selectable-text'], " +
+        "span[dir='ltr'], " +
+        "span[dir='auto']"
+      );
+      if (!textEl) return;
+
+      const text = (textEl.innerText || "").trim();
+      if (!text || text.length < 2) return;
+
+      const dataId = node.getAttribute("data-id") || "";
+      const isOut = (
+        dataId.startsWith("true_") ||
+        node.className.includes("message-out") ||
+        !!node.querySelector("span[data-icon*='check'], [data-testid*='check']")
+      );
+
+      messages.push({
+        sender: isOut ? "me" : "client",
+        text: text
+      });
+    });
+
+    // Fallback: se nenhum nó estruturado foi encontrado, captura textos do container
+    if (messages.length === 0) {
+      const textElements = mainPanel.querySelectorAll("span.selectable-text, span[dir='auto']");
+      textElements.forEach((el) => {
+        const t = (el.innerText || "").trim();
+        if (t && t.length > 3 && !t.includes("Online") && !t.includes("digitando") && !t.includes("visto por")) {
+          messages.push({ sender: "client", text: t });
+        }
+      });
+    }
+
+    return messages;
+  }
+
+  // Envia dados de conversa para a API da Discadora
+  async function sendChatToApi(phone, name, messages, chatSnippet = "") {
+    try {
+      const payload = {
+        clientPhone: phone,
+        clientName: name,
+        messages: Array.isArray(messages) && messages.length > 0 ? messages.slice(-25) : undefined,
+        chatText: chatSnippet || undefined,
+        empresaId: "ebe1ab22-519e-4784-8f96-e7f0d7a8c0a3"
+      };
+
+      const response = await fetch(`${crmBaseUrl}/api/ai/analyze-chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+
+      if (!response.ok) {
+        const err = await response.text();
+        return { success: false, error: err };
+      }
+
+      const data = await response.json();
+      return { success: true, data };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  }
+
+  // Minera o histórico da conversa atualmente aberta
+  async function mineActiveChat(silent = false) {
+    let contact = getActiveContactInfo();
+    let messages = extractActiveChatMessages();
+
+    // Se não encontrou no #main, tenta pegar do primeiro card ou card ativo
+    if (!contact) {
+      const firstItem = document.querySelector(
+        "#pane-side div[role='listitem'], " +
+        "#pane-side div[data-testid='cell-frame-container'], " +
+        "#pane-side div[tabindex='-1']"
+      );
+      if (firstItem) {
+        const cardData = extractSidebarCardData(firstItem);
+        if (cardData) {
+          contact = { name: cardData.name, phone: cardData.phone };
+          messages = [{ sender: "client", text: cardData.snippet }];
+        }
+      }
+    }
+
+    if (!contact) {
+      const err = "Nenhuma conversa detectada. Clique em um contato na barra lateral do WhatsApp Web antes de minerar.";
+      if (!silent) showInAppNotification(err, true);
+      return { success: false, error: err };
+    }
+
+    const snippet = messages.length === 0 ? "Conversa ativa no WhatsApp" : "";
+    const res = await sendChatToApi(contact.phone, contact.name, messages, snippet);
+
+    if (!res.success) {
+      const errMsg = "Erro ao sincronizar com CRM: " + res.error;
+      if (!silent) showInAppNotification(errMsg, true);
+      return { success: false, error: errMsg };
+    }
+
+    const successMsg = `🎉 ${contact.name} qualificado no CRM! [${res.data?.analysis?.temperatura || "Morno"} - ${res.data?.analysis?.produto || "Crédito"}].`;
+    if (!silent) showInAppNotification(successMsg);
+
+    // Atualiza contador no chrome.storage
+    if (window.chrome && chrome.storage && chrome.storage.local) {
+      chrome.storage.local.get(["leadsSyncedCount"], (store) => {
+        const current = (store.leadsSyncedCount || 0) + 1;
+        chrome.storage.local.set({ leadsSyncedCount: current });
+      });
+    }
+
+    return {
+      success: true,
+      message: successMsg,
+      data: res.data
+    };
+  }
+
+  // Minera todas as conversas visíveis na barra lateral em lote (Varredura Automática)
+  async function mineAllChats() {
+    if (isBatchMining) {
+      showInAppNotification("A varredura automática já está em andamento!", true);
+      return { success: false, message: "Varredura em andamento" };
+    }
+
+    // Seleciona todas as conversas listadas na barra lateral com ampla compatibilidade de seletores
+    let chatItems = Array.from(document.querySelectorAll(
+      "#pane-side div[role='listitem'], " +
+      "#pane-side div[data-testid='cell-frame-container'], " +
+      "#pane-side div[tabindex='-1'][role='row'], " +
+      "#pane-side div[role='row']"
+    ));
+
+    // Fallback de seleção lateral caso seletores padrão estejam diferentes
+    if (chatItems.length === 0) {
+      const paneSide = document.querySelector("#pane-side");
+      if (paneSide) {
+        chatItems = Array.from(paneSide.querySelectorAll("div[tabindex='-1']"));
+      }
+    }
+
+    if (!chatItems || chatItems.length === 0) {
+      showInAppNotification("Nenhuma conversa encontrada na barra lateral do WhatsApp Web.", true);
+      return { success: false, error: "Nenhuma conversa encontrada." };
+    }
+
+    isBatchMining = true;
+    const totalToMine = Math.min(chatItems.length, 30); // Até 30 conversas por rodada
+    showInAppNotification(`🚀 Iniciando varredura inteligente de ${totalToMine} conversas...`);
+
+    let successCount = 0;
+
+    for (let i = 0; i < totalToMine; i++) {
+      if (!isBatchMining) break;
+
+      const item = chatItems[i];
+      try {
+        // 1. Extrai imediatamente dados prévios do card lateral (garante que nada seja perdido)
+        const cardData = extractSidebarCardData(item);
+        const contactName = cardData?.name || `Contato ${i + 1}`;
+        const contactPhone = cardData?.phone || generateDeterministicPhone(contactName);
+        const initialSnippet = cardData?.snippet || "";
+
+        showInAppNotification(`⏳ [${i + 1}/${totalToMine}] Analisando ${contactName}...`);
+
+        // 2. Dispara evento de clique humanizado com ponteiro no elemento clicável
+        const clickable = item.querySelector("div[role='button'], div[tabindex='-1'], [data-testid='cell-frame-container']") || item;
+        simulateRealPointerClick(clickable);
+
+        // 3. Aguarda 1.2 segundos para verificar se o painel #main carregou as mensagens completas
+        await new Promise((resolve) => setTimeout(resolve, 1200));
+
+        let messages = [];
+        let finalPhone = contactPhone;
+        let finalName = contactName;
+
+        const activeContact = getActiveContactInfo();
+        if (activeContact) {
+          finalName = activeContact.name || finalName;
+          finalPhone = activeContact.phone || finalPhone;
+          messages = extractActiveChatMessages();
+        }
+
+        // Se o painel não carregou mensagens, usa o snippet capturado no card lateral
+        if (messages.length === 0 && initialSnippet) {
+          messages = [{ sender: "client", text: initialSnippet }];
+        }
+
+        // 4. Envia para a API da Discadora Sofia AI
+        const apiRes = await sendChatToApi(finalPhone, finalName, messages, initialSnippet);
+
+        if (apiRes.success) {
+          successCount++;
+          const temp = apiRes.data?.analysis?.temperatura || "Morno";
+          const prod = apiRes.data?.analysis?.produto || "FGTS";
+          showInAppNotification(`✅ [${i + 1}/${totalToMine}] ${finalName} salvo no CRM! [${temp} - ${prod}]`);
+        } else {
+          console.warn(`[Sofia AI] Falha ao enviar ${finalName} ao CRM:`, apiRes.error);
+        }
+
+      } catch (err) {
+        console.warn(`[Sofia AI] Erro durante mineração do item ${i + 1}:`, err);
+      }
+
+      // Intervalo cadenciado entre contatos para proteger a conexão
+      await new Promise((resolve) => setTimeout(resolve, 600));
+    }
+
+    isBatchMining = false;
+    const summary = `🎉 Varredura finalizada! ${successCount} de ${totalToMine} conversas qualificadas e sincronizadas no CRM!`;
+    showInAppNotification(summary);
+
+    // Atualiza contagem global
+    if (window.chrome && chrome.storage && chrome.storage.local) {
+      chrome.storage.local.get(["leadsSyncedCount"], (store) => {
+        const current = (store.leadsSyncedCount || 0) + successCount;
+        chrome.storage.local.set({ leadsSyncedCount: current });
+      });
+    }
+
+    return {
+      success: true,
+      message: summary,
+      syncedCount: successCount
+    };
+  }
+
+  // Simula digitação humana no campo de mensagem do WhatsApp Web
+  function sendWhatsAppMessage(text) {
+    const input = document.querySelector(
+      "#main footer div[contenteditable='true'], " +
+      "div[contenteditable='true'][data-tab='10'], " +
+      "div[data-lexical-editor='true'], " +
+      "footer div[contenteditable='true']"
+    );
+    if (!input) return false;
+
+    input.focus();
+    document.execCommand("insertText", false, text);
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+
+    setTimeout(() => {
+      const sendButton = document.querySelector(
+        'button[aria-label="Enviar"], ' +
+        'button[data-tab="11"], ' +
+        'span[data-icon="send"]'
+      )?.closest("button");
+
+      if (sendButton) {
+        sendButton.click();
+      } else {
+        const enterDown = new KeyboardEvent("keydown", { bubbles: true, cancelable: true, keyCode: 13, which: 13 });
+        input.dispatchEvent(enterDown);
+      }
+    }, 450);
+
+    return true;
+  }
+
+  // Resposta automática da Sofia no piloto automático
+  async function checkForIncomingMessages() {
+    if (!isSofiaActive || isAnswering || isBatchMining) return;
+
+    const contact = getActiveContactInfo();
+    if (!contact) return;
+
+    if (pausedChats.has(contact.name) || pausedChats.has(contact.phone)) return;
+
+    const mainPanel = document.querySelector("#main");
+    if (!mainPanel) return;
+
+    const messageNodes = mainPanel.querySelectorAll("div[data-id], div[class*='message-in'], div[class*='message-out'], .message-in, .message-out");
+    if (messageNodes.length === 0) return;
+
+    const lastMsgNode = messageNodes[messageNodes.length - 1];
+    const dataId = lastMsgNode.getAttribute("data-id") || "";
+    const isClient = dataId.startsWith("false_") || lastMsgNode.className.includes("message-in");
+    if (!isClient) return;
+
+    const textEl = lastMsgNode.querySelector(".selectable-text, .copyable-text, span[dir='ltr'], span[dir='auto']");
+    if (!textEl) return;
+
+    const text = (textEl.innerText || "").trim();
+    if (!text || text === lastProcessedMessage) return;
+
+    lastProcessedMessage = text;
+    isAnswering = true;
+
+    // Simula tempo de digitação humana (2 a 3.5 segundos)
+    const humanDelay = 2000 + Math.floor(Math.random() * 1500);
+
+    setTimeout(async () => {
+      try {
+        const res = await fetch(`${crmBaseUrl}/api/ai/chat`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            message: text,
+            clientPhone: contact.phone,
+            clientName: contact.name,
+            autoSync: true,
+            empresaId: "ebe1ab22-519e-4784-8f96-e7f0d7a8c0a3"
+          })
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.reply) {
+            sendWhatsAppMessage(data.reply);
+
+            if (data.isHandoff) {
+              pausedChats.add(contact.name);
+              if (contact.phone) pausedChats.add(contact.phone);
+              showInAppNotification(`⚠️ [Transbordo] ${contact.name} solicitou especialista. Sofia pausada para este contato.`);
+            }
+
+            if (window.chrome && chrome.storage && chrome.storage.local) {
+              chrome.storage.local.get(["repliedCount"], (store) => {
+                const count = (store.repliedCount || 0) + 1;
+                chrome.storage.local.set({ repliedCount: count });
+              });
+            }
+          }
+        }
+      } catch (err) {
+        console.error("[Sofia AI] Erro ao responder:", err);
+      } finally {
+        isAnswering = false;
+      }
+    }, humanDelay);
+  }
+
   // Injeta Widget Flutuante no topo do WhatsApp Web
   function renderFloatingWidget() {
     if (document.getElementById("sofia-floating-widget")) return;
@@ -59,7 +622,7 @@
       gap: 6px;
       background: #0f172a;
       color: #f8fafc;
-      padding: 5px 10px;
+      padding: 5px 12px;
       border-radius: 20px;
       box-shadow: 0 4px 18px rgba(0,0,0,0.35);
       border: 1px solid #10b981;
@@ -132,11 +695,6 @@
       const res = await mineActiveChat();
       mineBtn.textContent = "⚡ Minerar";
       mineBtn.disabled = false;
-      if (res.success) {
-        showInAppNotification(res.message);
-      } else {
-        showInAppNotification(res.error, true);
-      }
     });
 
     const mineAllBtn = widget.querySelector("#sofia-btn-mine-all");
@@ -165,390 +723,6 @@
     }
   }
 
-  // Notificação toast dentro do WhatsApp Web
-  function showInAppNotification(msg, isError = false) {
-    const toast = document.createElement("div");
-    toast.style.cssText = `
-      position: fixed;
-      bottom: 24px;
-      right: 24px;
-      z-index: 9999999;
-      background: ${isError ? "#7f1d1d" : "#064e3b"};
-      color: #fff;
-      padding: 12px 18px;
-      border-radius: 8px;
-      box-shadow: 0 4px 18px rgba(0,0,0,0.4);
-      border: 1px solid ${isError ? "#ef4444" : "#10b981"};
-      font-family: sans-serif;
-      font-size: 13px;
-      font-weight: 500;
-      max-width: 400px;
-      animation: fadeIn 0.3s ease;
-    `;
-    toast.textContent = msg;
-    document.body.appendChild(toast);
-    setTimeout(() => {
-      toast.style.opacity = "0";
-      toast.style.transition = "opacity 0.4s";
-      setTimeout(() => toast.remove(), 400);
-    }, 4500);
-  }
-
-  // Helper com camadas de fallback para identificar o contato ativo no WhatsApp Web
-  function getActiveContactInfo() {
-    let name = "";
-    let phone = "";
-
-    // 1. Verifica se há uma conversa aberta checando a existência da área de digitação ou rodapé
-    const hasActiveChat = document.querySelector("footer, div[contenteditable='true'], [data-lexical-editor='true']");
-    if (!hasActiveChat) {
-      return null; // Nenhuma conversa selecionada na tela neste momento
-    }
-
-    // 2. Encontra o cabeçalho da conversa aberta (exclui o cabeçalho da barra lateral de conversas)
-    const headers = Array.from(document.querySelectorAll("header"));
-    const chatHeader = headers.find(h => !h.closest("#pane-side") && !h.closest("[data-testid='chat-list']")) || headers[headers.length - 1];
-
-    if (chatHeader) {
-      const titleEl = chatHeader.querySelector(
-        "span[data-testid='conversation-info-header-chat-title'], " +
-        "div[role='button'] span[dir='auto'], " +
-        "h2, " +
-        "span[dir='auto'][title], " +
-        "span[title], " +
-        "span[dir='auto']"
-      );
-      if (titleEl) {
-        name = (titleEl.getAttribute("title") || titleEl.innerText || "").trim();
-      }
-
-      // Procura número explícito no subtítulo (ex: "+55 11 98765-4321")
-      const subTitleEl = chatHeader.querySelector("span[title*='+'], span[title*='55'], span[dir='auto']:not(:first-child)");
-      if (subTitleEl) {
-        const text = subTitleEl.innerText || subTitleEl.getAttribute("title") || "";
-        const digits = text.replace(/\D/g, "");
-        if (digits.length >= 10 && digits.startsWith("55")) {
-          phone = digits;
-        }
-      }
-    }
-
-    // 3. Extrai o telefone internacional diretamente do atributo data-id das mensagens
-    // Padrão do WhatsApp Web: false_5511999998888@c.us_3EB0... ou true_5511999998888@c.us_...
-    if (!phone) {
-      const msgWithDataId = document.querySelector("div[data-id*='@c.us']");
-      if (msgWithDataId) {
-        const dataId = msgWithDataId.getAttribute("data-id") || "";
-        const match = dataId.match(/_(\d{10,15})@c\.us/);
-        if (match && match[1]) {
-          phone = match[1];
-        }
-      }
-    }
-
-    // 4. Se o nome for o próprio número de telefone
-    const digitsInName = (name || "").replace(/\D/g, "");
-    if (digitsInName.length >= 10 && !phone) {
-      phone = digitsInName;
-    }
-
-    if (!name && !phone) {
-      return null;
-    }
-
-    const finalPhone = phone || (digitsInName.length >= 8 ? digitsInName : "550000000000");
-    const finalName = name || `Cliente (${finalPhone.slice(-4)})`;
-
-    return { name: finalName, phone: finalPhone };
-  }
-
-  // Extrai mensagens da conversa atual com suporte universal ao DOM moderno do WhatsApp
-  function extractActiveChatMessages() {
-    const messages = [];
-
-    // Busca elementos de mensagem por múltiplos seletores possíveis
-    const messageNodes = document.querySelectorAll(
-      "div[data-id], " +
-      "div[data-testid='msg-container'], " +
-      "div[role='row'], " +
-      "div[class*='message-in'], " +
-      "div[class*='message-out'], " +
-      ".message-in, " +
-      ".message-out"
-    );
-
-    messageNodes.forEach((node) => {
-      // Ignora divisores de data ('Hoje', 'Ontem', etc.)
-      const textEl = node.querySelector(
-        ".copyable-text span, " +
-        ".selectable-text, " +
-        "[data-testid='selectable-text'], " +
-        "span[dir='ltr'], " +
-        "span[dir='auto']"
-      );
-      if (!textEl) return;
-
-      const text = (textEl.innerText || "").trim();
-      if (!text || text.length < 2) return;
-
-      // Determina se a mensagem é do cliente ou do operador
-      const dataId = node.getAttribute("data-id") || "";
-      const isOut = (
-        dataId.startsWith("true_") ||
-        node.className.includes("message-out") ||
-        !!node.querySelector("span[data-icon*='check'], [data-testid*='check']")
-      );
-
-      messages.push({
-        sender: isOut ? "me" : "client",
-        text: text
-      });
-    });
-
-    // Fallback: se nenhum nó estruturado foi encontrado, captura parágrafos do container central
-    if (messages.length === 0) {
-      const panel = document.querySelector("#main, div[data-testid='conversation-panel-body'], div[role='region']");
-      if (panel) {
-        const textElements = panel.querySelectorAll("span.selectable-text, span[dir='auto']");
-        textElements.forEach((el) => {
-          const t = (el.innerText || "").trim();
-          if (t && t.length > 3 && !t.includes("Online") && !t.includes("digitando") && !t.includes("visto por último")) {
-            messages.push({ sender: "client", text: t });
-          }
-        });
-      }
-    }
-
-    console.log(`[Sofia AI] Total de mensagens extraídas: ${messages.length}`);
-    return messages;
-  }
-
-  // Minera o histórico da conversa atualmente aberta
-  async function mineActiveChat(silent = false) {
-    const contact = getActiveContactInfo();
-    if (!contact) {
-      return { 
-        success: false, 
-        error: "Nenhuma conversa detectada. Clique em um contato na barra lateral do WhatsApp Web antes de minerar." 
-      };
-    }
-
-    const messages = extractActiveChatMessages();
-    if (messages.length === 0) {
-      return { 
-        success: false, 
-        error: `Não foram encontradas mensagens legíveis na conversa com ${contact.name}. Envie ou aguarde uma mensagem.` 
-      };
-    }
-
-    try {
-      console.log(`[Sofia AI] Enviando ${messages.length} mensagens de ${contact.name} para análise...`);
-      const response = await fetch(`${crmBaseUrl}/api/ai/analyze-chat`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          clientPhone: contact.phone,
-          clientName: contact.name,
-          messages: messages.slice(-25) // Analisa até as últimas 25 mensagens
-        })
-      });
-
-      if (!response.ok) {
-        const err = await response.text();
-        return { success: false, error: "Erro na API da Sofia: " + err };
-      }
-
-      const data = await response.json();
-      const successMsg = `🎉 Mineração concluída! ${contact.name} sincronizado no CRM como [${data.analysis?.produto || "Crédito"} - ${data.analysis?.temperatura || "Morno"}].`;
-      
-      if (!silent) {
-        showInAppNotification(successMsg);
-      }
-
-      // Atualiza contador no chrome.storage
-      if (window.chrome && chrome.storage && chrome.storage.local) {
-        chrome.storage.local.get(["leadsSyncedCount"], (store) => {
-          const current = (store.leadsSyncedCount || 0) + 1;
-          chrome.storage.local.set({ leadsSyncedCount: current });
-        });
-      }
-
-      return {
-        success: true,
-        message: successMsg,
-        data
-      };
-    } catch (e) {
-      return { success: false, error: "Falha de conexão com a Discadora: " + e.message };
-    }
-  }
-
-  // Minera todas as conversas visíveis na barra lateral em lote (Varredura Automática)
-  async function mineAllChats() {
-    if (isBatchMining) {
-      showInAppNotification("A varredura automática já está em andamento!", true);
-      return { success: false, message: "Varredura em andamento" };
-    }
-
-    // Seleciona as conversas listadas na barra lateral
-    const chatItems = document.querySelectorAll(
-      "#pane-side div[role='listitem'], " +
-      "#pane-side div[data-testid='cell-frame-container'], " +
-      "#pane-side div[tabindex='-1'][role='row'], " +
-      "#pane-side div[role='row']"
-    );
-
-    if (!chatItems || chatItems.length === 0) {
-      showInAppNotification("Nenhuma conversa visível encontrada na barra lateral.", true);
-      return { success: false, error: "Nenhuma conversa na barra lateral." };
-    }
-
-    isBatchMining = true;
-    const totalToMine = Math.min(chatItems.length, 25); // Até 25 conversas por rodada para não travar
-    showInAppNotification(`🚀 Iniciando varredura em lote de ${totalToMine} conversas...`);
-
-    let successCount = 0;
-
-    for (let i = 0; i < totalToMine; i++) {
-      if (!isBatchMining) break;
-
-      const item = chatItems[i];
-      try {
-        // Dispara eventos de clique reais no elemento interno da conversa
-        const clickable = item.querySelector("div[role='button'], div[tabindex='-1'], [data-testid='cell-frame-container']") || item;
-        clickable.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }));
-        clickable.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, cancelable: true }));
-        clickable.click();
-        showInAppNotification(`⏳ [${i + 1}/${totalToMine}] Analisando conversa...`);
-
-        // Aguarda 1.8 segundos para as mensagens carregarem no painel
-        await new Promise((resolve) => setTimeout(resolve, 1800));
-
-        const res = await mineActiveChat(true);
-        if (res && res.success) {
-          successCount++;
-        }
-      } catch (err) {
-        console.warn(`[Sofia AI] Erro ao minerar item ${i + 1}:`, err);
-      }
-
-      // Intervalo cadenciado entre conversas
-      await new Promise((resolve) => setTimeout(resolve, 700));
-    }
-
-    isBatchMining = false;
-    const summary = `🎉 Varredura finalizada! ${successCount} de ${totalToMine} conversas qualificadas e enviadas ao CRM.`;
-    showInAppNotification(summary);
-
-    return {
-      success: true,
-      message: summary
-    };
-  }
-
-  // Simula digitação humana no campo de mensagem do WhatsApp Web
-  function sendWhatsAppMessage(text) {
-    const input = document.querySelector(
-      "#main footer div[contenteditable='true'], " +
-      "div[contenteditable='true'][data-tab='10'], " +
-      "div[data-lexical-editor='true'], " +
-      "footer div[contenteditable='true']"
-    );
-    if (!input) return false;
-
-    input.focus();
-    document.execCommand("insertText", false, text);
-    input.dispatchEvent(new Event("input", { bubbles: true }));
-
-    setTimeout(() => {
-      const sendButton = document.querySelector(
-        'button[aria-label="Enviar"], ' +
-        'button[data-tab="11"], ' +
-        'span[data-icon="send"]'
-      )?.closest("button");
-
-      if (sendButton) {
-        sendButton.click();
-      } else {
-        const enterDown = new KeyboardEvent("keydown", { bubbles: true, cancelable: true, keyCode: 13, which: 13 });
-        input.dispatchEvent(enterDown);
-      }
-    }, 450);
-
-    return true;
-  }
-
-  // Verifica e processa mensagens recebidas na conversa aberta
-  async function checkForIncomingMessages() {
-    if (!isSofiaActive || isAnswering || isBatchMining) return;
-
-    const contact = getActiveContactInfo();
-    if (!contact) return;
-
-    if (pausedChats.has(contact.name) || pausedChats.has(contact.phone)) return;
-
-    const messageNodes = document.querySelectorAll("div[data-id], div[class*='message-in'], div[class*='message-out'], .message-in, .message-out");
-    if (messageNodes.length === 0) return;
-
-    const lastMsgNode = messageNodes[messageNodes.length - 1];
-
-    // Verifica se a última mensagem foi enviada pelo cliente
-    const dataId = lastMsgNode.getAttribute("data-id") || "";
-    const isClient = dataId.startsWith("false_") || lastMsgNode.className.includes("message-in");
-    if (!isClient) return;
-
-    const textEl = lastMsgNode.querySelector(".selectable-text, .copyable-text, span[dir='ltr'], span[dir='auto']");
-    if (!textEl) return;
-
-    const text = (textEl.innerText || "").trim();
-    if (!text || text === lastProcessedMessage) return;
-
-    lastProcessedMessage = text;
-    isAnswering = true;
-
-    // Aguarda entre 2 a 4 segundos simulando tempo de digitação humano
-    const humanDelay = 2000 + Math.floor(Math.random() * 2000);
-
-    setTimeout(async () => {
-      try {
-        const res = await fetch(`${crmBaseUrl}/api/ai/chat`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            message: text,
-            clientPhone: contact.phone,
-            clientName: contact.name,
-            autoSync: true
-          })
-        });
-
-        if (res.ok) {
-          const data = await res.json();
-          if (data && data.reply) {
-            sendWhatsAppMessage(data.reply);
-
-            if (data.isHandoff) {
-              pausedChats.add(contact.name);
-              if (contact.phone) pausedChats.add(contact.phone);
-              showInAppNotification(`⚠️ [Transbordo Humano] ${contact.name} solicitou especialista. Sofia pausada para este contato.`);
-            }
-
-            if (window.chrome && chrome.storage && chrome.storage.local) {
-              chrome.storage.local.get(["repliedCount"], (store) => {
-                const count = (store.repliedCount || 0) + 1;
-                chrome.storage.local.set({ repliedCount: count });
-              });
-            }
-          }
-        }
-      } catch (err) {
-        console.error("[Sofia AI] Erro ao responder mensagem:", err);
-      } finally {
-        isAnswering = false;
-      }
-    }, humanDelay);
-  }
-
   // Observador de mutações no WhatsApp Web
   const observer = new MutationObserver(() => {
     checkForIncomingMessages();
@@ -561,7 +735,6 @@
       setInterval(checkForIncomingMessages, 2500);
       renderFloatingWidget();
 
-      // Garante que o widget permaneça visível mesmo após trocas de rotas no WhatsApp Web
       setInterval(() => {
         if (!document.getElementById("sofia-floating-widget") && document.body) {
           renderFloatingWidget();
