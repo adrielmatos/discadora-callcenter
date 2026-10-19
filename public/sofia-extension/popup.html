@@ -60,6 +60,10 @@
     <div class="badge-status" id="statusBadge">Pronto</div>
   </div>
 
+  <button class="btn btn-primary" id="btnOpenWhatsApp" style="background: linear-gradient(135deg, #10b981, #047857); font-weight: 700; margin-bottom: 12px; padding: 11px; font-size: 13px; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);">
+    🟢 Abrir WhatsApp Web Oficial
+  </button>
+
   <div class="card">
     <div class="switch-row">
       <div>
@@ -85,13 +89,18 @@
   </div>
 
   <div class="card">
-    <div class="card-title">Mineração de Crédito</div>
+    <div class="card-title">Mineração Inteligente de Leads</div>
     <div style="font-size: 11px; color: #cbd5e1; margin-bottom: 8px;">
-      Analisa o histórico da conversa aberta no WhatsApp e identifica se há oportunidade de FGTS ou Consignado.
+      Identifica FGTS e Consignado no histórico das conversas e sincroniza automaticamente com o CRM.
     </div>
-    <button class="btn btn-primary" id="btnMineCurrentChat">
-      ⚡ Minerar e Enviar para CRM
-    </button>
+    <div style="display: flex; flex-direction: column; gap: 6px;">
+      <button class="btn btn-primary" id="btnMineCurrentChat">
+        ⚡ Minerar Conversa Aberta
+      </button>
+      <button class="btn btn-secondary" id="btnMineAllChats" style="border-color: #38bdf8; color: #38bdf8; margin-top: 0;">
+        🔍 Minerar Todas as Conversas (Varredura)
+      </button>
+    </div>
   </div>
 
   <div class="card">

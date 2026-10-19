@@ -104,6 +104,38 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   });
 
+  // Minerar Todas as Conversas (Varredura Automática)
+  const btnMineAll = document.getElementById("btnMineAllChats");
+  if (btnMineAll) {
+    btnMineAll.addEventListener("click", () => {
+      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        if (!tabs[0] || !tabs[0].url || !tabs[0].url.includes("web.whatsapp.com")) {
+          alert("Abra o WhatsApp Web oficial (web.whatsapp.com) antes de iniciar a varredura.");
+          return;
+        }
+
+        btnMineAll.textContent = "⏳ Varredura em andamento...";
+        btnMineAll.disabled = true;
+
+        chrome.tabs.sendMessage(tabs[0].id, { action: "MINE_ALL_CHATS" }, (response) => {
+          btnMineAll.disabled = false;
+          btnMineAll.textContent = "🔍 Minerar Todas as Conversas (Varredura)";
+          if (response && response.message) {
+            alert(response.message);
+          }
+        });
+      });
+    });
+  }
+
+  // Abrir WhatsApp Web
+  const btnOpenWhatsApp = document.getElementById("btnOpenWhatsApp");
+  if (btnOpenWhatsApp) {
+    btnOpenWhatsApp.addEventListener("click", () => {
+      chrome.tabs.create({ url: "https://web.whatsapp.com" });
+    });
+  }
+
   // Abrir CRM
   btnOpenCrm.addEventListener("click", () => {
     const url = (crmUrlInput.value.trim() || "https://discadora-callcenter.vercel.app") + "/leads";
