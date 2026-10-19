@@ -6,7 +6,8 @@ import { useState, useEffect } from "react";
 import { 
   LayoutDashboard, PhoneCall, Kanban, FileText, 
   Settings, PhoneOff, Calendar,
-  BarChart3, Target, Phone, MessageSquare, LogOut, Building2
+  BarChart3, Target, Phone, MessageSquare, LogOut, Building2,
+  ShieldCheck, Download
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
@@ -71,6 +72,7 @@ export default function Sidebar() {
       title: "Canais & Inteligência",
       items: [
         { name: "Atendente IA 24h", path: "/omnichannel", icon: MessageSquare },
+        { name: "Extensão WhatsApp (ZIP)", path: "/download-extensao", icon: ShieldCheck },
         { name: "Scripts de Atendimento", path: "/scripts", icon: FileText },
         { name: "Bloqueio Não Perturbe", path: "/dnd", icon: PhoneOff },
         { name: "Telefonia SIP", path: "/telefonia", icon: Phone },
@@ -139,6 +141,25 @@ export default function Sidebar() {
           </div>
         ))}
       </nav>
+
+      {/* Card de Download Rápido da Extensão */}
+      <div className="px-3 py-2 border-t border-slate-800/60 shrink-0">
+        <Link
+          href="/download-extensao"
+          className="w-full bg-gradient-to-r from-emerald-950/80 to-slate-900 hover:from-emerald-900/90 hover:to-slate-800 text-white p-2.5 rounded-xl border border-emerald-500/40 flex items-center justify-between shadow-md transition group cursor-pointer"
+        >
+          <div className="flex items-center space-x-2.5 min-w-0">
+            <div className="w-7 h-7 rounded-lg bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center shrink-0">
+              <ShieldCheck size={16} className="text-emerald-400" />
+            </div>
+            <div className="text-left min-w-0">
+              <span className="text-[11px] font-bold block leading-tight text-white truncate">Extensão WhatsApp</span>
+              <span className="text-[9px] text-emerald-400 font-semibold block">Anti-Ban • Baixar ZIP</span>
+            </div>
+          </div>
+          <Download size={14} className="text-emerald-400 shrink-0 group-hover:translate-y-0.5 transition" />
+        </Link>
+      </div>
 
       {/* Footer & Logout */}
       <div className="p-3 border-t border-slate-800/60 shrink-0 space-y-2">
