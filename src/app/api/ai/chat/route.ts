@@ -12,13 +12,28 @@ interface ProviderCandidate {
   label: string;
 }
 
+// Output Guardrail para Conformidade Bacen nº 3.954/2011 e CDC Art. 39
+function sanitizeBacenReply(text: string): string {
+  if (!text) return "";
+  const forbiddenPatterns = [
+    /taxa\s+(de\s+)?(cadastro|abertura|seguro|antecipada)/i,
+    /dep[oó]sito\s+pr[eé]vio/i,
+    /pagar\s+(algo|valor|taxa)\s+antes/i
+  ];
+  if (forbiddenPatterns.some(pattern => pattern.test(text))) {
+    return "Nosso atendimento é 100% gratuito e não cobramos nenhuma taxa antecipada, em estrita conformidade com as normas do Banco Central. Deseja realizar sua simulação gratuita agora?";
+  }
+  return text;
+}
+
 // Sincroniza conversa e cliente diretamente com o CRM da Discadora (Supabase)
 async function syncConversationToCrm(
   phone: string,
   name?: string,
   userMessage?: string,
   aiReply?: string,
-  isHandoff?: boolean
+  isHandoff?: boolean,
+  empresaId?: string
 ) {
   try {
     if (!phone) return null;
@@ -27,11 +42,16 @@ async function syncConversationToCrm(
 
     const searchPhone = cleanPhone.slice(-8); // Busca pelos últimos 8 dígitos para cobrir com/sem 55 e DDD
 
-    const { data: existingLeads } = await supabase
+    let leadQuery = supabase
       .from("leads")
       .select("id, nome, telefone, etapa_crm, status")
-      .ilike("telefone", `%${searchPhone}%`)
-      .limit(1);
+      .ilike("telefone", `%${searchPhone}%`);
+
+    if (empresaId) {
+      leadQuery = leadQuery.eq("empresa_id", empresaId);
+    }
+
+    const { data: existingLeads } = await leadQuery.limit(1);
 
     let leadId: number | null = null;
     const nextEtapa = isHandoff ? "Simulação" : "Interessado";
@@ -54,16 +74,19 @@ async function syncConversationToCrm(
     } else {
       // Cria automaticamente um novo lead vindo do WhatsApp
       const cleanName = (name || "").trim() || `Cliente WhatsApp (${cleanPhone.slice(-4)})`;
+      const insertPayload: any = {
+        nome: cleanName,
+        telefone: cleanPhone,
+        status: "pendente",
+        etapa_crm: nextEtapa,
+        ultima_tabulacao: tabulacaoLabel,
+        produto: "FGTS / Consignado"
+      };
+      if (empresaId) insertPayload.empresa_id = empresaId;
+
       const { data: newLead } = await supabase
         .from("leads")
-        .insert({
-          nome: cleanName,
-          telefone: cleanPhone,
-          status: "pendente",
-          etapa_crm: nextEtapa,
-          ultima_tabulacao: tabulacaoLabel,
-          produto: "FGTS / Consignado"
-        })
+        .insert(insertPayload)
         .select("id")
         .single();
 
@@ -150,7 +173,8 @@ async function callGemini(
       const res = await fetch(geminiUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(8000)
       });
 
       if (res.ok) {
@@ -162,7 +186,8 @@ async function callGemini(
       } else {
         const errText = await res.text();
         lastError = { error: errText, status: res.status };
-        if (res.status === 404 || res.status === 503) continue;
+        // Em 404 (modelo indisponível), 503 (serviço ocupado) ou 429 (rate limit), avança para o próximo modelo/chave
+        if (res.status === 404 || res.status === 503 || res.status === 429) continue;
         return lastError;
       }
     } catch (err: any) {
@@ -206,7 +231,8 @@ async function callGroq(
         messages,
         temperature: 0.5,
         max_tokens: 140
-      })
+      }),
+      signal: AbortSignal.timeout(8000)
     });
 
     if (!res.ok) {
@@ -235,19 +261,24 @@ export async function POST(req: NextRequest) {
       agentName, 
       handoffTriggers,
       clientPhone,
-      clientName
+      clientName,
+      empresaId
     } = await req.json();
 
     if (!message || typeof message !== "string") {
       return NextResponse.json({ error: "Mensagem obrigatória" }, { status: 400 });
     }
 
-    // Busca configurações no banco Supabase
-    const { data: config } = await supabase
+    // Busca configurações no banco Supabase (com suporte a isolamento por empresa)
+    let configQuery = supabase
       .from("app_configuracoes")
-      .select("gemini_api_key, groq_api_key, ai_knowledge, ai_name, empresa_nome, ai_handoff_triggers")
-      .limit(1)
-      .maybeSingle();
+      .select("gemini_api_key, groq_api_key, ai_knowledge, ai_name, empresa_nome, ai_handoff_triggers");
+    
+    if (empresaId) {
+      configQuery = configQuery.eq("empresa_id", empresaId);
+    }
+
+    const { data: config } = await configQuery.limit(1).maybeSingle();
 
     const effectiveCompany = company || config?.empresa_nome || "A&K Soluções Financeiras";
     const effectiveName = agentName || config?.ai_name || "Sofia";
@@ -261,11 +292,12 @@ export async function POST(req: NextRequest) {
 
     // Se o cliente acionou o gatilho de fechamento/transbordo humano
     if (shouldHandoff) {
-      const reply = `Perfeito! Já transferi seu atendimento para o nosso especialista da ${effectiveCompany}. Ele já tem o seu histórico e vai falar com você aqui em instantes para concluir a formalização! 🚀`;
+      const rawReply = `Perfeito! Já transferi seu atendimento para o nosso especialista da ${effectiveCompany}. Ele já tem o seu histórico e vai falar com você aqui em instantes para concluir a formalização! 🚀`;
+      const reply = sanitizeBacenReply(rawReply);
       
       let syncResult = null;
       if (clientPhone) {
-        syncResult = await syncConversationToCrm(clientPhone, clientName, message, reply, true);
+        syncResult = await syncConversationToCrm(clientPhone, clientName, message, reply, true, empresaId);
       }
 
       return NextResponse.json({
@@ -358,12 +390,13 @@ ESTRATÉGIAS COMERCIAIS POR PERFIL:
         if (candidate.type === "gemini") {
           const result = await callGemini(candidate.key, systemInstruction, history, message);
           if ("text" in result && result.text) {
+            const cleanText = sanitizeBacenReply(result.text);
             let syncResult = null;
             if (clientPhone) {
-              syncResult = await syncConversationToCrm(clientPhone, clientName, message, result.text, false);
+              syncResult = await syncConversationToCrm(clientPhone, clientName, message, cleanText, false, empresaId);
             }
             return NextResponse.json({
-              reply: result.text,
+              reply: cleanText,
               isHandoff: false,
               source: "gemini_ai",
               provider: candidate.label,
@@ -374,12 +407,13 @@ ESTRATÉGIAS COMERCIAIS POR PERFIL:
         } else if (candidate.type === "groq") {
           const result = await callGroq(candidate.key, systemInstruction, history, message);
           if ("text" in result && result.text) {
+            const cleanText = sanitizeBacenReply(result.text);
             let syncResult = null;
             if (clientPhone) {
-              syncResult = await syncConversationToCrm(clientPhone, clientName, message, result.text, false);
+              syncResult = await syncConversationToCrm(clientPhone, clientName, message, cleanText, false, empresaId);
             }
             return NextResponse.json({
-              reply: result.text,
+              reply: cleanText,
               isHandoff: false,
               source: "groq_ai",
               provider: candidate.label,

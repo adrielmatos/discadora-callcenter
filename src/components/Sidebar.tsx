@@ -7,7 +7,7 @@ import {
   LayoutDashboard, PhoneCall, Kanban, FileText, 
   Settings, PhoneOff, Calendar,
   BarChart3, Target, Phone, MessageSquare, LogOut, Building2,
-  ShieldCheck, Download
+  ShieldCheck, Download, ChevronLeft, ChevronRight
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
@@ -15,6 +15,7 @@ export default function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const [currentUser, setCurrentUser] = useState<{ email?: string; nome?: string } | null>(null);
+  const [isCollapsed, setIsCollapsed] = useState(false);
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -82,59 +83,73 @@ export default function Sidebar() {
   ];
 
   return (
-    <aside className="w-64 bg-[#0a0e17] border-r border-slate-800/80 flex flex-col h-screen text-slate-400 select-none">
+    <aside className={`${isCollapsed ? "w-16" : "w-64"} bg-[#0a0e17] border-r border-slate-800/80 flex flex-col h-screen text-slate-400 select-none transition-all duration-200 shrink-0`}>
       {/* Brand Header */}
-      <div className="h-16 flex items-center px-6 border-b border-slate-800/60 shrink-0">
-        <div className="flex items-center space-x-3">
-          <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white font-bold text-sm tracking-wider shadow-sm">
+      <div className={`h-16 flex items-center ${isCollapsed ? "justify-center px-2" : "justify-between px-6"} border-b border-slate-800/60 shrink-0`}>
+        <div className="flex items-center space-x-3 overflow-hidden">
+          <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white font-bold text-sm tracking-wider shadow-sm shrink-0">
             AK
           </div>
-          <div>
-            <h1 className="text-white font-bold text-sm tracking-tight leading-tight">A&K Soluções</h1>
-            <p className="text-[10px] text-blue-400 font-semibold tracking-wider uppercase">Call Center Pro</p>
-          </div>
+          {!isCollapsed && (
+            <div className="min-w-0">
+              <h1 className="text-white font-bold text-sm tracking-tight leading-tight truncate">A&K Soluções</h1>
+              <p className="text-[10px] text-blue-400 font-semibold tracking-wider uppercase truncate">Call Center Pro</p>
+            </div>
+          )}
         </div>
+        <button
+          onClick={() => setIsCollapsed(!isCollapsed)}
+          className="text-slate-400 hover:text-white p-1 rounded-md hover:bg-slate-800 transition cursor-pointer"
+          title={isCollapsed ? "Expandir menu lateral" : "Recolher menu lateral"}
+        >
+          {isCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
+        </button>
       </div>
 
       {/* User Status Card */}
-      <div className="px-4 py-3 border-b border-slate-800/40 shrink-0">
-        <div className="flex items-center space-x-3 bg-slate-900/60 px-3 py-2 rounded-lg border border-slate-800/60">
-          <div className="w-7 h-7 rounded-full bg-blue-600 border border-blue-500/40 flex items-center justify-center text-white font-bold text-xs">
-            {(currentUser?.nome || "A").charAt(0).toUpperCase()}
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-slate-200 font-semibold text-xs truncate">
-              {currentUser?.nome || "Adriel (Dono)"}
-            </p>
-            <p className="text-[10px] text-emerald-400 flex items-center space-x-1 font-medium">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0"></span>
-              <span className="truncate">Administrador • Online</span>
-            </p>
+      {!isCollapsed && (
+        <div className="px-4 py-3 border-b border-slate-800/40 shrink-0">
+          <div className="flex items-center space-x-3 bg-slate-900/60 px-3 py-2 rounded-lg border border-slate-800/60">
+            <div className="w-7 h-7 rounded-full bg-blue-600 border border-blue-500/40 flex items-center justify-center text-white font-bold text-xs shrink-0">
+              {(currentUser?.nome || "A").charAt(0).toUpperCase()}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-slate-200 font-semibold text-xs truncate">
+                {currentUser?.nome || "Adriel (Dono)"}
+              </p>
+              <p className="text-[10px] text-emerald-400 flex items-center space-x-1 font-medium">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0"></span>
+                <span className="truncate">Administrador • Online</span>
+              </p>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* Grouped Navigation */}
       <nav className="flex-1 overflow-y-auto py-3 px-3 space-y-4 custom-scrollbar">
         {navGroups.map((group) => (
           <div key={group.title} className="space-y-1">
-            <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider px-3 py-0.5">
-              {group.title}
-            </div>
+            {!isCollapsed && (
+              <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider px-3 py-0.5 truncate">
+                {group.title}
+              </div>
+            )}
             {group.items.map((item) => {
               const isActive = pathname === item.path;
               return (
                 <Link 
                   key={item.path} 
                   href={item.path}
-                  className={`flex items-center space-x-3 px-3 py-2 rounded-lg text-xs font-semibold transition-all ${
+                  title={item.name}
+                  className={`flex items-center ${isCollapsed ? "justify-center px-0 py-2.5" : "space-x-3 px-3 py-2"} rounded-lg text-xs font-semibold transition-all ${
                     isActive 
                       ? "bg-blue-600 text-white shadow-xs font-bold" 
                       : "text-slate-400 hover:bg-slate-800/60 hover:text-slate-100"
                   }`}
                 >
-                  <item.icon size={15} className={isActive ? "text-white" : "text-slate-400"} />
-                  <span>{item.name}</span>
+                  <item.icon size={16} className={isActive ? "text-white shrink-0" : "text-slate-400 shrink-0"} />
+                  {!isCollapsed && <span className="truncate">{item.name}</span>}
                 </Link>
               );
             })}
@@ -143,36 +158,42 @@ export default function Sidebar() {
       </nav>
 
       {/* Card de Download Rápido da Extensão */}
-      <div className="px-3 py-2 border-t border-slate-800/60 shrink-0">
+      <div className="px-2 py-2 border-t border-slate-800/60 shrink-0">
         <Link
           href="/download-extensao"
-          className="w-full bg-gradient-to-r from-emerald-950/80 to-slate-900 hover:from-emerald-900/90 hover:to-slate-800 text-white p-2.5 rounded-xl border border-emerald-500/40 flex items-center justify-between shadow-md transition group cursor-pointer"
+          title="Extensão WhatsApp Anti-Ban"
+          className={`w-full bg-gradient-to-r from-emerald-950/80 to-slate-900 hover:from-emerald-900/90 hover:to-slate-800 text-white p-2 rounded-xl border border-emerald-500/40 flex items-center ${isCollapsed ? "justify-center" : "justify-between"} shadow-md transition group cursor-pointer`}
         >
           <div className="flex items-center space-x-2.5 min-w-0">
             <div className="w-7 h-7 rounded-lg bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center shrink-0">
               <ShieldCheck size={16} className="text-emerald-400" />
             </div>
-            <div className="text-left min-w-0">
-              <span className="text-[11px] font-bold block leading-tight text-white truncate">Extensão WhatsApp</span>
-              <span className="text-[9px] text-emerald-400 font-semibold block">Anti-Ban • Baixar ZIP</span>
-            </div>
+            {!isCollapsed && (
+              <div className="text-left min-w-0">
+                <span className="text-[11px] font-bold block leading-tight text-white truncate">Extensão WhatsApp</span>
+                <span className="text-[9px] text-emerald-400 font-semibold block">Anti-Ban • Baixar ZIP</span>
+              </div>
+            )}
           </div>
-          <Download size={14} className="text-emerald-400 shrink-0 group-hover:translate-y-0.5 transition" />
+          {!isCollapsed && <Download size={14} className="text-emerald-400 shrink-0 group-hover:translate-y-0.5 transition" />}
         </Link>
       </div>
 
       {/* Footer & Logout */}
-      <div className="p-3 border-t border-slate-800/60 shrink-0 space-y-2">
+      <div className="p-2 border-t border-slate-800/60 shrink-0 space-y-2">
         <button
           onClick={handleLogout}
-          className="w-full flex items-center justify-center space-x-2 py-2 px-3 rounded-lg text-xs font-semibold text-rose-400 hover:text-white hover:bg-rose-950/40 border border-slate-800/60 hover:border-rose-900/50 transition cursor-pointer"
+          title="Sair da Conta"
+          className={`w-full flex items-center ${isCollapsed ? "justify-center" : "justify-center space-x-2"} py-2 px-2 rounded-lg text-xs font-semibold text-rose-400 hover:text-white hover:bg-rose-950/40 border border-slate-800/60 hover:border-rose-900/50 transition cursor-pointer`}
         >
-          <LogOut size={14} />
-          <span>Sair da Conta</span>
+          <LogOut size={16} />
+          {!isCollapsed && <span>Sair da Conta</span>}
         </button>
-        <div className="text-center">
-          <p className="text-[10px] text-slate-500 font-medium">A&K Soluções Financeiras • v3.2</p>
-        </div>
+        {!isCollapsed && (
+          <div className="text-center">
+            <p className="text-[10px] text-slate-500 font-medium">A&K Soluções Financeiras • v3.2</p>
+          </div>
+        )}
       </div>
     </aside>
   );

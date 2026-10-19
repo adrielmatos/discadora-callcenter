@@ -2,6 +2,12 @@
 const nextConfig = {
   poweredByHeader: false,
   compress: true,
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
+  experimental: {
+    optimizePackageImports: ['lucide-react']
+  },
   async headers() {
     return [
       {

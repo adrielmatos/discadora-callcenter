@@ -6,8 +6,22 @@ export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const etapa = searchParams.get("etapa") || "fila";
-    const limit = parseInt(searchParams.get("limit") || "50", 10);
-    const empresaId = searchParams.get("empresa_id");
+    const rawLimit = parseInt(searchParams.get("limit") || "50", 10);
+    // Limite máximo de segurança (Cap) para impedir exfiltração em massa
+    const limit = Math.min(Math.max(isNaN(rawLimit) ? 50 : rawLimit, 1), 200);
+    let empresaId = searchParams.get("empresa_id");
+
+    // Identificação de segurança do tenant autenticado
+    const authHeader = req.headers.get("authorization");
+    if (authHeader) {
+      try {
+        const token = authHeader.replace(/^Bearer\s+/i, "");
+        const { data: { user } } = await supabase.auth.getUser(token);
+        if (user?.app_metadata?.empresa_id) {
+          empresaId = user.app_metadata.empresa_id;
+        }
+      } catch {}
+    }
 
     let query = supabase
       .from("leads")

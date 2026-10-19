@@ -1,16 +1,28 @@
 "use client";
 
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useMemo } from "react";
+import dynamic from "next/dynamic";
 import { 
   Upload, Search, Download, RefreshCw, Kanban, Table, 
   ArrowRight, CheckCircle2, PhoneOff, XCircle, AlertCircle, User, MessageSquare,
   Building2, Filter, Eye, ShieldCheck, UserPlus, Send
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
-import * as XLSX from "xlsx";
-import LeadModal from "@/components/LeadModal";
-import LeadDrawer from "@/components/LeadDrawer";
-import BroadcastModal from "@/components/BroadcastModal";
+
+// Dynamic imports para reduzir o bundle inicial e eliminar travamentos
+const LeadModal = dynamic(() => import("@/components/LeadModal"), { ssr: false });
+const LeadDrawer = dynamic(() => import("@/components/LeadDrawer"), { ssr: false });
+const BroadcastModal = dynamic(() => import("@/components/BroadcastModal"), { ssr: false });
+
+// Hook de debounce customizado para busca instantânea sem input lag
+function useDebounceValue<T>(value: T, delayMs = 250): T {
+  const [debouncedValue, setDebouncedValue] = useState<T>(value);
+  useEffect(() => {
+    const handler = setTimeout(() => setDebouncedValue(value), delayMs);
+    return () => clearTimeout(handler);
+  }, [value, delayMs]);
+  return debouncedValue;
+}
 
 interface Lead {
   id: number;
@@ -37,6 +49,7 @@ export default function LeadsCRM() {
   const [viewMode, setViewMode] = useState<"kanban" | "table" | "esteira">("kanban");
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
+  const debouncedSearchTerm = useDebounceValue(searchTerm, 250);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isBroadcastOpen, setIsBroadcastOpen] = useState(false);
   const [selectedDrawerLead, setSelectedDrawerLead] = useState<Lead | null>(null);
@@ -149,6 +162,7 @@ export default function LeadsCRM() {
     let allLeads: any[] = [];
     const fileArray = Array.from(files);
 
+    const XLSX = await import("xlsx");
     for (const file of fileArray) {
       try {
         const data = await file.arrayBuffer();
@@ -213,7 +227,7 @@ export default function LeadsCRM() {
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
-  const handleExport = (format: "xlsx" | "csv" = "xlsx") => {
+  const handleExport = async (format: "xlsx" | "csv" = "xlsx") => {
     const listToExport = filteredLeads.length > 0 ? filteredLeads : leads;
     if (listToExport.length === 0) {
       alert("Nenhum lead disponível para exportar.");
@@ -233,6 +247,7 @@ export default function LeadsCRM() {
       "Operador / Carteira": l.operador_nome || "Pool Geral"
     }));
 
+    const XLSX = await import("xlsx");
     const ws = XLSX.utils.json_to_sheet(formatted);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Leads Exportados");
@@ -250,20 +265,49 @@ export default function LeadsCRM() {
     setLeads(prev => prev.map(l => l.id === leadId ? { ...l, etapa_crm: nextEtapa } : l));
   };
 
-  const filteredLeads = leads.filter(l => {
-    const matchSearch = l.nome.toLowerCase().includes(searchTerm.toLowerCase()) || 
-      l.telefone.includes(searchTerm) || 
-      (l.cpf && l.cpf.includes(searchTerm));
-    
-    const matchEmpresa = selectedEmpresa === "all" || l.empresa_id === selectedEmpresa;
-    const matchOperador = selectedOperador === "all" 
-      ? true 
-      : selectedOperador === "pool" 
-      ? !l.operador_nome 
-      : l.operador_nome === selectedOperador;
+  const filteredLeads = useMemo(() => {
+    const term = debouncedSearchTerm.toLowerCase().trim();
+    return leads.filter(l => {
+      const matchSearch = !term ||
+        l.nome.toLowerCase().includes(term) || 
+        l.telefone.includes(term) || 
+        (l.cpf && l.cpf.includes(term));
+      
+      const matchEmpresa = selectedEmpresa === "all" || l.empresa_id === selectedEmpresa;
+      const matchOperador = selectedOperador === "all" 
+        ? true 
+        : selectedOperador === "pool" 
+        ? !l.operador_nome 
+        : l.operador_nome === selectedOperador;
 
-    return matchSearch && matchEmpresa && matchOperador;
-  });
+      return matchSearch && matchEmpresa && matchOperador;
+    });
+  }, [leads, debouncedSearchTerm, selectedEmpresa, selectedOperador]);
+
+  // Mapa O(N) para indexação instantânea das colunas do Kanban sem filtros repetidos
+  const leadsByStageMap = useMemo(() => {
+    const map: Record<string, Lead[]> = {
+      "fila": [],
+      "interessado": [],
+      "simulação": [],
+      "proposta": [],
+      "contrato": [],
+      "não atendeu": [],
+      "não interessado": [],
+      "sem perfil": []
+    };
+    for (const l of filteredLeads) {
+      const stage = (l.etapa_crm || (l.status === "pendente" ? "fila" : l.ultima_tabulacao || "fila")).toLowerCase();
+      if (map[stage]) {
+        map[stage].push(l);
+      } else if (stage.includes("perfil") || stage.includes("inválido")) {
+        map["sem perfil"].push(l);
+      } else {
+        map["fila"].push(l);
+      }
+    }
+    return map;
+  }, [filteredLeads]);
 
   // Estágios do Pipeline correspondentes à Tabulação (sem Retorno que tem tela própria)
   const stages = [
@@ -604,11 +648,8 @@ export default function LeadsCRM() {
           /* Visual Pipeline Kanban com todas as tabulações */
           <div className="flex-1 flex space-x-3.5 overflow-x-auto pb-4 custom-scrollbar">
             {stages.map(st => {
-              const stageLeads = filteredLeads.filter(l => {
-                const currentStage = l.etapa_crm || (l.status === "pendente" ? "fila" : l.ultima_tabulacao || "fila");
-                return currentStage.toLowerCase() === st.id.toLowerCase() || 
-                       (st.id === "Sem perfil" && (currentStage === "Sem perfil" || currentStage === "Número inválido"));
-              });
+              const stageKey = st.id.toLowerCase();
+              const stageLeads = leadsByStageMap[stageKey] || [];
 
               return (
                 <div key={st.id} className="w-68 flex flex-col rounded-xl bg-slate-100/70 border border-slate-200 shrink-0 overflow-hidden">

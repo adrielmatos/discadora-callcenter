@@ -79,7 +79,8 @@ export async function POST(req: NextRequest) {
         const response = await fetch(endpoint, {
           method: "POST",
           headers,
-          body: JSON.stringify(payload)
+          body: JSON.stringify(payload),
+          signal: AbortSignal.timeout(10000)
         });
 
         const resData = await response.json();

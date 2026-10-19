@@ -282,19 +282,42 @@ export class SoftphoneEngine {
     }
     this.updateRegStatus("disconnected");
     this.updateCallState("idle");
+    this.cleanupRemoteAudio();
+  }
+
+  private smartphoneTimer: any = null;
+
+  private cleanupRemoteAudio() {
+    if (this.remoteAudioElement && this.remoteAudioElement.srcObject) {
+      try {
+        const stream = this.remoteAudioElement.srcObject as MediaStream;
+        if (stream.getTracks) {
+          stream.getTracks().forEach(track => {
+            try { track.stop(); } catch (e) {}
+          });
+        }
+      } catch (e) {}
+      this.remoteAudioElement.srcObject = null;
+    }
   }
 
   // Efetua discagem para o número do cliente
   async makeCall(phoneNumber: string): Promise<boolean> {
     const cleanNumber = phoneNumber.replace(/\D/g, "");
 
+    if (this.smartphoneTimer) {
+      clearTimeout(this.smartphoneTimer);
+      this.smartphoneTimer = null;
+    }
+
     // Se o ramal não estiver registrado via WebRTC, usa ponte celular
     if (!this.ua || this.regStatus !== "registered" || !this.ua.isRegistered()) {
       phoneAudio.startRinging();
       this.updateCallState("calling");
-      setTimeout(() => {
+      this.smartphoneTimer = setTimeout(() => {
         phoneAudio.stopRinging();
         this.updateCallState("talking");
+        this.smartphoneTimer = null;
       }, 2000);
       return false; // Indica modo alternativo
     }
@@ -303,8 +326,13 @@ export class SoftphoneEngine {
       this.updateCallState("calling");
       phoneAudio.startRinging();
 
-      // Solicita permissão do microfone
-      await navigator.mediaDevices.getUserMedia({ audio: true });
+      // Solicita permissão do microfone e encerra o stream temporário de teste
+      try {
+        const testStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        testStream.getTracks().forEach(track => track.stop());
+      } catch (micErr) {
+        console.warn("Aviso ao testar microfone:", micErr);
+      }
 
       const cleanHost = this.config?.sip_host.replace(/^https?:\/\//, "").replace(/^wss?:\/\//, "").replace(/\/.*$/, "") || "localhost";
       const targetUri = `sip:${cleanNumber}@${cleanHost}`;
@@ -366,6 +394,7 @@ export class SoftphoneEngine {
     session.on("ended", () => {
       phoneAudio.stopRinging();
       phoneAudio.playHangupTone();
+      this.cleanupRemoteAudio();
       this.currentSession = null;
       this.updateCallState("wrapup");
     });
@@ -373,6 +402,7 @@ export class SoftphoneEngine {
     session.on("failed", (e: any) => {
       phoneAudio.stopRinging();
       phoneAudio.playHangupTone();
+      this.cleanupRemoteAudio();
       this.lastError = e?.cause || "Chamada não completada pelo PABX";
       this.currentSession = null;
       this.updateCallState("failed");
@@ -381,7 +411,12 @@ export class SoftphoneEngine {
 
   // Desliga chamada ativa
   hangup() {
+    if (this.smartphoneTimer) {
+      clearTimeout(this.smartphoneTimer);
+      this.smartphoneTimer = null;
+    }
     phoneAudio.stopRinging();
+    this.cleanupRemoteAudio();
     if (this.currentSession) {
       try { this.currentSession.terminate(); } catch (e) {}
       this.currentSession = null;

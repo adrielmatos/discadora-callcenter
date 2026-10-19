@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import dynamic from "next/dynamic";
 import {
   PhoneCall, PhoneOff, Check, X, Calendar, MessageSquare,
   Play, FastForward, User, AlertCircle, Calculator,
@@ -10,8 +11,10 @@ import {
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { SoftphoneEngine, phoneAudio, SipConfig, SipRegStatus } from "@/lib/softphone";
-import SoftphoneKeypadModal from "@/components/SoftphoneKeypadModal";
-import FinanceCalculatorModal from "@/components/FinanceCalculatorModal";
+
+// Dynamic imports para reduzir o bundle inicial do discador
+const SoftphoneKeypadModal = dynamic(() => import("@/components/SoftphoneKeypadModal"), { ssr: false });
+const FinanceCalculatorModal = dynamic(() => import("@/components/FinanceCalculatorModal"), { ssr: false });
 
 const OBJECTION_LIST = [
   {
@@ -120,12 +123,43 @@ interface WhatsAppInteraction {
   raw: string;
 }
 
+// Subcomponente de Cronômetro Memoizado: elimina re-render da tela inteira a cada 1000ms
+const CallTimerDisplay = React.memo(function CallTimerDisplay({ 
+  onTick 
+}: { 
+  onTick?: (seconds: number) => void 
+}) {
+  const [seconds, setSeconds] = useState(0);
+
+  useEffect(() => {
+    const startTime = Date.now();
+    const interval = setInterval(() => {
+      const elapsed = Math.floor((Date.now() - startTime) / 1000);
+      setSeconds(elapsed);
+      if (onTick) onTick(elapsed);
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [onTick]);
+
+  const m = Math.floor(seconds / 60).toString().padStart(2, "0");
+  const s = (seconds % 60).toString().padStart(2, "0");
+
+  return (
+    <p className="text-4xl font-mono font-black text-white tracking-wider">
+      {m}:{s}
+    </p>
+  );
+});
+
 export default function DialerWorkspace() {
   const [leadsList, setLeadsList] = useState<Lead[]>([]);
+  const [isLoadingQueue, setIsLoadingQueue] = useState(true);
   const [currentLeadIndex, setCurrentLeadIndex] = useState(0);
   const [isPowerDialing, setIsPowerDialing] = useState(false);
   const [callStatus, setCallStatus] = useState<"idle" | "calling" | "talking" | "wrapup">("idle");
   const [duration, setDuration] = useState(0);
+  const callDurationRef = useRef<number>(0);
   const [scriptsList, setScriptsList] = useState<any[]>([]);
   const [selectedScriptProduct, setSelectedScriptProduct] = useState("");
   const [productFilter, setProductFilter] = useState<"all" | "fgts" | "inss" | "consignado">("all");
@@ -210,17 +244,22 @@ export default function DialerWorkspace() {
   };
 
   const fetchQueue = async (filter: "all" | "fgts" | "inss" | "consignado" = productFilter) => {
-    let query = supabase.from("leads").select("*").eq("status", "pendente");
-    if (filter === "fgts") query = query.ilike("produto", "%fgts%");
-    else if (filter === "inss") query = query.or("produto.ilike.%inss%,produto.ilike.%bpc%,produto.ilike.%loas%");
-    else if (filter === "consignado") query = query.ilike("produto", "%consignado%");
-    const { data } = await query.order("id", { ascending: true }).limit(500);
-    if (data) {
-      // Modo Geral: sobe a lista 100% aleatória misturando FGTS, INSS e Consignado
-      // Modo Específico: mantém focado na carteira selecionada
-      const finalQueue = filter === "all" ? shuffleArray(data) : data;
-      setLeadsList(finalQueue);
-      setCurrentLeadIndex(0);
+    setIsLoadingQueue(true);
+    try {
+      let query = supabase.from("leads").select("*").eq("status", "pendente");
+      if (filter === "fgts") query = query.ilike("produto", "%fgts%");
+      else if (filter === "inss") query = query.or("produto.ilike.%inss%,produto.ilike.%bpc%,produto.ilike.%loas%");
+      else if (filter === "consignado") query = query.ilike("produto", "%consignado%");
+      const { data } = await query.order("id", { ascending: true }).limit(500);
+      if (data) {
+        // Modo Geral: sobe a lista 100% aleatória misturando FGTS, INSS e Consignado
+        // Modo Específico: mantém focado na carteira selecionada
+        const finalQueue = filter === "all" ? shuffleArray(data) : data;
+        setLeadsList(finalQueue);
+        setCurrentLeadIndex(0);
+      }
+    } finally {
+      setIsLoadingQueue(false);
     }
   };
 
@@ -539,7 +578,8 @@ export default function DialerWorkspace() {
 
   const saveCallRecord = async (status: string, notes?: string) => {
     if (!activeLead?.id) return;
-    await supabase.from("historico_ligacoes").insert({ lead_id: activeLead.id, tabulacao: status, duracao_segundos: duration });
+    const duracaoFinal = callDurationRef.current || duration;
+    await supabase.from("historico_ligacoes").insert({ lead_id: activeLead.id, tabulacao: status, duracao_segundos: duracaoFinal });
     let etapaCrm = "finalizado";
     if (status === "Contrato") etapaCrm = "contrato";
     else if (status === "Proposta") etapaCrm = "proposta";
@@ -626,6 +666,25 @@ export default function DialerWorkspace() {
       .replaceAll("dos seus [VALOR]", isMargemZero ? "do seu saldo liberado" : `dos seus ${rawMargem}`)
       .replaceAll("[VALOR]", valorTexto);
   };
+
+  // ─── Loading inicial da Fila (Skeleton elegante) ─────────────────
+  if (isLoadingQueue) {
+    return (
+      <div className="flex-1 flex flex-col h-full bg-slate-50 animate-pulse font-sans">
+        <div className="h-14 bg-white border-b border-slate-200 px-6 flex items-center justify-between">
+          <div className="h-6 w-48 bg-slate-200 rounded-lg" />
+          <div className="h-8 w-64 bg-slate-200 rounded-lg" />
+        </div>
+        <div className="flex-1 flex p-6 gap-6">
+          <div className="flex-1 space-y-4">
+            <div className="h-28 bg-white rounded-2xl border border-slate-200" />
+            <div className="h-80 bg-white rounded-2xl border border-slate-200" />
+          </div>
+          <div className="w-80 h-full bg-white rounded-2xl border border-slate-200" />
+        </div>
+      </div>
+    );
+  }
 
   // ─── Fila vazia ───────────────────────────────────────────────────
   if (!activeLead && leadsList.length === 0) {
@@ -800,11 +859,11 @@ export default function DialerWorkspace() {
         </div>
       </header>
 
-      {/* ── CORPO PRINCIPAL (2 Colunas Limpas) ───────────────────────── */}
-      <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
+      {/* ── CORPO PRINCIPAL (2 Colunas Limpas lado a lado) ───────────── */}
+      <div className="flex-1 flex flex-row overflow-hidden">
         
         {/* ── COLUNA ESQUERDA: Ficha do Lead + Abas Centrais ───────────── */}
-        <div className="flex-1 flex flex-col overflow-y-auto border-r border-slate-200">
+        <div className="flex-1 flex flex-col overflow-y-auto border-r border-slate-200 min-w-0">
 
           {/* DND alerta */}
           {isDndBlocked && (
@@ -1078,37 +1137,36 @@ export default function DialerWorkspace() {
                             </div>
                           )}
 
-                          {/* Balão da Sofia (Direita - Verde) */}
+                          {/* Balão da Sofia (Esquerda - Verde) */}
                           {item.sofiaMessage && (
-                            <div className="flex justify-end">
-                              <div className="max-w-[85%] bg-emerald-50 border border-emerald-200 rounded-2xl rounded-tr-xs p-3 shadow-2xs text-xs">
+                            <div className="flex justify-start">
+                              <div className="max-w-[85%] bg-emerald-50 border border-emerald-200 rounded-2xl rounded-tl-sm p-3 shadow-xs text-xs">
                                 <div className="flex items-center justify-between gap-2 mb-1">
                                   <span className="text-[10px] font-bold text-emerald-700 flex items-center gap-1">
-                                    <Bot size={11} /> Sofia (IA A&K)
+                                    <Bot size={11} /> Sofia (IA Oficial)
                                   </span>
                                 </div>
                                 <p className="text-slate-900 font-medium leading-relaxed">{item.sofiaMessage}</p>
-                                <div className="flex items-center justify-end gap-1 mt-1 text-[9px] text-emerald-700 font-medium">
+                                <div className="flex items-center justify-start gap-1 mt-1 text-[9px] text-emerald-700 font-medium">
                                   <span>{formatMsgTime(item.created_at)}</span>
-                                  <CheckCheck size={12} className="text-blue-500" />
                                 </div>
                               </div>
                             </div>
                           )}
 
-                          {/* Balão do Operador Humano (Direita - Azul) */}
+                          {/* Balão do Operador Humano (Direita - Azul Royal) */}
                           {item.operatorMessage && (
                             <div className="flex justify-end">
-                              <div className="max-w-[85%] bg-blue-50 border border-blue-200 rounded-2xl rounded-tr-xs p-3 shadow-2xs text-xs">
+                              <div className="max-w-[85%] bg-blue-600 text-white rounded-2xl rounded-tr-sm p-3 shadow-xs text-xs">
                                 <div className="flex items-center justify-between gap-2 mb-1">
-                                  <span className="text-[10px] font-bold text-blue-700 flex items-center gap-1">
+                                  <span className="text-[10px] font-bold text-blue-100 flex items-center gap-1">
                                     <User size={11} /> Você (Operador)
                                   </span>
                                 </div>
-                                <p className="text-slate-900 font-medium leading-relaxed">{item.operatorMessage}</p>
-                                <div className="flex items-center justify-end gap-1 mt-1 text-[9px] text-blue-600 font-medium">
+                                <p className="text-white font-medium leading-relaxed">{item.operatorMessage}</p>
+                                <div className="flex items-center justify-end gap-1 mt-1 text-[9px] text-blue-200 font-medium">
                                   <span>{formatMsgTime(item.created_at)}</span>
-                                  <CheckCheck size={12} className="text-blue-500" />
+                                  <CheckCheck size={12} className="text-blue-200" />
                                 </div>
                               </div>
                             </div>
@@ -1189,11 +1247,11 @@ export default function DialerWorkspace() {
           </div>
         </div>
 
-        {/* ── COLUNA DIREITA: Telefone + Controles de Chamada ─────────── */}
-        <div className="w-full lg:w-80 bg-white border-t lg:border-t-0 lg:border-l border-slate-200 flex flex-col p-5 shrink-0 justify-between">
+        {/* ── COLUNA DIREITA: Telefone + Controles de Chamada (Sempre Visível) ─── */}
+        <div className="w-72 xl:w-80 bg-white border-l border-slate-200 flex flex-col p-4 shrink-0 justify-between overflow-y-auto z-10">
           
           {/* Header do Telefone + Localização */}
-          <div className="text-center pb-4 border-b border-slate-100">
+          <div className="text-center pb-3 border-b border-slate-100">
             <div className="flex items-center justify-center gap-1.5 mb-1.5">
               <span className={`text-[10px] font-bold uppercase tracking-widest px-2.5 py-0.5 rounded-full border ${
                 softphoneMode === "webrtc" && sipRegStatus === "registered"
@@ -1272,7 +1330,7 @@ export default function DialerWorkspace() {
                     <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
                     <span>Em Conversação</span>
                   </div>
-                  <p className="text-4xl font-mono font-black text-white tracking-wider">{formatTime(duration)}</p>
+                  <CallTimerDisplay onTick={useCallback((secs: number) => { callDurationRef.current = secs; }, [])} />
 
                   <div className="mt-2 flex items-center justify-center gap-1 text-[10px] text-slate-400 font-semibold">
                     <Radio size={12} className="text-emerald-400" />

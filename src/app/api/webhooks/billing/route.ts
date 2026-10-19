@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { supabase } from "@/lib/supabase";
+import { supabase, supabaseAdmin } from "@/lib/supabase";
 
 export async function POST(req: NextRequest) {
   try {
@@ -118,28 +118,35 @@ export async function POST(req: NextRequest) {
 
     // ─── 3. Webhook Asaas ───────────────────────────────────────────
     if (body.event && body.payment) {
+      const asaasToken = req.headers.get("asaas-access-token");
+      const expectedToken = process.env.ASAAS_WEBHOOK_TOKEN;
+      if (expectedToken && asaasToken !== expectedToken) {
+        console.warn("[Billing Webhook] Assinatura Asaas inválida ou não autorizada.");
+        return NextResponse.json({ error: "Token de webhook Asaas não autorizado" }, { status: 401 });
+      }
+
       const event = body.event;
       const payment = body.payment;
       const externalRef = payment.externalReference;
 
       if (event === "PAYMENT_RECEIVED" || event === "PAYMENT_CONFIRMED") {
         if (externalRef) {
-          await supabase
+          await supabaseAdmin
             .from("cobrancas_saas")
             .update({ status: "paga", pago_em: new Date().toISOString() })
             .eq("id", externalRef);
 
-          const { data: cob } = await supabase.from("cobrancas_saas").select("empresa_id").eq("id", externalRef).single();
+          const { data: cob } = await supabaseAdmin.from("cobrancas_saas").select("empresa_id").eq("id", externalRef).single();
           if (cob?.empresa_id) {
-            await supabase.from("empresas").update({ status: "ativa" }).eq("id", cob.empresa_id);
+            await supabaseAdmin.from("empresas").update({ status: "ativa" }).eq("id", cob.empresa_id);
           }
         }
       } else if (event === "PAYMENT_OVERDUE") {
         // Bloqueia empresa inadimplente
         if (externalRef) {
-          const { data: cob } = await supabase.from("cobrancas_saas").select("empresa_id").eq("id", externalRef).single();
+          const { data: cob } = await supabaseAdmin.from("cobrancas_saas").select("empresa_id").eq("id", externalRef).single();
           if (cob?.empresa_id) {
-            await supabase.from("empresas").update({ status: "bloqueada" }).eq("id", cob.empresa_id);
+            await supabaseAdmin.from("empresas").update({ status: "bloqueada" }).eq("id", cob.empresa_id);
           }
         }
       }
