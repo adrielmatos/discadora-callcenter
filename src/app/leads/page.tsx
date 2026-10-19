@@ -5,7 +5,7 @@ import dynamic from "next/dynamic";
 import { 
   Upload, Search, Download, RefreshCw, Kanban, Table, 
   ArrowRight, CheckCircle2, PhoneOff, XCircle, AlertCircle, User, MessageSquare,
-  Building2, Filter, Eye, ShieldCheck, UserPlus, Send
+  Building2, Filter, Eye, ShieldCheck, UserPlus, Send, Sparkles
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
@@ -59,6 +59,7 @@ export default function LeadsCRM() {
   const [empresas, setEmpresas] = useState<any[]>([]);
   const [selectedEmpresa, setSelectedEmpresa] = useState<string>("all");
   const [selectedOperador, setSelectedOperador] = useState<string>("all");
+  const [filterSofiaAI, setFilterSofiaAI] = useState<"all" | "sofia" | "quente">("all");
 
   const fetchLeads = async () => {
     setLoading(true);
@@ -280,9 +281,15 @@ export default function LeadsCRM() {
         ? !l.operador_nome 
         : l.operador_nome === selectedOperador;
 
-      return matchSearch && matchEmpresa && matchOperador;
+      const matchSofia = filterSofiaAI === "all"
+        ? true
+        : filterSofiaAI === "sofia"
+        ? Boolean(l.ultima_tabulacao?.includes("Mineração"))
+        : Boolean(l.ultima_tabulacao?.includes("Mineração") && l.ultima_tabulacao?.includes("Quente"));
+
+      return matchSearch && matchEmpresa && matchOperador && matchSofia;
     });
-  }, [leads, debouncedSearchTerm, selectedEmpresa, selectedOperador]);
+  }, [leads, debouncedSearchTerm, selectedEmpresa, selectedOperador, filterSofiaAI]);
 
   // Mapa O(N) para indexação instantânea das colunas do Kanban sem filtros repetidos
   const leadsByStageMap = useMemo(() => {
@@ -457,6 +464,37 @@ export default function LeadsCRM() {
               <option value="Camila Rocha">👤 Camila Rocha (SDR)</option>
               <option value="Marcos Vinicius">👤 Marcos Vinicius</option>
             </select>
+          </div>
+
+          {/* Filtro Rápido Sofia AI */}
+          <div className="flex items-center space-x-1 bg-slate-50 border border-slate-200 rounded-lg p-0.5">
+            <button
+              onClick={() => setFilterSofiaAI("all")}
+              className={`px-2 py-1 rounded text-xs font-bold transition cursor-pointer ${
+                filterSofiaAI === "all" ? "bg-white text-slate-800 shadow-xs" : "text-slate-500 hover:text-slate-800"
+              }`}
+            >
+              Todos
+            </button>
+            <button
+              onClick={() => setFilterSofiaAI("sofia")}
+              className={`px-2 py-1 rounded text-xs font-bold transition cursor-pointer flex items-center gap-1 ${
+                filterSofiaAI === "sofia" ? "bg-purple-600 text-white shadow-xs" : "text-purple-700 hover:bg-purple-50"
+              }`}
+              title="Filtrar apenas leads minerados no WhatsApp pela Sofia"
+            >
+              <Sparkles size={11} />
+              <span>Sofia AI</span>
+            </button>
+            <button
+              onClick={() => setFilterSofiaAI("quente")}
+              className={`px-2 py-1 rounded text-xs font-bold transition cursor-pointer flex items-center gap-1 ${
+                filterSofiaAI === "quente" ? "bg-rose-600 text-white shadow-xs" : "text-rose-700 hover:bg-rose-50"
+              }`}
+              title="Filtrar apenas leads quentes minerados pela Sofia"
+            >
+              <span>🔥 Quentes</span>
+            </button>
           </div>
         </div>
 
@@ -671,6 +709,19 @@ export default function LeadsCRM() {
                           <p className="font-bold text-xs text-slate-900 leading-snug truncate">{lead.nome}</p>
                           <span className="text-[10px] font-mono text-slate-400">#{lead.id}</span>
                         </div>
+
+                        {lead.ultima_tabulacao?.includes("Mineração") && (
+                          <div className="flex items-center gap-1 my-0.5">
+                            <span className={`px-1.5 py-0.5 rounded text-[10px] font-extrabold flex items-center gap-1 ${
+                              lead.ultima_tabulacao.includes("Quente")
+                                ? "bg-rose-50 text-rose-700 border border-rose-200"
+                                : "bg-purple-50 text-purple-700 border border-purple-200"
+                            }`}>
+                              <Sparkles size={10} className={lead.ultima_tabulacao.includes("Quente") ? "text-rose-500 animate-pulse" : "text-purple-500"} />
+                              <span>{lead.ultima_tabulacao.includes("Quente") ? "🔥 Sofia • Quente" : "🤖 Sofia • Morno"}</span>
+                            </span>
+                          </div>
+                        )}
 
                         <div className="flex items-center justify-between text-[11px] text-slate-500">
                           <span className="font-mono">{lead.telefone}</span>

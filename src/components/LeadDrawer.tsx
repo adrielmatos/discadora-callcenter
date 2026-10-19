@@ -42,7 +42,7 @@ interface LeadDrawerProps {
 }
 
 export default function LeadDrawer({ isOpen, onClose, lead, onUpdateLead }: LeadDrawerProps) {
-  const [activeTab, setActiveTab] = useState<"dados" | "historico" | "proposta">("dados");
+  const [activeTab, setActiveTab] = useState<"dados" | "sofia" | "historico" | "proposta">("dados");
   const [history, setHistory] = useState<CallHistory[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [newNote, setNewNote] = useState("");
@@ -99,6 +99,30 @@ export default function LeadDrawer({ isOpen, onClose, lead, onUpdateLead }: Lead
   const cleanPhone = (lead.telefone || "").replace(/\D/g, "");
   const formattedPhone = cleanPhone.startsWith("55") ? cleanPhone : `55${cleanPhone}`;
 
+  const sofiaCall = history.find(h => h.tabulacao.includes("[Diagnóstico IA Sofia]") || h.tabulacao.includes("[Mineração WhatsApp]"));
+  const isSofiaMined = Boolean(sofiaCall || lead.ultima_tabulacao?.includes("Mineração"));
+
+  let aiResumo = "";
+  let aiSugestao = "";
+  let aiTemperatura = "Morno";
+
+  if (sofiaCall) {
+    const raw = sofiaCall.tabulacao;
+    if (raw.includes("Quente")) aiTemperatura = "Quente";
+    else if (raw.includes("Frio")) aiTemperatura = "Frio";
+    
+    const resumoMatch = raw.match(/\[Diagnóstico IA Sofia\]:\s*([^|]+)/);
+    if (resumoMatch) aiResumo = resumoMatch[1].trim();
+    
+    const sugestaoMatch = raw.match(/Sugestão:\s*(.+)/);
+    if (sugestaoMatch) aiSugestao = sugestaoMatch[1].trim();
+  } else if (lead.ultima_tabulacao?.includes("Mineração")) {
+    if (lead.ultima_tabulacao.includes("Quente")) aiTemperatura = "Quente";
+    else if (lead.ultima_tabulacao.includes("Frio")) aiTemperatura = "Frio";
+    aiResumo = `Lead resgatado pela Sofia no WhatsApp com interesse em ${lead.produto || "Crédito"}.`;
+    aiSugestao = `Abordar oferecendo liberação rápida do ${lead.produto || "crédito"} via PIX no ${lead.banco || "banco parceiro"}.`;
+  }
+
   return (
     <div className="fixed inset-0 z-50 overflow-hidden">
       {/* Backdrop */}
@@ -139,16 +163,30 @@ export default function LeadDrawer({ isOpen, onClose, lead, onUpdateLead }: Lead
           </div>
 
           {/* Abas */}
-          <div className="flex border-b border-slate-200 bg-slate-50 px-6 gap-4">
+          <div className="flex border-b border-slate-200 bg-slate-50 px-6 gap-3 overflow-x-auto">
             <button
               onClick={() => setActiveTab("dados")}
-              className={`py-3 text-xs font-bold border-b-2 transition cursor-pointer ${
+              className={`py-3 text-xs font-bold border-b-2 transition cursor-pointer shrink-0 ${
                 activeTab === "dados"
                   ? "border-blue-600 text-blue-600"
                   : "border-transparent text-slate-500 hover:text-slate-800"
               }`}
             >
               Dados do Lead
+            </button>
+            <button
+              onClick={() => setActiveTab("sofia")}
+              className={`py-3 text-xs font-bold border-b-2 transition cursor-pointer shrink-0 flex items-center gap-1.5 ${
+                activeTab === "sofia"
+                  ? "border-purple-600 text-purple-600"
+                  : "border-transparent text-slate-500 hover:text-slate-800"
+              }`}
+            >
+              <Sparkles size={13} className={lead?.ultima_tabulacao?.includes("Mineração") ? "text-purple-600 animate-pulse" : "text-slate-400"} />
+              <span>Inteligência Sofia AI</span>
+              {lead?.ultima_tabulacao?.includes("Mineração") && (
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
+              )}
             </button>
             <button
               onClick={() => setActiveTab("historico")}
@@ -251,6 +289,107 @@ export default function LeadDrawer({ isOpen, onClose, lead, onUpdateLead }: Lead
                     </button>
                   </div>
                 </div>
+              </div>
+            )}
+
+            {/* TAB: INTELIGÊNCIA SOFIA AI */}
+            {activeTab === "sofia" && (
+              <div className="space-y-4">
+                {isSofiaMined ? (
+                  <div className="space-y-4">
+                    {/* Badge de Temperatura */}
+                    <div className={`p-4 rounded-2xl border ${
+                      aiTemperatura === "Quente"
+                        ? "bg-gradient-to-br from-rose-50 to-orange-50 border-rose-200"
+                        : "bg-gradient-to-br from-amber-50 to-yellow-50 border-amber-200"
+                    } space-y-2 shadow-xs`}>
+                      <div className="flex items-center justify-between">
+                        <span className={`text-[11px] font-black uppercase tracking-wider px-2.5 py-1 rounded-full flex items-center gap-1.5 shadow-xs ${
+                          aiTemperatura === "Quente" ? "bg-rose-600 text-white" : "bg-amber-600 text-white"
+                        }`}>
+                          <Sparkles size={12} className="animate-spin" />
+                          <span>{aiTemperatura === "Quente" ? "🔥 Lead Quente (Alta Conversão)" : "🟡 Lead Morno"}</span>
+                        </span>
+                        <span className="text-[11px] text-slate-500 font-bold">Mineração WhatsApp Web</span>
+                      </div>
+                      <p className="text-xs text-slate-700 leading-relaxed font-medium">
+                        A IA analisou as mensagens recentes deste cliente no WhatsApp e identificou interesse real em crédito.
+                      </p>
+                    </div>
+
+                    {/* Dados Identificados pela IA */}
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="bg-slate-50 border border-slate-200 p-3 rounded-xl space-y-1">
+                        <span className="text-[10px] uppercase font-bold text-slate-400">Produto Identificado</span>
+                        <p className="text-xs font-bold text-slate-800">{lead.produto || "Crédito"}</p>
+                      </div>
+                      <div className="bg-slate-50 border border-slate-200 p-3 rounded-xl space-y-1">
+                        <span className="text-[10px] uppercase font-bold text-slate-400">Margem / Saldo</span>
+                        <p className="text-xs font-black text-emerald-600">{lead.margem_disponivel || "Sob Consulta"}</p>
+                      </div>
+                    </div>
+
+                    {/* Resumo da Conversa no WhatsApp */}
+                    <div className="bg-slate-50 border border-slate-200 p-4 rounded-2xl space-y-2">
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+                        <MessageSquare size={13} className="text-blue-500" />
+                        <span>Diagnóstico do Histórico no WhatsApp</span>
+                      </h4>
+                      <div className="bg-white p-3 rounded-xl border border-slate-200/80 text-xs text-slate-700 leading-relaxed font-medium italic">
+                        "{aiResumo || "Cliente demonstrou interesse em crédito nas mensagens do WhatsApp."}"
+                      </div>
+                    </div>
+
+                    {/* Roteiro / Pitch de Abordagem Sugerido */}
+                    <div className="bg-gradient-to-br from-purple-50 via-indigo-50 to-blue-50 border border-purple-200 p-4 rounded-2xl space-y-3">
+                      <div className="flex items-center justify-between">
+                        <h4 className="text-xs font-black text-purple-900 flex items-center gap-1.5">
+                          <Sparkles size={14} className="text-purple-600" />
+                          <span>Roteiro de Abordagem para o Operador</span>
+                        </h4>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigator.clipboard.writeText(aiSugestao || `Olá ${lead.nome}, estou acompanhando sua simulação de crédito...`);
+                            alert("Roteiro copiado para a área de transferência!");
+                          }}
+                          className="text-[10px] font-bold text-purple-700 bg-white hover:bg-purple-100 px-2.5 py-1 rounded-lg border border-purple-200 transition cursor-pointer flex items-center gap-1 shadow-xs"
+                        >
+                          <span>Copiar Script</span>
+                        </button>
+                      </div>
+
+                      <div className="bg-white/95 p-3.5 rounded-xl border border-purple-100 text-xs text-slate-800 leading-relaxed font-medium shadow-xs">
+                        {aiSugestao || `Olá ${lead.nome}, vi que você conversou conosco no WhatsApp sobre liberação de valores. Conseguimos pré-aprovar sua proposta para liberação hoje mesmo!`}
+                      </div>
+
+                      <div className="pt-1">
+                        <a
+                          href={`/dialer?phone=${cleanPhone}`}
+                          className="w-full py-2.5 px-3 rounded-xl text-xs font-bold bg-purple-700 hover:bg-purple-800 text-white flex items-center justify-center gap-1.5 shadow-sm transition"
+                        >
+                          <Phone size={13} />
+                          <span>Ligar para ${lead.nome} no Discador</span>
+                        </a>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="py-12 text-center space-y-3 bg-slate-50 border border-slate-200 rounded-2xl p-6">
+                    <div className="w-12 h-12 rounded-full bg-purple-100 text-purple-600 mx-auto flex items-center justify-center">
+                      <Sparkles size={24} />
+                    </div>
+                    <div className="space-y-1">
+                      <h4 className="text-sm font-bold text-slate-800">Sem Diagnóstico de WhatsApp</h4>
+                      <p className="text-xs text-slate-500 max-w-xs mx-auto leading-relaxed">
+                        Este lead ainda não passou pela mineração da Sofia no WhatsApp Web.
+                      </p>
+                    </div>
+                    <div className="pt-2 text-[11px] text-slate-500 leading-relaxed max-w-xs mx-auto">
+                      Dica: Abra a conversa com este contato no WhatsApp Web e clique em <strong>[⚡ Minerar]</strong>. A Sofia gerará o diagnóstico e o script pronto de vendas aqui!
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 

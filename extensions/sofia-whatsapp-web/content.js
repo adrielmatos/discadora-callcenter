@@ -194,27 +194,28 @@
     }, 4500);
   }
 
-  // Helper com 5 camadas de fallback para identificar o contato ativo no WhatsApp Web
+  // Helper com camadas de fallback para identificar o contato ativo no WhatsApp Web
   function getActiveContactInfo() {
     let name = "";
     let phone = "";
 
-    // Camada 1: Procura o cabeçalho da conversa aberta
-    const header = document.querySelector(
-      "#main header, " +
-      "header[data-testid='conversation-header'], " +
-      "div[data-testid='conversation-panel-wrapper'] header, " +
-      "div[role='region'] header, " +
-      "#main > div > header, " +
-      "div[data-testid='chat'] header"
-    );
+    // 1. Verifica se há uma conversa aberta checando a existência da área de digitação ou rodapé
+    const hasActiveChat = document.querySelector("footer, div[contenteditable='true'], [data-lexical-editor='true']");
+    if (!hasActiveChat) {
+      return null; // Nenhuma conversa selecionada na tela neste momento
+    }
 
-    if (header) {
-      const titleEl = header.querySelector(
+    // 2. Encontra o cabeçalho da conversa aberta (exclui o cabeçalho da barra lateral de conversas)
+    const headers = Array.from(document.querySelectorAll("header"));
+    const chatHeader = headers.find(h => !h.closest("#pane-side") && !h.closest("[data-testid='chat-list']")) || headers[headers.length - 1];
+
+    if (chatHeader) {
+      const titleEl = chatHeader.querySelector(
         "span[data-testid='conversation-info-header-chat-title'], " +
+        "div[role='button'] span[dir='auto'], " +
+        "h2, " +
         "span[dir='auto'][title], " +
         "span[title], " +
-        "div[role='button'] span[dir='auto'], " +
         "span[dir='auto']"
       );
       if (titleEl) {
@@ -222,7 +223,7 @@
       }
 
       // Procura número explícito no subtítulo (ex: "+55 11 98765-4321")
-      const subTitleEl = header.querySelector("span[title*='+'], span[title*='55'], span[dir='auto']");
+      const subTitleEl = chatHeader.querySelector("span[title*='+'], span[title*='55'], span[dir='auto']:not(:first-child)");
       if (subTitleEl) {
         const text = subTitleEl.innerText || subTitleEl.getAttribute("title") || "";
         const digits = text.replace(/\D/g, "");
@@ -232,22 +233,7 @@
       }
     }
 
-    // Camada 2: Conversa selecionada na barra lateral (#pane-side)
-    if (!name || !phone) {
-      const activeSideItem = document.querySelector(
-        "#pane-side div[aria-selected='true'], " +
-        "#pane-side div[data-testid='cell-frame-container'][class*='active'], " +
-        "#pane-side div[tabindex='0'][role='listitem']"
-      );
-      if (activeSideItem) {
-        const sideTitle = activeSideItem.querySelector("span[title], span[dir='auto']");
-        if (!name && sideTitle) {
-          name = (sideTitle.getAttribute("title") || sideTitle.innerText || "").trim();
-        }
-      }
-    }
-
-    // Camada 3: Extrai o telefone internacional diretamente do atributo data-id das mensagens
+    // 3. Extrai o telefone internacional diretamente do atributo data-id das mensagens
     // Padrão do WhatsApp Web: false_5511999998888@c.us_3EB0... ou true_5511999998888@c.us_...
     if (!phone) {
       const msgWithDataId = document.querySelector("div[data-id*='@c.us']");
@@ -260,21 +246,19 @@
       }
     }
 
-    // Camada 4: Se o nome for o próprio número de telefone
-    const digitsInName = name.replace(/\D/g, "");
+    // 4. Se o nome for o próprio número de telefone
+    const digitsInName = (name || "").replace(/\D/g, "");
     if (digitsInName.length >= 10 && !phone) {
       phone = digitsInName;
     }
 
     if (!name && !phone) {
-      console.warn("[Sofia AI] Não foi possível detectar o contato ativo na tela.");
       return null;
     }
 
     const finalPhone = phone || (digitsInName.length >= 8 ? digitsInName : "550000000000");
     const finalName = name || `Cliente (${finalPhone.slice(-4)})`;
 
-    console.log(`[Sofia AI] Contato ativo identificado: ${finalName} (${finalPhone})`);
     return { name: finalName, phone: finalPhone };
   }
 
@@ -430,12 +414,15 @@
 
       const item = chatItems[i];
       try {
-        // Clica na conversa para abri-la
-        item.click();
+        // Dispara eventos de clique reais no elemento interno da conversa
+        const clickable = item.querySelector("div[role='button'], div[tabindex='-1'], [data-testid='cell-frame-container']") || item;
+        clickable.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }));
+        clickable.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, cancelable: true }));
+        clickable.click();
         showInAppNotification(`⏳ [${i + 1}/${totalToMine}] Analisando conversa...`);
 
-        // Aguarda 1.2 segundos para as mensagens carregarem no painel
-        await new Promise((resolve) => setTimeout(resolve, 1200));
+        // Aguarda 1.8 segundos para as mensagens carregarem no painel
+        await new Promise((resolve) => setTimeout(resolve, 1800));
 
         const res = await mineActiveChat(true);
         if (res && res.success) {
