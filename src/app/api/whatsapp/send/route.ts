@@ -28,8 +28,19 @@ export async function POST(req: NextRequest) {
     const cleanNumber = telefone.replace(/\D/g, "");
     const formattedPhone = cleanNumber.startsWith("55") ? cleanNumber : `55${cleanNumber}`;
 
-    // Busca configurações de WhatsApp salvas no banco (com suporte a multitenancy)
-    const userEmpresaId = authUser?.user_metadata?.empresa_id;
+    // Busca configurações de WhatsApp salvas no banco (com suporte a multitenancy seguro)
+    let userEmpresaId = (authUser?.app_metadata?.empresa_id as string) || null;
+    if (!userEmpresaId && authUser?.email) {
+      const { data: op } = await supabase
+        .from("operadores_app")
+        .select("empresa_id")
+        .eq("email", authUser.email)
+        .maybeSingle();
+      if (op?.empresa_id) {
+        userEmpresaId = op.empresa_id;
+      }
+    }
+
     let configQuery = supabase
       .from("app_configuracoes")
       .select("wa_mode, wa_api_url, wa_api_token, wa_instance_name");
