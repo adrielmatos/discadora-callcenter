@@ -109,4 +109,13 @@ document.addEventListener("DOMContentLoaded", () => {
     const url = (crmUrlInput.value.trim() || "https://discadora-callcenter.vercel.app") + "/leads";
     chrome.tabs.create({ url });
   });
+
+  // Abrir Disparo Cadenciado
+  const btnStartBroadcast = document.getElementById("btnStartBroadcast");
+  if (btnStartBroadcast) {
+    btnStartBroadcast.addEventListener("click", () => {
+      const url = (crmUrlInput.value.trim() || "https://discadora-callcenter.vercel.app") + "/leads";
+      chrome.tabs.create({ url });
+    });
+  }
 });

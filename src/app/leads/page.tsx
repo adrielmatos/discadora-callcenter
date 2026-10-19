@@ -4,12 +4,13 @@ import React, { useState, useRef, useEffect } from "react";
 import { 
   Upload, Search, Download, RefreshCw, Kanban, Table, 
   ArrowRight, CheckCircle2, PhoneOff, XCircle, AlertCircle, User, MessageSquare,
-  Building2, Filter, Eye, ShieldCheck, UserPlus
+  Building2, Filter, Eye, ShieldCheck, UserPlus, Send
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import * as XLSX from "xlsx";
 import LeadModal from "@/components/LeadModal";
 import LeadDrawer from "@/components/LeadDrawer";
+import BroadcastModal from "@/components/BroadcastModal";
 
 interface Lead {
   id: number;
@@ -37,6 +38,7 @@ export default function LeadsCRM() {
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isBroadcastOpen, setIsBroadcastOpen] = useState(false);
   const [selectedDrawerLead, setSelectedDrawerLead] = useState<Lead | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -335,6 +337,15 @@ export default function LeadsCRM() {
               <span>CSV</span>
             </button>
           </div>
+
+          <button 
+            onClick={() => setIsBroadcastOpen(true)}
+            className="flex items-center space-x-1.5 bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-1.5 rounded-lg font-bold text-xs shadow-xs transition cursor-pointer"
+            title="Disparo cadenciado gratuito no WhatsApp com proteção anti-ban"
+          >
+            <Send size={13} />
+            <span>Disparar WhatsApp</span>
+          </button>
 
           <button 
             onClick={() => setIsModalOpen(true)}
@@ -709,6 +720,13 @@ export default function LeadsCRM() {
         onClose={() => setSelectedDrawerLead(null)}
         lead={selectedDrawerLead}
         onUpdateLead={fetchLeads}
+      />
+
+      {/* Modal de Disparo Cadenciado WhatsApp (Sofia AI) */}
+      <BroadcastModal
+        isOpen={isBroadcastOpen}
+        onClose={() => setIsBroadcastOpen(false)}
+        onSuccess={fetchLeads}
       />
     </div>
   );
