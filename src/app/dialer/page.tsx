@@ -6,7 +6,7 @@ import {
   Play, FastForward, User, AlertCircle, Calculator,
   ShieldAlert, Sparkles, Building2, CheckCircle2, Zap, ChevronRight,
   Headphones, Mic, MicOff, Radio, Volume2, Hash, Phone,
-  Clock, Bot, RefreshCw, Send, ExternalLink, CheckCheck
+  Clock, Bot, RefreshCw, Send, ExternalLink, CheckCheck, PauseCircle, PlayCircle
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { SoftphoneEngine, phoneAudio, SipConfig, SipRegStatus } from "@/lib/softphone";
@@ -116,6 +116,7 @@ interface WhatsAppInteraction {
   created_at: string;
   clientMessage?: string;
   sofiaMessage?: string;
+  operatorMessage?: string;
   raw: string;
 }
 
@@ -141,6 +142,11 @@ export default function DialerWorkspace() {
   const [activeTab, setActiveTab] = useState<"script" | "sofia">("script");
   const [whatsappInteractions, setWhatsappInteractions] = useState<WhatsAppInteraction[]>([]);
   const [loadingWhatsapp, setLoadingWhatsapp] = useState(false);
+
+  // ─── ADMINISTRAÇÃO DIRETA DE MENSAGENS NO WHATSAPP ─────────────────
+  const [operatorInput, setOperatorInput] = useState("");
+  const [sendingMessage, setSendingMessage] = useState(false);
+  const [isSofiaPausedForLead, setIsSofiaPausedForLead] = useState(false);
 
   // ─── ESTADOS DO SOFTPHONE WEBRTC (Fase 2) ─────────────────────────
   const [softphoneMode, setSoftphoneMode] = useState<"webrtc" | "smartphone">("webrtc");
@@ -205,26 +211,37 @@ export default function DialerWorkspace() {
         const tab = r.tabulacao;
         let clientMsg = "";
         let sofiaMsg = "";
+        let operatorMsg = "";
 
-        const clientQuote = tab.match(/Cliente:\s*"([^"]+)"/i);
-        const sofiaQuote = tab.match(/Sofia:\s*"([^"]+)"/i);
-
-        if (clientQuote) {
-          clientMsg = clientQuote[1];
+        // Verifica se é mensagem enviada pelo Operador humano
+        if (tab.includes("[WhatsApp Operador]")) {
+          const opQuote = tab.match(/Operador:\s*"([^"]+)"/i) || tab.match(/Adriel:\s*"([^"]+)"/i);
+          if (opQuote) {
+            operatorMsg = opQuote[1];
+          } else {
+            operatorMsg = tab.replace(/\[WhatsApp Operador\]\s*(Operador|Adriel)?:\s*/i, "").replace(/^"|"$/g, "").trim();
+          }
         } else {
-          const clientSimple = tab.match(/Cliente:\s*(.+?)\s*\|\s*Sofia:/i);
-          if (clientSimple) clientMsg = clientSimple[1];
-        }
+          const clientQuote = tab.match(/Cliente:\s*"([^"]+)"/i);
+          const sofiaQuote = tab.match(/Sofia:\s*"([^"]+)"/i);
 
-        if (sofiaQuote) {
-          sofiaMsg = sofiaQuote[1];
-        } else {
-          const sofiaSimple = tab.match(/Sofia:\s*(.+)$/i);
-          if (sofiaSimple) sofiaMsg = sofiaSimple[1];
-        }
+          if (clientQuote) {
+            clientMsg = clientQuote[1];
+          } else {
+            const clientSimple = tab.match(/Cliente:\s*(.+?)\s*\|\s*Sofia:/i);
+            if (clientSimple) clientMsg = clientSimple[1];
+          }
 
-        if (!clientMsg && !sofiaMsg) {
-          sofiaMsg = tab.replace(/\[WhatsApp Sofia\]/gi, "").replace(/\[WhatsApp\]/gi, "").trim();
+          if (sofiaQuote) {
+            sofiaMsg = sofiaQuote[1];
+          } else {
+            const sofiaSimple = tab.match(/Sofia:\s*(.+)$/i);
+            if (sofiaSimple) sofiaMsg = sofiaSimple[1];
+          }
+
+          if (!clientMsg && !sofiaMsg) {
+            sofiaMsg = tab.replace(/\[WhatsApp Sofia\]/gi, "").replace(/\[WhatsApp\]/gi, "").trim();
+          }
         }
 
         return {
@@ -232,6 +249,7 @@ export default function DialerWorkspace() {
           created_at: r.created_at,
           clientMessage: clientMsg,
           sofiaMessage: sofiaMsg,
+          operatorMessage: operatorMsg,
           raw: tab
         };
       });
@@ -257,6 +275,50 @@ export default function DialerWorkspace() {
       setWhatsappInteractions([]);
     } finally {
       setLoadingWhatsapp(false);
+    }
+  };
+
+  // Disparo de mensagem pelo operador direto na tela da discadora
+  const handleSendOperatorMessage = async (customText?: string) => {
+    const msg = (customText || operatorInput).trim();
+    if (!msg || !activeLead?.id || !activeLead?.telefone) return;
+
+    setSendingMessage(true);
+    try {
+      const cleanPhone = activeLead.telefone.replace(/\D/g, "");
+      const formattedPhone = cleanPhone.startsWith("55") ? cleanPhone : `55${cleanPhone}`;
+
+      // Salva no CRM como mensagem do operador
+      await supabase.from("historico_ligacoes").insert({
+        lead_id: activeLead.id,
+        tabulacao: `[WhatsApp Operador] Operador: "${msg}"`,
+        duracao_segundos: 0
+      });
+
+      // Tenta enviar via API de WhatsApp
+      const res = await fetch("/api/whatsapp/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          telefone: formattedPhone,
+          mensagem: msg,
+          lead_id: activeLead.id
+        })
+      });
+
+      const resJson = await res.json();
+      if (resJson.method === "web" || resJson.waUrl) {
+        window.open(resJson.waUrl || `https://wa.me/${formattedPhone}?text=${encodeURIComponent(msg)}`, "_blank");
+      }
+
+      setOperatorInput("");
+      await loadWhatsappHistory(activeLead.id);
+    } catch (err) {
+      console.error("Erro ao enviar mensagem do operador:", err);
+      const cleanPhone = activeLead.telefone.replace(/\D/g, "");
+      window.open(`https://wa.me/55${cleanPhone}?text=${encodeURIComponent(msg)}`, "_blank");
+    } finally {
+      setSendingMessage(false);
     }
   };
 
@@ -314,6 +376,7 @@ export default function DialerWorkspace() {
   useEffect(() => {
     if (activeLead?.id) {
       loadWhatsappHistory(activeLead.id);
+      setIsSofiaPausedForLead(false);
     } else {
       setWhatsappInteractions([]);
     }
@@ -494,8 +557,8 @@ export default function DialerWorkspace() {
     const rawMargem = (activeLead.margem_disponivel || "").trim();
     const isMargemZero = !rawMargem || rawMargem === "R$ 0,00" || rawMargem === "0";
     const valorMsg = isMargemZero ? "condição especial aprovada" : `limite liberado de ${rawMargem}`;
-    const text = encodeURIComponent(`Olá, ${activeLead.nome}! Sou o Adriel da A&K Soluções Financeiras. A Sofia me passou sua ficha referente à ${valorMsg} no ${activeLead.banco || "banco conveniado"}. Gostaria de confirmar a liberação no seu PIX agora?`);
-    window.open(`https://wa.me/55${cleanPhone}?text=${text}`, "_blank");
+    const text = `Olá, ${activeLead.nome}! Sou o Adriel da A&K Soluções Financeiras. A Sofia me passou sua ficha referente à ${valorMsg} no ${activeLead.banco || "banco conveniado"}. Gostaria de confirmar a liberação no seu PIX agora?`;
+    handleSendOperatorMessage(text);
   };
 
   const currentScript = scriptsList.find(s => s.produto === selectedScriptProduct) || scriptsList[0] || {
@@ -548,7 +611,7 @@ export default function DialerWorkspace() {
       {/* Áudio Remoto Oculto para WebRTC */}
       <audio ref={remoteAudioRef} autoPlay playsInline className="hidden" />
 
-      {/* ── HEADER SUPERIOR FIXO & PROFISSIONAL (Zero botões flutuantes sobrepostos) ── */}
+      {/* ── HEADER SUPERIOR FIXO & PROFISSIONAL ──────────────────────── */}
       <header className="h-14 px-4 lg:px-6 bg-white border-b border-slate-200 flex items-center justify-between shrink-0 shadow-2xs z-10">
         
         {/* Esquerda: Identificação da Fila + Status Softphone */}
@@ -733,7 +796,7 @@ export default function DialerWorkspace() {
           </div>
 
           {/* ── SISTEMA DE ABAS CENTRAIS: Script vs Sofia WhatsApp ───── */}
-          <div className="mx-4 mt-3 mb-4 bg-white rounded-2xl border border-slate-200 shadow-2xs flex-1 flex flex-col overflow-hidden min-h-[380px]">
+          <div className="mx-4 mt-3 mb-4 bg-white rounded-2xl border border-slate-200 shadow-2xs flex-1 flex flex-col overflow-hidden min-h-[420px]">
             
             {/* Header das Abas */}
             <div className="border-b border-slate-200 px-4 bg-slate-50/70 flex items-center justify-between shrink-0">
@@ -773,15 +836,31 @@ export default function DialerWorkspace() {
                 </button>
               </div>
 
-              {/* Botão recarregar dados da aba atual */}
+              {/* Controles da Sofia: Pausar IA / Assumir Atendimento Humano */}
               {activeTab === "sofia" && (
-                <button
-                  onClick={() => activeLead?.id && loadWhatsappHistory(activeLead.id)}
-                  title="Atualizar mensagens do WhatsApp"
-                  className="text-slate-400 hover:text-emerald-600 transition p-1.5 rounded-lg hover:bg-slate-100 cursor-pointer"
-                >
-                  <RefreshCw size={13} className={loadingWhatsapp ? "animate-spin text-emerald-600" : ""} />
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsSofiaPausedForLead(!isSofiaPausedForLead)}
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition flex items-center gap-1 cursor-pointer ${
+                      isSofiaPausedForLead
+                        ? "bg-amber-50 text-amber-800 border-amber-300"
+                        : "bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100"
+                    }`}
+                    title={isSofiaPausedForLead ? "Sofia pausada: operador no controle da conversa" : "Sofia respondendo no piloto automático"}
+                  >
+                    <span className={`w-1.5 h-1.5 rounded-full ${isSofiaPausedForLead ? "bg-amber-500" : "bg-emerald-500 animate-pulse"}`}></span>
+                    <span className="hidden sm:inline">{isSofiaPausedForLead ? "Humano no Controle" : "Sofia Respondendo"}</span>
+                  </button>
+
+                  <button
+                    onClick={() => activeLead?.id && loadWhatsappHistory(activeLead.id)}
+                    title="Atualizar mensagens do WhatsApp"
+                    className="text-slate-400 hover:text-emerald-600 transition p-1.5 rounded-lg hover:bg-slate-100 cursor-pointer"
+                  >
+                    <RefreshCw size={13} className={loadingWhatsapp ? "animate-spin text-emerald-600" : ""} />
+                  </button>
+                </div>
               )}
             </div>
 
@@ -865,7 +944,7 @@ export default function DialerWorkspace() {
               </div>
             )}
 
-            {/* ── CONTEÚDO DA ABA 2: CONVERSA SOFIA (WHATSAPP) ─────────── */}
+            {/* ── CONTEÚDO DA ABA 2: CONVERSA SOFIA (WHATSAPP) COM ADMINISTRAÇÃO TOTAL ── */}
             {activeTab === "sofia" && (
               <div className="flex-1 flex flex-col overflow-hidden p-4">
                 {loadingWhatsapp ? (
@@ -881,21 +960,23 @@ export default function DialerWorkspace() {
                     </div>
                     <h3 className="text-sm font-bold text-slate-800">Nenhuma conversa prévia no WhatsApp</h3>
                     <p className="text-xs text-slate-500 max-w-sm mt-1 mb-4 leading-relaxed">
-                      A Sofia ainda não conversou com {activeLead?.nome || "este lead"} no WhatsApp. Você pode ligar diretamente ou enviar uma abordagem inicial agora.
+                      A Sofia ainda não conversou com {activeLead?.nome || "este lead"} no WhatsApp. Você pode enviar uma abordagem inicial agora mesmo por aqui.
                     </p>
-                    <button
-                      onClick={handleWhatsApp}
-                      className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition flex items-center gap-2 shadow-2xs cursor-pointer"
-                    >
-                      <MessageSquare size={13} />
-                      <span>Iniciar Abordagem no WhatsApp com Sofia</span>
-                    </button>
+                    <div className="flex flex-wrap items-center justify-center gap-2">
+                      <button
+                        onClick={handleWhatsApp}
+                        className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition flex items-center gap-2 shadow-2xs cursor-pointer"
+                      >
+                        <MessageSquare size={13} />
+                        <span>Iniciar Abordagem no WhatsApp com Sofia</span>
+                      </button>
+                    </div>
                   </div>
                 ) : (
-                  // Chat estilo WhatsApp do Lead com a Sofia
+                  // Chat estilo WhatsApp do Lead com a Sofia e o Operador
                   <div className="flex-1 flex flex-col overflow-hidden">
                     {/* Alerta de Lead Quente */}
-                    <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 px-3.5 py-2 rounded-xl text-xs font-bold flex items-center justify-between shrink-0 mb-3">
+                    <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 px-3.5 py-1.5 rounded-xl text-xs font-bold flex items-center justify-between shrink-0 mb-2">
                       <div className="flex items-center gap-2">
                         <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
                         <span>🔥 LEAD QUENTE: Cliente já conversou com a Sofia no WhatsApp!</span>
@@ -906,10 +987,10 @@ export default function DialerWorkspace() {
                     </div>
 
                     {/* Lista de Mensagens Balões */}
-                    <div className="flex-1 overflow-y-auto space-y-3 p-3 bg-slate-100/70 rounded-xl border border-slate-200">
+                    <div className="flex-1 overflow-y-auto space-y-2.5 p-3 bg-slate-100/70 rounded-xl border border-slate-200">
                       {whatsappInteractions.map((item) => (
                         <div key={item.id} className="space-y-2">
-                          {/* Balão do Cliente (Esquerda) */}
+                          {/* Balão do Cliente (Esquerda - Branco) */}
                           {item.clientMessage && (
                             <div className="flex justify-start">
                               <div className="max-w-[85%] bg-white rounded-2xl rounded-tl-xs p-3 shadow-2xs border border-slate-200 text-xs">
@@ -924,7 +1005,7 @@ export default function DialerWorkspace() {
                             </div>
                           )}
 
-                          {/* Balão da Sofia (Direita) */}
+                          {/* Balão da Sofia (Direita - Verde) */}
                           {item.sofiaMessage && (
                             <div className="flex justify-end">
                               <div className="max-w-[85%] bg-emerald-50 border border-emerald-200 rounded-2xl rounded-tr-xs p-3 shadow-2xs text-xs">
@@ -941,29 +1022,89 @@ export default function DialerWorkspace() {
                               </div>
                             </div>
                           )}
+
+                          {/* Balão do Operador Humano (Direita - Azul) */}
+                          {item.operatorMessage && (
+                            <div className="flex justify-end">
+                              <div className="max-w-[85%] bg-blue-50 border border-blue-200 rounded-2xl rounded-tr-xs p-3 shadow-2xs text-xs">
+                                <div className="flex items-center justify-between gap-2 mb-1">
+                                  <span className="text-[10px] font-bold text-blue-700 flex items-center gap-1">
+                                    <User size={11} /> Você (Operador)
+                                  </span>
+                                </div>
+                                <p className="text-slate-900 font-medium leading-relaxed">{item.operatorMessage}</p>
+                                <div className="flex items-center justify-end gap-1 mt-1 text-[9px] text-blue-600 font-medium">
+                                  <span>{formatMsgTime(item.created_at)}</span>
+                                  <CheckCheck size={12} className="text-blue-500" />
+                                </div>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>
 
-                    {/* Ações Rápidas do WhatsApp */}
-                    <div className="pt-3 flex flex-wrap items-center justify-between gap-2 shrink-0">
-                      <div className="text-[11px] text-slate-500 font-medium flex items-center gap-1">
-                        <Bot size={13} className="text-emerald-600" />
-                        <span>Sincronizado automaticamente via Sofia IA</span>
+                    {/* Barra de Respostas Rápidas */}
+                    <div className="pt-2 flex items-center gap-1.5 overflow-x-auto scrollbar-none shrink-0">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider shrink-0">Rápidas:</span>
+                      {[
+                        { label: "📄 Pedir RG/CNH", text: `Olá, ${activeLead?.nome}! Pode me enviar uma foto legível do seu RG ou CNH (frente e verso) para formalizarmos a liberação?` },
+                        { label: "🏦 Autorizar Banco", text: `Olá, ${activeLead?.nome}! Você já autorizou o banco ${activeLead?.banco || "parceiro"} a consultar seu saldo no aplicativo do FGTS?` },
+                        { label: "🔑 Chave PIX", text: `Olá, ${activeLead?.nome}! Qual a sua chave PIX para creditarmos o valor assim que a proposta for aprovada?` },
+                        { label: "⚡ Simulação Aprovada", text: `Olá, ${activeLead?.nome}! Sua simulação foi aprovada com sucesso no ${activeLead?.banco || "banco"}. Vamos concluir a assinatura no celular?` },
+                      ].map((chip) => (
+                        <button
+                          key={chip.label}
+                          type="button"
+                          onClick={() => handleSendOperatorMessage(chip.text)}
+                          className="text-[11px] font-medium bg-slate-100 hover:bg-blue-50 hover:text-blue-700 hover:border-blue-200 text-slate-700 px-2.5 py-1 rounded-full border border-slate-200 shrink-0 transition cursor-pointer"
+                        >
+                          {chip.label}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Campo de Digitação e Envio Direto */}
+                    <form
+                      onSubmit={(e) => { e.preventDefault(); handleSendOperatorMessage(); }}
+                      className="pt-2 flex items-center gap-2 shrink-0"
+                    >
+                      <input
+                        type="text"
+                        placeholder={`Responder para ${activeLead?.nome || "cliente"} no WhatsApp...`}
+                        value={operatorInput}
+                        onChange={(e) => setOperatorInput(e.target.value)}
+                        className="flex-1 bg-slate-50 border border-slate-200 focus:bg-white focus:border-blue-500 rounded-xl px-3.5 py-2 text-xs outline-none transition"
+                      />
+                      <button
+                        type="submit"
+                        disabled={sendingMessage || !operatorInput.trim()}
+                        className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition flex items-center gap-1.5 disabled:opacity-50 cursor-pointer shadow-xs shrink-0"
+                      >
+                        <Send size={13} className={sendingMessage ? "animate-pulse" : ""} />
+                        <span>{sendingMessage ? "Enviando..." : "Enviar"}</span>
+                      </button>
+                    </form>
+
+                    {/* Ações Auxiliares do Rodapé */}
+                    <div className="pt-2 flex flex-wrap items-center justify-between gap-2 shrink-0">
+                      <div className="text-[10px] text-slate-500 font-medium flex items-center gap-1">
+                        <Bot size={12} className="text-emerald-600" />
+                        <span>Sincronizado automaticamente via Sofia IA & CRM</span>
                       </div>
                       <div className="flex items-center gap-2">
                         <button
                           onClick={handleSendQuickProposal}
-                          className="px-3 py-1.5 rounded-lg bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
+                          className="px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 text-[11px] font-bold transition flex items-center gap-1 cursor-pointer"
                         >
-                          <Send size={12} />
+                          <Send size={11} />
                           <span>Mandar Proposta no Zap</span>
                         </button>
                         <button
                           onClick={handleWhatsApp}
-                          className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 text-xs font-bold transition flex items-center gap-1.5 shadow-2xs cursor-pointer"
+                          className="px-2.5 py-1 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 text-[11px] font-bold transition flex items-center gap-1 shadow-2xs cursor-pointer"
                         >
-                          <ExternalLink size={12} />
+                          <ExternalLink size={11} />
                           <span>Abrir WhatsApp Web</span>
                         </button>
                       </div>
