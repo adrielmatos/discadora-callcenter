@@ -137,8 +137,8 @@ async function callGemini(
     },
     contents,
     generationConfig: {
-      temperature: 0.6,
-      maxOutputTokens: 160
+      temperature: 0.5,
+      maxOutputTokens: 110
     }
   };
 
@@ -204,8 +204,8 @@ async function callGroq(
       body: JSON.stringify({
         model: "llama-3.1-8b-instant",
         messages,
-        temperature: 0.6,
-        max_tokens: 160
+        temperature: 0.5,
+        max_tokens: 110
       })
     });
 
@@ -312,31 +312,23 @@ export async function POST(req: NextRequest) {
       });
     });
 
-    const systemInstruction = `Você é ${effectiveName}, assistente virtual de atendimento da ${effectiveCompany}.
-Sua missão é prestar um atendimento formal, polido, humanizado e juridicamente seguro pelo WhatsApp, pautado estritamente na legislação brasileira vigente.
+    const systemInstruction = `Você é ${effectiveName}, assistente de atendimento no WhatsApp da ${effectiveCompany}.
+Sua missão é atender com simpatia, rapidez e segurança jurídica no WhatsApp.
 
-BASE LEGAL OFICIAL (SIGA RIGOROSAMENTE):
-1. FGTS (Lei Federal nº 13.932/2019 e Resolução CCFGTS nº 958/2020):
-   - A antecipação é uma cessão fiduciária do Saque-Aniversário.
-   - Requisitos obrigatórios por lei: ter saldo no FGTS (contas ativas ou inativas), optar pela modalidade Saque-Aniversário no aplicativo oficial do FGTS da Caixa e autorizar os bancos parceiros a consultarem o saldo.
-   - Não há desconto de boletos ou salário mensal: o pagamento é descontado anualmente direto do fundo pela Caixa.
-   - Não há restrição para negativados (sem consulta ao SPC/Serasa).
-   - NUNCA invente número fixo de anos ou parcelas: a quantidade de anos antecipados e o valor liberado dependem estritamente do saldo disponível e da política de cada banco parceiro na consulta oficial.
+REGRAS DE FORMATAÇÃO E ESTILO (CRÍTICO):
+- MÁXIMO DE 1 A 2 FRASES CURTAS (estilo WhatsApp ágil e humano).
+- NUNCA mande parágrafos longos, textões ou cumprimentos excessivamente formais que pareçam robô.
+- Seja direta, educada e natural, como uma atendente humana real digitando no WhatsApp.
+- NUNCA invente taxa de juros, valor fixo de parcela ou quantidade de anos.
 
-2. CRÉDITO CONSIGNADO (Lei Federal nº 10.820/2003 e Instruções Normativas do INSS):
-   - Exclusivo para quem possui margem consignável disponível (aposentados, pensionistas do INSS, BPC/LOAS e servidores).
-   - Desconto automático e direto em folha de pagamento ou benefício.
-   - Vedada por lei qualquer cobrança de taxa prévia ou depósito antecipado.
+DIRECIONAMENTO RÁPIDO POR PERFIL:
+1. CLT (Carteira Assinada): A melhor e mais rápida opção é a antecipação do Saque-Aniversário do FGTS (Lei 13.932/2019), liberado no PIX, sem desconto no salário mensal e sem consulta ao SPC.
+2. SIAPE (Servidor Público Federal): Consignado federal com taxas mínimas e desconto em folha (Lei 10.820/2003).
+3. Prefeitura / Estado (Servidor Municipal ou Estadual): Consignado público com margem consignável em folha.
+4. Aposentado / Pensionista INSS / BPC: Consignado com desconto no benefício ou portabilidade com troco.
+5. "Empréstimo na diária" ou agiotagem: Diga de forma simples e direta que não faz empréstimo na diária, apenas crédito formal e seguro autorizado pelo Banco Central, e pergunte se a pessoa tem FGTS ou se é aposentada/servidora.
 
-3. PORTABILIDADE DE CRÉDITO (Resolução Bacen nº 4.292/2013 e Resolução CMN nº 5.057/2022):
-   - Direito do titular de transferir o contrato para outro banco com taxa de juros mais vantajosa, podendo liberar a diferença como troco em dinheiro na conta, mantendo a parcela atual.
-
-REGRAS DE CONDUTA E ESTILO:
-- Formal, polida e humanizada: utilize linguagem profissional e respeitosa, sem gírias ou termos excessivamente informais.
-- Respostas curtas: máximo de 2 a 3 frases claras e objetivas, adequadas para leitura ágil no WhatsApp.
-- Preservação jurídica total: se perguntarem sobre taxas ou valores, explique que as condições exatas dependem da consulta oficial da margem no sistema do banco, oferecendo a consulta gratuita com o especialista da equipe.
-- Finalize sempre com uma pergunta cordial (ex: "Gostaria que o nosso especialista verifique as condições oficiais para você?").
-Base de conhecimento da empresa: ${effectiveKnowledge}`;
+Finalize sempre com uma pergunta curta convidando para a simulação gratuita (ex: "Gostaria de fazer uma simulação rápida sem compromisso?").`;
 
     // Se temos provedores no pool, balanceia a carga e faz rotação com failover instantâneo
     if (pool.length > 0) {
@@ -382,18 +374,26 @@ Base de conhecimento da empresa: ${effectiveKnowledge}`;
 
     // Fallback inteligente contextual caso nenhuma chave esteja configurada
     let fallbackReply = "";
-    if (lowerMessage.includes("golpe") || lowerMessage.includes("seguro") || lowerMessage.includes("confiavel") || lowerMessage.includes("confiável") || lowerMessage.includes("taxa antecipada") || lowerMessage.includes("depósito")) {
-      fallbackReply = `Compreendo sua preocupação. Na ${effectiveCompany} não cobramos nenhum valor antecipado. A contratação é 100% digital e segura, e o crédito é depositado diretamente em sua conta bancária. Posso auxiliar com uma simulação?`;
+    if (lowerMessage.includes("diaria") || lowerMessage.includes("diária")) {
+      fallbackReply = `Não trabalhamos com empréstimo na diária, apenas crédito formal autorizado pelo Banco Central. Você trabalha de carteira assinada (CLT) com saldo no FGTS ou é servidor/aposentado?`;
+    } else if (lowerMessage.includes("clt") || lowerMessage.includes("carteira assinada") || lowerMessage.includes("empresa privada")) {
+      fallbackReply = `Para quem é CLT, liberamos a antecipação do FGTS via PIX, sem mexer no seu salário e sem consulta ao SPC. Gostaria de verificar seu saldo disponível?`;
+    } else if (lowerMessage.includes("siape") || lowerMessage.includes("federal")) {
+      fallbackReply = `Atendemos servidores federais (SIAPE) com as menores taxas do mercado no consignado em folha. Gostaria de consultar sua margem disponível hoje?`;
+    } else if (lowerMessage.includes("prefeitura") || lowerMessage.includes("municip") || lowerMessage.includes("estado") || lowerMessage.includes("estadual")) {
+      fallbackReply = `Atendemos servidores públicos estaduais e municipais com margem consignável. Deseja que o nosso especialista verifique as condições oficiais para você?`;
+    } else if (lowerMessage.includes("golpe") || lowerMessage.includes("seguro") || lowerMessage.includes("confiavel") || lowerMessage.includes("confiável") || lowerMessage.includes("taxa antecipada") || lowerMessage.includes("depósito")) {
+      fallbackReply = `Não cobramos nenhuma taxa antecipada. A contratação é 100% digital e o crédito cai direto na sua conta bancária. Posso fazer uma simulação gratuita para você?`;
     } else if (lowerMessage.includes("taxa") || lowerMessage.includes("juros") || lowerMessage.includes("quanto fica") || lowerMessage.includes("valor da parcela") || lowerMessage.includes("quanto pago")) {
-      fallbackReply = `As taxas e condições dependem da análise oficial da sua margem junto aos bancos parceiros. Se desejar, posso solicitar que o nosso especialista realize uma consulta personalizada para você agora mesmo. Qual é o seu nome, por gentileza?`;
+      fallbackReply = `As taxas dependem da consulta oficial da sua margem no banco. Gostaria que nosso consultor fizesse uma simulação gratuita e exata para você agora?`;
     } else if (lowerMessage.includes("fgts") || lowerMessage.includes("aniversario") || lowerMessage.includes("aniversário")) {
-      fallbackReply = `Trabalhamos com a antecipação do Saque-Aniversário do FGTS, sem consulta ao SPC ou Serasa e com liberação rápida via PIX. Gostaria que o nosso especialista verifique o saldo disponível para você?`;
+      fallbackReply = `Antecipamos seu Saque-Aniversário do FGTS com liberação rápida no PIX e sem consulta ao SPC. Quer verificar quanto libera para você?`;
     } else if (lowerMessage.includes("portabilidade") || lowerMessage.includes("troco") || lowerMessage.includes("reduzir")) {
-      fallbackReply = `Com a portabilidade de crédito, buscamos reduzir a taxa do seu contrato atual e liberar troco em dinheiro em sua conta, sem alterar o valor da sua parcela. Deseja realizar uma consulta?`;
+      fallbackReply = `Com a portabilidade, reduzimos a taxa do seu contrato atual e liberamos troco em dinheiro na sua conta, mantendo sua parcela. Deseja consultar?`;
     } else if (lowerMessage.includes("inss") || lowerMessage.includes("bpc") || lowerMessage.includes("loas") || lowerMessage.includes("aposentado")) {
-      fallbackReply = `Atendemos aposentados, pensionistas e beneficiários BPC/LOAS com as melhores condições de crédito consignado. Gostaria que verificássemos a sua margem disponível hoje?`;
+      fallbackReply = `Temos condições especiais de consignado para aposentados, pensionistas e BPC/LOAS. Gostaria de consultar sua margem hoje?`;
     } else {
-      fallbackReply = `Olá! Sou a ${effectiveName}, assistente da ${effectiveCompany}. Como posso ajudar você hoje? Tem interesse em consultar opções de FGTS ou Consignado?`;
+      fallbackReply = `Olá! Sou a ${effectiveName} da ${effectiveCompany}. Você tem interesse em consultar opções de FGTS ou Consignado hoje?`;
     }
 
     let syncResult = null;
