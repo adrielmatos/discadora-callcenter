@@ -74,6 +74,17 @@
         cursor: pointer;
         transition: 0.2s;
       " title="Analisa o histórico deste cliente e sincroniza com o CRM">⚡ Minerar</button>
+      <button id="sofia-btn-crm" style="
+        background: #1e293b;
+        color: #a78bfa;
+        border: 1px solid #334155;
+        border-radius: 12px;
+        padding: 3px 8px;
+        font-size: 11px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: 0.2s;
+      " title="Abrir CRM da Discadora em nova aba">📊 CRM</button>
     `;
 
     document.body.appendChild(widget);
@@ -87,6 +98,13 @@
         chrome.storage.local.set({ sofiaActive: isSofiaActive });
       }
     });
+
+    const crmBtn = widget.querySelector("#sofia-btn-crm");
+    if (crmBtn) {
+      crmBtn.addEventListener("click", () => {
+        window.open(crmBaseUrl + "/leads", "_blank");
+      });
+    }
 
     const mineBtn = widget.querySelector("#sofia-btn-mine");
     mineBtn.addEventListener("click", async () => {
@@ -343,9 +361,20 @@
       observer.observe(appEl, { childList: true, subtree: true });
       setInterval(checkForIncomingMessages, 2500);
       renderFloatingWidget();
+      // Garante que o widget flutuante não suma com re-renders do WhatsApp
+      setInterval(() => {
+        if (!document.getElementById("sofia-floating-widget") && document.body) {
+          renderFloatingWidget();
+        }
+      }, 3000);
     } else {
       setTimeout(startObserver, 1000);
     }
+  }
+
+  // Tenta renderizar imediatamente se o body já estiver carregado
+  if (document.body) {
+    renderFloatingWidget();
   }
 
   startObserver();

@@ -104,6 +104,14 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   });
 
+  // Abrir WhatsApp Web
+  const btnOpenWhatsApp = document.getElementById("btnOpenWhatsApp");
+  if (btnOpenWhatsApp) {
+    btnOpenWhatsApp.addEventListener("click", () => {
+      chrome.tabs.create({ url: "https://web.whatsapp.com" });
+    });
+  }
+
   // Abrir CRM
   btnOpenCrm.addEventListener("click", () => {
     const url = (crmUrlInput.value.trim() || "https://discadora-callcenter.vercel.app") + "/leads";

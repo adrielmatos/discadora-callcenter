@@ -1,8 +1,13 @@
 {
   "manifest_version": 3,
   "name": "Sofia AI - Piloto Automático WhatsApp & CRM",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Atendente virtual de crédito Sofia para WhatsApp Web oficial. Responde clientes de acordo com a legislação e sincroniza automaticamente com o CRM da Discadora.",
+  "icons": {
+    "16": "icon16.png",
+    "48": "icon48.png",
+    "128": "icon128.png"
+  },
   "permissions": [
     "storage",
     "activeTab"
@@ -14,7 +19,12 @@
   ],
   "action": {
     "default_popup": "popup.html",
-    "default_title": "Sofia AI - Painel de Controle"
+    "default_title": "Sofia AI - Painel de Controle",
+    "default_icon": {
+      "16": "icon16.png",
+      "48": "icon48.png",
+      "128": "icon128.png"
+    }
   },
   "content_scripts": [
     {
