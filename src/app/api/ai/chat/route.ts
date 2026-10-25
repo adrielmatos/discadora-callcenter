@@ -40,91 +40,33 @@ async function syncConversationToCrm(
     const cleanPhone = phone.replace(/\D/g, "");
     if (cleanPhone.length < 8) return null;
 
-    const searchPhone = cleanPhone.slice(-8); // Busca pelos últimos 8 dígitos para cobrir com/sem 55 e DDD
-
-    let leadQuery = supabase
-      .from("leads")
-      .select("id, nome, telefone, etapa_crm, status")
-      .ilike("telefone", `%${searchPhone}%`);
-
-    if (empresaId) {
-      leadQuery = leadQuery.eq("empresa_id", empresaId);
-    }
-
-    const { data: existingLeads } = await leadQuery.limit(1);
-
-    let leadId: number | null = null;
-    const nextEtapa = isHandoff ? "Simulação" : "Interessado";
+    const targetEtapa = isHandoff ? "Simulação" : "Interessado";
     const tabulacaoLabel = isHandoff 
       ? "[WhatsApp Sofia] Aguardando Especialista" 
       : "[WhatsApp Sofia] Em Atendimento";
 
-    if (existingLeads && existingLeads.length > 0) {
-      const existing = existingLeads[0];
-      leadId = existing.id;
-      // Atualiza status e etapa do lead existente
-      await supabase
-        .from("leads")
-        .update({
-          etapa_crm: nextEtapa,
-          ultima_tabulacao: tabulacaoLabel,
-          updated_at: new Date().toISOString()
-        })
-        .eq("id", leadId);
-    } else {
-      // Cria automaticamente um novo lead vindo do WhatsApp
-      const cleanName = (name || "").trim() || `Cliente WhatsApp (${cleanPhone.slice(-4)})`;
-      const insertPayload: any = {
-        nome: cleanName,
-        telefone: cleanPhone,
-        status: "pendente",
-        etapa_crm: nextEtapa,
-        ultima_tabulacao: tabulacaoLabel,
-        produto: "FGTS / Consignado"
-      };
-      if (empresaId) insertPayload.empresa_id = empresaId;
+    const interactionText = `Cliente: "${(userMessage || "").slice(0, 150)}" | Sofia: "${(aiReply || "").slice(0, 200)}"`;
 
-      const { data: newLead } = await supabase
-        .from("leads")
-        .insert(insertPayload)
-        .select("id")
-        .single();
+    const { data: rpcRes, error: rpcErr } = await supabase.rpc("sync_mined_lead", {
+      p_client_phone: cleanPhone,
+      p_client_name: (name || "").trim() || `Cliente WhatsApp (${cleanPhone.slice(-4)})`,
+      p_produto: "FGTS / Consignado",
+      p_banco: "Banco Parceiro",
+      p_margem: "R$ 0,00",
+      p_etapa: targetEtapa,
+      p_tabulacao: tabulacaoLabel,
+      p_resumo: interactionText,
+      p_sugestao: isHandoff ? "Cliente aguardando especialista humano no WhatsApp" : "Em atendimento Sofia",
+      p_temperatura: isHandoff ? "Quente" : "Morno",
+      p_empresa_id: empresaId || "ebe1ab22-519e-4784-8f96-e7f0d7a8c0a3"
+    });
 
-      if (newLead) {
-        leadId = newLead.id;
-      }
+    if (rpcErr) {
+      console.error("[syncConversationToCrm] Erro na RPC:", rpcErr);
     }
 
-    if (leadId) {
-      // Registra a interação no histórico da ficha do cliente
-      const interactionText = `[WhatsApp Sofia] Cliente: "${(userMessage || "").slice(0, 150)}" | Sofia: "${(aiReply || "").slice(0, 200)}"`;
-      await supabase.from("historico_ligacoes").insert({
-        lead_id: leadId,
-        tabulacao: interactionText,
-        duracao_segundos: 0
-      });
-
-      // Se for acionado o transbordo para especialista humano, gera alerta prioritário em 'retornos'
-      if (isHandoff) {
-        const { data: existingRetorno } = await supabase
-          .from("retornos")
-          .select("id")
-          .eq("lead_id", leadId)
-          .eq("concluido", false)
-          .limit(1);
-
-        if (!existingRetorno || existingRetorno.length === 0) {
-          await supabase.from("retornos").insert({
-            lead_id: leadId,
-            data_hora: new Date().toISOString(),
-            observacao: `[ALERTA WHATSAPP] Cliente solicitou especialista/simulação: "${(userMessage || "").slice(0, 100)}"`,
-            concluido: false
-          });
-        }
-      }
-    }
-
-    return { leadId, synced: true };
+    const leadId = rpcRes?.lead_id || null;
+    return { leadId, synced: Boolean(leadId) };
   } catch (err) {
     console.error("Erro ao sincronizar WhatsApp com CRM:", err);
     return null;

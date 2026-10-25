@@ -133,79 +133,29 @@ Retorne ESTRITAMENTE um JSON válido com esta estrutura exata (sem formatação 
       }
     }
 
-    // Sincroniza e insere/atualiza no CRM (Supabase)
-    const searchPhone = cleanPhone.slice(-8);
-    let leadQuery = supabase
-      .from("leads")
-      .select("id, nome, telefone, etapa_crm, empresa_id")
-      .ilike("telefone", `%${searchPhone}%`);
-
-    if (targetEmpresaId) {
-      leadQuery = leadQuery.eq("empresa_id", targetEmpresaId);
-    }
-
-    const { data: existingLeads } = await leadQuery.limit(1);
-
-    let leadId: number | null = null;
+    // Sincroniza e insere/atualiza no CRM (Supabase) via RPC SECURITY DEFINER (imune a bloqueios de RLS)
     const targetEtapa = aiAnalysis.temperatura === "Quente" ? "Simulação" : "Interessado";
     const tabulacaoLabel = `[Mineração WhatsApp] ${aiAnalysis.temperatura}: ${aiAnalysis.produto}`;
 
-    if (existingLeads && existingLeads.length > 0) {
-      leadId = existingLeads[0].id;
-      await supabase
-        .from("leads")
-        .update({
-          nome: cleanName,
-          produto: aiAnalysis.produto,
-          banco: aiAnalysis.banco_atual || undefined,
-          margem_disponivel: aiAnalysis.valor_ou_margem || undefined,
-          etapa_crm: targetEtapa,
-          ultima_tabulacao: tabulacaoLabel,
-          empresa_id: targetEmpresaId,
-          updated_at: new Date().toISOString()
-        })
-        .eq("id", leadId);
-    } else {
-      const { data: newLead } = await supabase
-        .from("leads")
-        .insert({
-          nome: cleanName,
-          telefone: cleanPhone,
-          produto: aiAnalysis.produto,
-          banco: aiAnalysis.banco_atual || "Banco Parceiro",
-          margem_disponivel: aiAnalysis.valor_ou_margem || "R$ 0,00",
-          status: "pendente",
-          etapa_crm: targetEtapa,
-          ultima_tabulacao: tabulacaoLabel,
-          empresa_id: targetEmpresaId
-        })
-        .select("id")
-        .single();
+    const { data: rpcResult, error: rpcError } = await supabase.rpc("sync_mined_lead", {
+      p_client_phone: cleanPhone,
+      p_client_name: cleanName,
+      p_produto: aiAnalysis.produto,
+      p_banco: aiAnalysis.banco_atual || "Banco Parceiro",
+      p_margem: aiAnalysis.valor_ou_margem || "R$ 0,00",
+      p_etapa: targetEtapa,
+      p_tabulacao: tabulacaoLabel,
+      p_resumo: aiAnalysis.resumo,
+      p_sugestao: aiAnalysis.sugestao_abordagem,
+      p_temperatura: aiAnalysis.temperatura,
+      p_empresa_id: targetEmpresaId
+    });
 
-      if (newLead) leadId = newLead.id;
+    if (rpcError) {
+      console.error("Erro na RPC sync_mined_lead:", rpcError);
     }
 
-    if (leadId) {
-      // Registra o diagnóstico na ficha do lead
-      const note = `[Diagnóstico IA Sofia]: ${aiAnalysis.resumo} | Sugestão: ${aiAnalysis.sugestao_abordagem}`;
-      await supabase.from("historico_ligacoes").insert({
-        lead_id: leadId,
-        tabulacao: note.slice(0, 450),
-        duracao_segundos: 0,
-        empresa_id: targetEmpresaId
-      });
-
-      // Se for lead quente, coloca em retornos prioritários
-      if (aiAnalysis.temperatura === "Quente") {
-        await supabase.from("retornos").insert({
-          lead_id: leadId,
-          data_hora: new Date().toISOString(),
-          observacao: `[Oportunidade Quente Resgatada] ${aiAnalysis.produto}: ${aiAnalysis.resumo}`.slice(0, 250),
-          concluido: false,
-          empresa_id: targetEmpresaId
-        });
-      }
-    }
+    const leadId: number | null = rpcResult?.lead_id || null;
 
     return NextResponse.json({
       success: true,
