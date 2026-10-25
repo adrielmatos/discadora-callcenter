@@ -8,6 +8,8 @@ import {
   Building2, Filter, Eye, ShieldCheck, UserPlus, Send, Sparkles
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { processLeadsBatch } from "@/lib/leadIntelligence";
+import { logAuditEvent } from "@/lib/audit";
 
 // Dynamic imports para reduzir o bundle inicial e eliminar travamentos
 const LeadModal = dynamic(() => import("@/components/LeadModal"), { ssr: false });
@@ -210,10 +212,20 @@ export default function LeadsCRM() {
       return;
     }
 
+    // Processamento de Inteligência de Base: Validação CPF Receita Federal + Sanitização Telefones Anatel + Deduplicação
+    const targetEmpresaId = selectedEmpresa !== "all" ? selectedEmpresa : "ebe1ab22-519e-4784-8f96-e7f0d7a8c0a3";
+    const { cleanLeads, stats } = processLeadsBatch(allLeads, targetEmpresaId);
+
+    if (cleanLeads.length === 0) {
+      alert("Nenhum lead com telefone nacional válido foi aprovado pelo filtro de sanitização.");
+      setLoading(false);
+      return;
+    }
+
     // Inserção em lotes de 100
     const chunkSize = 100;
-    for (let i = 0; i < allLeads.length; i += chunkSize) {
-      const chunk = allLeads.slice(i, i + chunkSize);
+    for (let i = 0; i < cleanLeads.length; i += chunkSize) {
+      const chunk = cleanLeads.slice(i, i + chunkSize);
       const { error } = await supabase.from("leads").insert(chunk);
       if (error) {
         console.error("Erro no lote:", error);
@@ -222,7 +234,29 @@ export default function LeadsCRM() {
       }
     }
 
-    alert(`Sucesso! ${totalImported} leads importados de ${fileArray.length} planilha(s)!`);
+    // Registro na Trilha de Auditoria Imutável (LGPD & Compliance)
+    await logAuditEvent({
+      action: "LEAD_IMPORT",
+      entity: "leads",
+      empresa_id: targetEmpresaId,
+      details: {
+        totalRecebido: stats.total,
+        importadosValidos: totalImported,
+        duplicadosDescartados: stats.duplicatesRemoved,
+        telefonesSanitizados: stats.phonesSanitized,
+        cpfsValidados: stats.cpfsValidated,
+        arquivos: fileArray.map(f => f.name)
+      }
+    });
+
+    alert(
+      `Importação Concluída com Sucesso!\n\n` +
+      `• Leads Salvos: ${totalImported}\n` +
+      `• Telefones Sanitizados (9º dígito): ${stats.phonesSanitized}\n` +
+      `• CPFs Oficiais Validados: ${stats.cpfsValidated}\n` +
+      `• Duplicados Descartados: ${stats.duplicatesRemoved}\n` +
+      `• Telefones Inválidos Ignorados: ${stats.phonesInvalid}`
+    );
     fetchLeads();
     setLoading(false);
     if (fileInputRef.current) fileInputRef.current.value = "";
@@ -259,6 +293,18 @@ export default function LeadsCRM() {
     const fileName = `leads_${empSlug}_${dateStr}.${format}`;
 
     XLSX.writeFile(wb, fileName, { bookType: format });
+
+    // Registro na Trilha de Auditoria Imutável (Exportação de Dados)
+    await logAuditEvent({
+      action: "LEAD_EXPORT",
+      entity: "leads",
+      empresa_id: selectedEmpresa !== "all" ? selectedEmpresa : undefined,
+      details: {
+        totalExportados: listToExport.length,
+        formato: format,
+        arquivo: fileName
+      }
+    });
   };
 
   const changeEtapa = async (leadId: number, nextEtapa: string) => {

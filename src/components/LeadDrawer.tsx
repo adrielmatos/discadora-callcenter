@@ -4,9 +4,10 @@ import React, { useState, useEffect } from "react";
 import { 
   X, User, Phone, FileText, Building2, MapPin, 
   Calendar, Clock, MessageSquare, ArrowRight, CheckCircle2, 
-  AlertCircle, DollarSign, Download, Printer, Sparkles, Send
+  AlertCircle, DollarSign, Download, Printer, Sparkles, Send, UserX
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { logAuditEvent } from "@/lib/audit";
 
 interface Lead {
   id: number;
@@ -92,6 +93,47 @@ export default function LeadDrawer({ isOpen, onClose, lead, onUpdateLead }: Lead
 
   const handlePrintProposal = () => {
     window.print();
+  };
+
+  const handleAnonymizeLGPD = async () => {
+    if (!lead?.id) return;
+    const confirm = window.confirm(
+      `ATENÇÃO - CONFORMIDADE LGPD (Art. 18):\n\nDeseja realmente anonimizar os dados pessoais do titular "${lead.nome}"?\n\nO nome será substituído por "Titular Anonimizado (LGPD)" e os dados de telefone, CPF e endereço serão eliminados do cadastro ativo.`
+    );
+    if (!confirm) return;
+
+    setSavingNote(true);
+    const { error } = await supabase
+      .from("leads")
+      .update({
+        nome: "Titular Anonimizado (LGPD)",
+        cpf: "000.000.000-00",
+        telefone: "5500000000000",
+        endereco: null,
+        cep: null,
+        bairro: null,
+        cidade: null,
+        uf: null
+      })
+      .eq("id", lead.id);
+
+    if (!error) {
+      await logAuditEvent({
+        action: "LEAD_ANONYMIZE_LGPD",
+        entity: "leads",
+        entity_id: String(lead.id),
+        details: {
+          motivo: "Direito de eliminação/anonimização do titular (Art. 18 LGPD)",
+          lead_id: lead.id
+        }
+      });
+      alert("Dados do titular anonimizados com sucesso em conformidade com a LGPD.");
+      if (onUpdateLead) onUpdateLead();
+      onClose();
+    } else {
+      alert("Erro ao anonimizar lead: " + error.message);
+    }
+    setSavingNote(false);
   };
 
   if (!isOpen || !lead) return null;
@@ -288,6 +330,22 @@ export default function LeadDrawer({ isOpen, onClose, lead, onUpdateLead }: Lead
                       <span>{savingNote ? "Salvando..." : "Salvar Anotação"}</span>
                     </button>
                   </div>
+                </div>
+
+                {/* Conformidade LGPD */}
+                <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
+                  <div className="text-[10px] text-slate-400">
+                    <span className="font-semibold text-slate-500">Privacidade & LGPD:</span> Art. 18 Lei 13.709
+                  </div>
+                  <button
+                    onClick={handleAnonymizeLGPD}
+                    disabled={savingNote}
+                    title="Anonimizar dados pessoais deste lead permanentemente"
+                    className="text-[11px] text-rose-600 hover:text-rose-700 hover:bg-rose-50 px-2.5 py-1.5 rounded-lg border border-rose-200 font-semibold flex items-center gap-1.5 transition cursor-pointer"
+                  >
+                    <UserX size={13} />
+                    <span>Anonimizar (LGPD)</span>
+                  </button>
                 </div>
               </div>
             )}

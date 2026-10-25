@@ -7,7 +7,7 @@ import {
   LayoutDashboard, PhoneCall, Kanban, FileText, 
   Settings, PhoneOff, Calendar,
   BarChart3, Target, Phone, MessageSquare, LogOut, Building2,
-  ShieldCheck, Download, ChevronLeft, ChevronRight
+  ShieldCheck, Download, ChevronLeft, ChevronRight, CheckSquare, Shield
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
@@ -57,6 +57,7 @@ export default function Sidebar() {
       items: [
         { name: "Discador de Chamadas", path: "/dialer", icon: PhoneCall, highlight: true },
         { name: "CRM & Esteira", path: "/leads", icon: Kanban },
+        { name: "Tarefas & Follow-up", path: "/tasks", icon: CheckSquare },
         { name: "Agenda de Retornos", path: "/retornos", icon: Calendar },
       ]
     },
@@ -64,6 +65,7 @@ export default function Sidebar() {
       title: "Gestão & Métricas",
       items: [
         { name: "Painel da Dona / Master", path: "/", icon: LayoutDashboard },
+        { name: "Painel Master (Multi-Tenant)", path: "/admin", icon: Shield },
         { name: "Empresas Assinantes (SaaS)", path: "/settings?tab=empresas", icon: Building2 },
         { name: "Resultados & Relatórios", path: "/resultados", icon: BarChart3 },
         { name: "Campanhas de Mailing", path: "/campanhas", icon: Target },
