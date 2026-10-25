@@ -88,17 +88,17 @@ export default function Sidebar() {
     <aside className={`${isCollapsed ? "w-16" : "w-64"} bg-[#0a0e17] border-r border-slate-800/80 flex flex-col h-screen text-slate-400 select-none transition-all duration-200 shrink-0`}>
       {/* Brand Header */}
       <div className={`h-16 flex items-center ${isCollapsed ? "justify-center px-2" : "justify-between px-6"} border-b border-slate-800/60 shrink-0`}>
-        <div className="flex items-center space-x-3 overflow-hidden">
-          <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white font-bold text-sm tracking-wider shadow-sm shrink-0">
+        <Link href="/" title="Ir para o Painel Geral" className="flex items-center space-x-3 overflow-hidden group cursor-pointer">
+          <div className="w-8 h-8 rounded-lg bg-blue-600 group-hover:bg-blue-500 transition flex items-center justify-center text-white font-bold text-sm tracking-wider shadow-sm shrink-0">
             AK
           </div>
           {!isCollapsed && (
             <div className="min-w-0">
-              <h1 className="text-white font-bold text-sm tracking-tight leading-tight truncate">A&K Soluções</h1>
+              <h1 className="text-white group-hover:text-blue-400 transition font-bold text-sm tracking-tight leading-tight truncate">A&K Soluções</h1>
               <p className="text-[10px] text-blue-400 font-semibold tracking-wider uppercase truncate">Call Center Pro</p>
             </div>
           )}
-        </div>
+        </Link>
         <button
           onClick={() => setIsCollapsed(!isCollapsed)}
           className="text-slate-400 hover:text-white p-1 rounded-md hover:bg-slate-800 transition cursor-pointer"

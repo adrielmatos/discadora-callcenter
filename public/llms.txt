@@ -1,0 +1,17 @@
+# A&K Soluções - Call Center Pro & CRM Omnichannel
+
+> A&K Soluções é uma plataforma enterprise de Contact Center, Discador Preditivo e CRM Omnichannel com Inteligência Artificial Sofia integrada ao WhatsApp Web, gestão de esteira de crédito (FGTS, Consignado INSS/SIAPE) e telefonia SIP WebRTC.
+
+## Recursos Principais
+- **Discador Preditivo & Softphone WebRTC**: Discagem contínua para operadores com cálculo de margem e quebra de objeções em tempo real.
+- **CRM & Pipeline Kanban**: Gestão de leads, esteira de crédito consignado, histórico de chamadas e agendamento de retornos.
+- **Sofia AI 24h**: Assistente de inteligência artificial baseada em Google Gemini e Groq com guardrails de conformidade jurídica Bacen nº 3.954/2011 e CDC Art. 39.
+- **Extensão WhatsApp Web Anti-Ban**: Opera na interface oficial do WhatsApp Web com simulação de ponteiro humanizado e mineração em lote para o CRM.
+- **Segurança & Multi-Tenant**: Isolamento por empresa via Supabase Row Level Security (RLS) e auditoria imutável LGPD.
+
+## Links Rápidos
+- Painel Principal: https://discadora-callcenter.vercel.app/
+- Acesso Operador: https://discadora-callcenter.vercel.app/login
+- Discador de Chamadas: https://discadora-callcenter.vercel.app/dialer
+- Esteira de Leads: https://discadora-callcenter.vercel.app/leads
+- Extensão WhatsApp Web: https://discadora-callcenter.vercel.app/download-extensao
