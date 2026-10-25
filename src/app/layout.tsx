@@ -27,6 +27,11 @@ export const metadata: Metadata = {
     "credito consignado inss"
   ],
   authors: [{ name: "A&K Soluções Financeiras" }],
+  icons: {
+    icon: "/favicon.svg",
+    shortcut: "/favicon.svg",
+    apple: "/favicon.svg"
+  },
   openGraph: {
     type: "website",
     locale: "pt_BR",

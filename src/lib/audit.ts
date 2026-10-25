@@ -20,10 +20,14 @@ export type AuditAction =
 
 export interface AuditEventParams {
   action: AuditAction;
-  resource: string;
+  resource?: string;
+  entity?: string;
   resourceId?: string | number | null;
+  entity_id?: string | number | null;
   metadata?: Record<string, any>;
+  details?: Record<string, any>;
   empresaId?: string | null;
+  empresa_id?: string | null;
   actorUserId?: string | null;
 }
 
@@ -33,15 +37,24 @@ export interface AuditEventParams {
 export async function logAuditEvent({
   action,
   resource,
+  entity,
   resourceId,
-  metadata = {},
+  entity_id,
+  metadata,
+  details,
   empresaId,
+  empresa_id,
   actorUserId
 }: AuditEventParams): Promise<boolean> {
   try {
+    const finalResource = resource || entity || "general";
+    const rawResourceId = resourceId !== undefined ? resourceId : entity_id;
+    const finalMetadata = metadata && Object.keys(metadata).length > 0 ? metadata : details || {};
+    const finalEmp = empresaId || empresa_id;
+
     // Tenta resolver o usuário logado caso não tenha sido explicitamente fornecido
     let finalUserId = actorUserId || null;
-    let finalEmpresaId = empresaId || null;
+    let finalEmpresaId = finalEmp || null;
 
     if (!finalUserId || !finalEmpresaId) {
       try {
@@ -57,12 +70,12 @@ export async function logAuditEvent({
 
     const payload = {
       action,
-      resource,
-      resource_id: resourceId ? String(resourceId) : null,
+      resource: finalResource,
+      resource_id: rawResourceId ? String(rawResourceId) : null,
       actor_user_id: finalUserId,
       empresa_id: finalEmpresaId || "ebe1ab22-519e-4784-8f96-e7f0d7a8c0a3",
       metadata: {
-        ...metadata,
+        ...finalMetadata,
         timestamp: new Date().toISOString(),
         user_agent: typeof window !== "undefined" ? window.navigator.userAgent : "server-agent"
       }
