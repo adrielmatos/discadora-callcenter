@@ -73,27 +73,29 @@ export default function DashboardPage() {
         });
       }
 
-      // 2. Leads e Esteira
-      const { data: leadsData } = await supabase
-        .from("leads")
-        .select("*")
-        .order("id", { ascending: true });
+      // 2. Leads e Esteira (Contagem rápida indexada + Amostra de alta performance)
+      const [{ count: totalLeadsCount }, { data: leadsData }] = await Promise.all([
+        supabase.from("leads").select("*", { count: "exact", head: true }),
+        supabase.from("leads").select("id, nome, telefone, cpf, margem_disponivel, banco, status, etapa_crm, produto, created_at").order("id", { ascending: false }).limit(200)
+      ]);
 
-      const leads: Lead[] = leadsData || [];
+      const leads: Lead[] = (leadsData as Lead[]) || [];
 
-      // 3. Histórico de Ligações
+      // 3. Histórico de Ligações (Recentes)
       const { data: callsData } = await supabase
         .from("historico_ligacoes")
-        .select("*")
-        .order("created_at", { ascending: false });
+        .select("id, tabulacao, duracao_segundos, created_at")
+        .order("created_at", { ascending: false })
+        .limit(200);
 
       const calls = callsData || [];
 
       // 4. Retornos Agendados
-      const { data: retornosData } = await supabase
+      const { data: retornosData, count: retornosCount } = await supabase
         .from("retornos")
-        .select("*")
-        .eq("concluido", false);
+        .select("id", { count: "exact" })
+        .eq("concluido", false)
+        .limit(100);
 
       const retornos = retornosData || [];
 
@@ -117,7 +119,7 @@ export default function DashboardPage() {
       const taxa = calls.length > 0 ? `${Math.round((efetivas / calls.length) * 100)}%` : "24%";
 
       setMetrics({
-        totalLeads: leads.length,
+        totalLeads: totalLeadsCount ?? leads.length,
         pendentesFila: pendentes.length,
         ligacoesHoje: calls.length,
         contatosEfetivos: efetivas,
@@ -127,7 +129,7 @@ export default function DashboardPage() {
         volumeEmAndamento: volEmAndamento,
         comissaoEstimada: comissao,
         aguardandoAnuencia: 4, // Amostra de anuências no prazo de 5 dias do INSS
-        retornosPendentes: retornos.length
+        retornosPendentes: retornosCount ?? retornos.length
       });
 
       // Amostra da Fila (Pool vs Carteira)

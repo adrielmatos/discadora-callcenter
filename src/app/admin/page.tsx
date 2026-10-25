@@ -1,8 +1,6 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import Sidebar from "@/components/Sidebar";
-import AuthGuard from "@/components/AuthGuard";
 import { supabase } from "@/lib/supabase";
 import { logAuditEvent } from "@/lib/audit";
 import {
@@ -168,11 +166,8 @@ export default function SuperAdminPage() {
   };
 
   return (
-    <AuthGuard>
-      <div className="flex h-screen bg-[#070b14] text-slate-100 font-sans overflow-hidden">
-        <Sidebar />
-
-        <main className="flex-1 flex flex-col h-full overflow-y-auto">
+    <div className="flex-1 flex flex-col h-full bg-[#070b14] text-slate-100 font-sans overflow-hidden">
+      <main className="flex-1 flex flex-col h-full overflow-y-auto">
           {/* Header Superior Master */}
           <header className="px-6 py-4 border-b border-slate-800/80 bg-slate-900/60 backdrop-blur-md flex flex-wrap items-center justify-between gap-4 sticky top-0 z-20">
             <div>
@@ -393,7 +388,6 @@ export default function SuperAdminPage() {
               </div>
             )}
           </div>
-        </main>
 
         {/* Modal de Criação de Tenant */}
         {isModalOpen && (
@@ -492,7 +486,7 @@ export default function SuperAdminPage() {
             </div>
           </div>
         )}
-      </div>
-    </AuthGuard>
+      </main>
+    </div>
   );
 }

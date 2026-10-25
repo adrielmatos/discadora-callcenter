@@ -33,8 +33,18 @@ export default function RetornosPage() {
 
   useEffect(() => {
     fetchRetornos();
-    const interval = setInterval(fetchRetornos, 5000);
-    return () => clearInterval(interval);
+    const channel = supabase
+      .channel("retornos_realtime")
+      .on("postgres_changes", { event: "*", schema: "public", table: "retornos" }, () => {
+        fetchRetornos();
+      })
+      .subscribe();
+
+    const interval = setInterval(fetchRetornos, 30000);
+    return () => {
+      supabase.removeChannel(channel);
+      clearInterval(interval);
+    };
   }, []);
 
   const handleConclude = async (id: string) => {
