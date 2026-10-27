@@ -712,7 +712,7 @@ export default function DialerWorkspace() {
       <audio ref={remoteAudioRef} autoPlay playsInline className="hidden" />
 
       {/* ── HEADER SUPERIOR FIXO & PROFISSIONAL ──────────────────────── */}
-      <header className="h-14 px-4 lg:px-6 bg-white border-b border-slate-200 flex items-center justify-between shrink-0 shadow-2xs z-10">
+      <header className="h-12 px-3 lg:px-5 bg-white border-b border-slate-200 flex items-center justify-between shrink-0 shadow-2xs z-10">
         
         {/* Esquerda: Identificação da Fila + Status Softphone */}
         <div className="flex items-center gap-3">
@@ -860,57 +860,57 @@ export default function DialerWorkspace() {
       </header>
 
       {/* ── CORPO PRINCIPAL (2 Colunas Limpas lado a lado) ───────────── */}
-      <div className="flex-1 flex flex-row overflow-hidden">
+      <div className="flex-1 flex flex-row overflow-hidden min-h-0">
         
-        {/* ── COLUNA ESQUERDA: Ficha do Lead + Abas Centrais ───────────── */}
-        <div className="flex-1 flex flex-col overflow-y-auto border-r border-slate-200 min-w-0">
+        {/* ── COLUNA ESQUERDA: Ficha do Lead + Abas Centrais (Sem Rolagem Geral) ───────────── */}
+        <div className="flex-1 flex flex-col border-r border-slate-200 min-w-0 overflow-hidden">
 
           {/* DND alerta */}
           {isDndBlocked && (
-            <div className="mx-4 mt-3 bg-rose-50 border border-rose-200 text-rose-800 px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 animate-pulse">
-              <ShieldAlert size={14} className="text-rose-500" />
-              ATENÇÃO: Este contato está cadastrado no Não Perturbe (DND / Bloqueio)
+            <div className="mx-3 mt-2 bg-rose-50 border border-rose-200 text-rose-800 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-2 animate-pulse shrink-0">
+              <ShieldAlert size={14} className="text-rose-500 shrink-0" />
+              <span>ATENÇÃO: Este contato está cadastrado no Não Perturbe (DND / Bloqueio)</span>
             </div>
           )}
 
-          {/* ── CARD DO LEAD ATIVO (Limpo e compacto) ────────────────── */}
-          <div className="mx-4 mt-3 bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden shrink-0">
+          {/* ── CARD DO LEAD ATIVO (Limpo, Ultra-Compacto e Moderno) ────────────────── */}
+          <div className="mx-3 mt-2 bg-white rounded-xl border border-slate-200 shadow-2xs overflow-hidden shrink-0">
             {/* Banner de diagnóstico */}
-            <div className="bg-gradient-to-r from-blue-600 to-indigo-700 px-4 py-2 flex items-center justify-between">
-              <div className="flex items-center gap-2 text-white text-xs min-w-0">
-                <Sparkles size={13} className="text-blue-200 shrink-0" />
+            <div className="bg-gradient-to-r from-blue-600 to-indigo-700 px-3 py-1 flex items-center justify-between">
+              <div className="flex items-center gap-1.5 text-white text-[11px] min-w-0">
+                <Sparkles size={12} className="text-blue-200 shrink-0" />
                 <span className="font-medium text-blue-50 truncate leading-snug">{getLeadDiagnosis(activeLead)}</span>
               </div>
-              <span className="text-[10px] font-extrabold uppercase tracking-wider text-blue-700 bg-white px-2.5 py-0.5 rounded-full shrink-0 ml-2">
+              <span className="text-[9px] font-black uppercase tracking-wider text-blue-700 bg-white px-2 py-0.5 rounded-full shrink-0 ml-2">
                 Pré-Qualificado
               </span>
             </div>
 
             {/* Identificação e Margem */}
-            <div className="p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-              <div className="flex items-center gap-3.5 min-w-0">
-                <div className="w-11 h-11 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center font-black text-lg border border-blue-200/60 shrink-0">
+            <div className="p-2.5 px-3 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-9 h-9 rounded-lg bg-blue-50 text-blue-700 flex items-center justify-center font-black text-sm border border-blue-200/60 shrink-0">
                   {activeLead?.nome?.charAt(0) || "C"}
                 </div>
                 <div className="min-w-0">
-                  <h2 className="text-base font-extrabold text-slate-900 leading-tight truncate">{activeLead?.nome}</h2>
-                  <div className="flex flex-wrap items-center gap-2 mt-1">
-                    <span className="font-mono text-[11px] text-slate-600 bg-slate-100 px-2 py-0.5 rounded border border-slate-200/60">
+                  <h2 className="text-sm font-extrabold text-slate-900 leading-tight truncate">{activeLead?.nome}</h2>
+                  <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
+                    <span className="font-mono text-[10px] text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200/60">
                       {activeLead?.cpf || "CPF Indisponível"}
                     </span>
-                    <span className="flex items-center gap-1 text-[11px] font-semibold text-slate-700 bg-slate-100 px-2 py-0.5 rounded border border-slate-200/60">
-                      <Building2 size={11} className="text-blue-600" />
+                    <span className="flex items-center gap-1 text-[10px] font-semibold text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200/60">
+                      <Building2 size={10} className="text-blue-600" />
                       {activeLead?.banco || "Banco Parceiro"}
                     </span>
-                    <span className="flex items-center gap-1 text-[11px] font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200/60">
+                    <span className="flex items-center gap-1 text-[10px] font-bold text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200/60">
                       🎯 {activeLead?.produto || "Consignado"}
                     </span>
                     <button
                       onClick={handleWhatsApp}
-                      className="flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded hover:bg-emerald-100 transition cursor-pointer"
+                      className="flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded hover:bg-emerald-100 transition cursor-pointer"
                       title="Abrir WhatsApp direto do lead"
                     >
-                      <MessageSquare size={11} />
+                      <MessageSquare size={10} />
                       WhatsApp
                     </button>
                   </div>
@@ -918,9 +918,9 @@ export default function DialerWorkspace() {
               </div>
 
               {/* Card de Margem / Limite */}
-              <div className="text-left sm:text-right shrink-0 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 self-stretch sm:self-auto flex sm:flex-col justify-between items-center sm:items-end">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Margem / Limite</span>
-                <span className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
+              <div className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-1 text-right shrink-0">
+                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block leading-none mb-0.5">Margem / Limite</span>
+                <span className="text-lg font-black text-slate-900 tracking-tight leading-tight">
                   {activeLead?.margem_disponivel || "R$ 0,00"}
                 </span>
               </div>
@@ -928,15 +928,15 @@ export default function DialerWorkspace() {
           </div>
 
           {/* ── SISTEMA DE ABAS CENTRAIS: Script vs Sofia WhatsApp ───── */}
-          <div className="mx-4 mt-3 mb-4 bg-white rounded-2xl border border-slate-200 shadow-2xs flex-1 flex flex-col overflow-hidden min-h-[420px]">
+          <div className="mx-3 mt-2 mb-2 bg-white rounded-xl border border-slate-200 shadow-2xs flex-1 min-h-0 flex flex-col overflow-hidden">
             
             {/* Header das Abas */}
-            <div className="border-b border-slate-200 px-4 bg-slate-50/70 flex items-center justify-between shrink-0">
-              <div className="flex items-center gap-2">
+            <div className="border-b border-slate-200 px-3 bg-slate-50/70 flex items-center justify-between shrink-0 h-9">
+              <div className="flex items-center gap-2 h-full">
                 <button
                   type="button"
                   onClick={() => setActiveTab("script")}
-                  className={`py-3 px-3 text-xs font-extrabold flex items-center gap-2 border-b-2 transition cursor-pointer ${
+                  className={`h-full px-3 text-xs font-extrabold flex items-center gap-1.5 border-b-2 transition cursor-pointer ${
                     activeTab === "script"
                       ? "border-blue-600 text-blue-700 bg-white shadow-2xs"
                       : "border-transparent text-slate-500 hover:text-slate-800"
@@ -948,20 +948,20 @@ export default function DialerWorkspace() {
                 <button
                   type="button"
                   onClick={() => setActiveTab("sofia")}
-                  className={`py-3 px-3 text-xs font-extrabold flex items-center gap-2 border-b-2 transition cursor-pointer ${
+                  className={`h-full px-3 text-xs font-extrabold flex items-center gap-1.5 border-b-2 transition cursor-pointer ${
                     activeTab === "sofia"
                       ? "border-emerald-600 text-emerald-700 bg-white shadow-2xs"
                       : "border-transparent text-slate-500 hover:text-slate-800"
                   }`}
                 >
-                  <Bot size={14} className={activeTab === "sofia" ? "text-emerald-600" : "text-slate-400"} />
+                  <Bot size={13} className={activeTab === "sofia" ? "text-emerald-600" : "text-slate-400"} />
                   <span>Conversa Sofia (WhatsApp)</span>
                   {whatsappInteractions.length > 0 ? (
-                    <span className="bg-emerald-100 text-emerald-800 border border-emerald-300 px-1.5 py-0.2 rounded-full text-[10px] font-black">
+                    <span className="bg-emerald-100 text-emerald-800 border border-emerald-300 px-1.5 py-0.2 rounded-full text-[9px] font-black">
                       {whatsappInteractions.length}
                     </span>
                   ) : (
-                    <span className="bg-slate-200/80 text-slate-500 px-1.5 py-0.2 rounded-full text-[10px] font-semibold">
+                    <span className="bg-slate-200/80 text-slate-500 px-1.5 py-0.2 rounded-full text-[9px] font-semibold">
                       0
                     </span>
                   )}
@@ -974,7 +974,7 @@ export default function DialerWorkspace() {
                   <button
                     type="button"
                     onClick={() => setIsSofiaPausedForLead(!isSofiaPausedForLead)}
-                    className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition flex items-center gap-1 cursor-pointer ${
+                    className={`px-2 py-0.5 rounded-lg text-[10px] font-bold border transition flex items-center gap-1 cursor-pointer ${
                       isSofiaPausedForLead
                         ? "bg-amber-50 text-amber-800 border-amber-300"
                         : "bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100"
@@ -988,9 +988,9 @@ export default function DialerWorkspace() {
                   <button
                     onClick={() => activeLead?.id && loadWhatsappHistory(activeLead.id)}
                     title="Atualizar mensagens do WhatsApp"
-                    className="text-slate-400 hover:text-emerald-600 transition p-1.5 rounded-lg hover:bg-slate-100 cursor-pointer"
+                    className="text-slate-400 hover:text-emerald-600 transition p-1 rounded-md hover:bg-slate-100 cursor-pointer"
                   >
-                    <RefreshCw size={13} className={loadingWhatsapp ? "animate-spin text-emerald-600" : ""} />
+                    <RefreshCw size={12} className={loadingWhatsapp ? "animate-spin text-emerald-600" : ""} />
                   </button>
                 </div>
               )}
@@ -998,14 +998,14 @@ export default function DialerWorkspace() {
 
             {/* ── CONTEÚDO DA ABA 1: SCRIPT DE LIGAÇÃO ────────────────── */}
             {activeTab === "script" && (
-              <div className="flex-1 flex flex-col overflow-hidden">
+              <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
                 {/* Objeções Rápidas em Pílulas */}
-                <div className="px-4 py-2 bg-amber-50/70 border-b border-amber-200/60 flex items-center gap-2 shrink-0">
-                  <div className="flex items-center gap-1 text-amber-800 text-[11px] font-extrabold shrink-0">
-                    <Zap size={12} className="text-amber-500 fill-amber-400" />
+                <div className="px-3 py-1 bg-amber-50/70 border-b border-amber-200/60 flex items-center gap-2 shrink-0">
+                  <div className="flex items-center gap-1 text-amber-800 text-[10px] font-black uppercase tracking-wider shrink-0">
+                    <Zap size={11} className="text-amber-500 fill-amber-400" />
                     <span>Objeções:</span>
                   </div>
-                  <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none flex-nowrap min-w-0 py-0.5">
+                  <div className="flex items-center gap-1 overflow-x-auto no-scrollbar flex-nowrap min-w-0 py-0.5">
                     {OBJECTION_LIST.map((obj) => {
                       const isActive = activeObjection === obj.id;
                       return (
@@ -1013,9 +1013,9 @@ export default function DialerWorkspace() {
                           key={obj.id}
                           type="button"
                           onClick={() => setActiveObjection(isActive ? null : obj.id)}
-                          className={`whitespace-nowrap text-[11px] px-2.5 py-1 rounded-full font-medium transition shrink-0 cursor-pointer ${
+                          className={`whitespace-nowrap text-[10px] px-2 py-0.5 rounded-full font-semibold transition shrink-0 cursor-pointer ${
                             isActive
-                              ? "bg-amber-600 text-white font-bold ring-2 ring-amber-400 shadow-2xs"
+                              ? "bg-amber-600 text-white font-bold ring-1 ring-amber-400 shadow-2xs"
                               : "bg-white text-amber-900 border border-amber-200/80 hover:bg-amber-100"
                           }`}
                         >
@@ -1028,24 +1028,24 @@ export default function DialerWorkspace() {
 
                 {/* Resposta da Objeção Selecionada */}
                 {activeObjection && (
-                  <div className="mx-4 mt-3 p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 shrink-0">
-                    <div className="flex items-center justify-between font-bold mb-1">
-                      <span className="flex items-center gap-1.5">
-                        <Zap size={12} className="text-amber-500 fill-amber-500" />
+                  <div className="mx-3 mt-1.5 p-2 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-900 shrink-0">
+                    <div className="flex items-center justify-between font-bold mb-0.5">
+                      <span className="flex items-center gap-1 text-[11px]">
+                        <Zap size={11} className="text-amber-500 fill-amber-500" />
                         {OBJECTION_LIST.find(o => o.id === activeObjection)?.label}
                       </span>
                       <button onClick={() => setActiveObjection(null)} className="text-amber-700 hover:text-amber-950 cursor-pointer">
-                        <X size={14} />
+                        <X size={13} />
                       </button>
                     </div>
-                    <p className="text-xs sm:text-sm font-medium leading-snug text-amber-950">
+                    <p className="text-xs font-medium leading-tight text-amber-950">
                       "{renderScriptText(OBJECTION_LIST.find(o => o.id === activeObjection)?.resposta || "")}"
                     </p>
                   </div>
                 )}
 
-                {/* 4 Etapas do Script */}
-                <div className="p-4 overflow-y-auto space-y-2.5 flex-1">
+                {/* 4 Etapas do Script (Design Compacto e Elegante sem rolagem) */}
+                <div className="p-2.5 px-3 overflow-y-auto space-y-1.5 flex-1 min-h-0">
                   {[
                     { num: "1", label: "Abertura", text: currentScript.abertura, color: "blue" },
                     { num: "2", label: "Motivo da Ligação", text: currentScript.motivo, color: "slate" },
@@ -1054,18 +1054,18 @@ export default function DialerWorkspace() {
                   ].map((step) => (
                     <div
                       key={step.num}
-                      className={`p-3 rounded-xl border text-xs ${
-                        step.color === "blue" ? "bg-blue-50/50 border-blue-100" :
-                        step.color === "emerald" ? "bg-emerald-50/50 border-emerald-100" :
-                        "bg-slate-50 border-slate-100"
+                      className={`p-2 px-2.5 rounded-lg border transition ${
+                        step.color === "blue" ? "bg-blue-50/40 border-blue-100/80" :
+                        step.color === "emerald" ? "bg-emerald-50/40 border-emerald-100/80" :
+                        "bg-slate-50/70 border-slate-100"
                       }`}
                     >
-                      <span className={`text-[10px] font-extrabold uppercase tracking-wider block mb-1 ${
+                      <span className={`text-[9px] font-extrabold uppercase tracking-wider block mb-0.5 ${
                         step.color === "blue" ? "text-blue-600" : step.color === "emerald" ? "text-emerald-600" : "text-slate-400"
                       }`}>
                         {step.num}. {step.label}
                       </span>
-                      <p className={`text-xs sm:text-sm font-medium leading-relaxed ${
+                      <p className={`text-[11px] sm:text-xs font-medium leading-snug ${
                         step.color === "blue" ? "text-blue-950" : step.color === "emerald" ? "text-emerald-950" : "text-slate-800"
                       }`}>
                         "{renderScriptText(step.text)}"
@@ -1247,13 +1247,13 @@ export default function DialerWorkspace() {
           </div>
         </div>
 
-        {/* ── COLUNA DIREITA: Telefone + Controles de Chamada (Sempre Visível) ─── */}
-        <div className="w-72 xl:w-80 bg-white border-l border-slate-200 flex flex-col p-4 shrink-0 justify-between overflow-y-auto z-10">
+        {/* ── COLUNA DIREITA: Telefone + Controles de Chamada (Sem Rolagem, 100% Visível) ─── */}
+        <div className="w-72 xl:w-80 bg-white border-l border-slate-200 flex flex-col p-3 shrink-0 justify-between overflow-hidden z-10">
           
           {/* Header do Telefone + Localização */}
-          <div className="text-center pb-3 border-b border-slate-100">
-            <div className="flex items-center justify-center gap-1.5 mb-1.5">
-              <span className={`text-[10px] font-bold uppercase tracking-widest px-2.5 py-0.5 rounded-full border ${
+          <div className="text-center pb-2 border-b border-slate-100 shrink-0">
+            <div className="flex items-center justify-center gap-1.5 mb-1">
+              <span className={`text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${
                 softphoneMode === "webrtc" && sipRegStatus === "registered"
                   ? "bg-emerald-50 text-emerald-700 border-emerald-200"
                   : "bg-blue-50 text-blue-700 border-blue-200"
@@ -1262,12 +1262,12 @@ export default function DialerWorkspace() {
               </span>
             </div>
 
-            <p className="text-2xl sm:text-3xl font-mono font-black text-slate-900 tracking-tight">
+            <p className="text-2xl font-mono font-black text-slate-900 tracking-tight">
               {formatPhone(activeLead?.telefone) || "(00) 00000-0000"}
             </p>
 
             {activeLead?.telefone && (
-              <div className="mt-1 flex items-center justify-center gap-1.5 text-[11px] text-slate-500 font-medium">
+              <div className="mt-0.5 flex items-center justify-center gap-1.5 text-[10px] text-slate-500 font-medium">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
                 <span>📍 {region.uf} ({region.ddd}) • {region.regiao}</span>
               </div>
@@ -1275,14 +1275,14 @@ export default function DialerWorkspace() {
           </div>
 
           {/* Área de Estados da Chamada */}
-          <div className="flex-1 flex flex-col justify-center gap-4 py-4">
+          <div className="flex-1 flex flex-col justify-center gap-2.5 py-2">
 
             {/* ESTADO 1: IDLE (Pronto para Chamar) */}
             {callStatus === "idle" && (
               <>
                 <button
                   onClick={handleQualifySdr}
-                  className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 px-4 rounded-xl font-bold text-xs flex items-center justify-center gap-2 shadow-sm transition cursor-pointer"
+                  className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-2 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 shadow-xs transition cursor-pointer"
                 >
                   <Check size={14} className="stroke-[3]" />
                   <span>Qualificar SDR ➔ Esteira</span>
@@ -1290,33 +1290,33 @@ export default function DialerWorkspace() {
 
                 <button
                   onClick={handleStartCall}
-                  className={`w-full py-5 rounded-2xl text-white flex flex-col items-center justify-center font-bold shadow-md hover:scale-[1.02] transition-all cursor-pointer ${
+                  className={`w-full py-3.5 rounded-xl text-white flex items-center justify-center gap-2 font-black shadow-sm hover:brightness-105 transition-all cursor-pointer ${
                     isDndBlocked ? "bg-amber-500 hover:bg-amber-600" : "bg-blue-600 hover:bg-blue-700"
                   }`}
                 >
-                  <PhoneCall size={32} className="mb-1.5" />
-                  <span className="text-sm uppercase tracking-wider">{isDndBlocked ? "Chamar (DND!)" : "Ligar Agora"}</span>
+                  <PhoneCall size={18} />
+                  <span className="text-xs uppercase tracking-wider">{isDndBlocked ? "Chamar (DND!)" : "Ligar Agora"}</span>
                 </button>
               </>
             )}
 
             {/* ESTADO 2: CALLING (Chamando / Conectando) */}
             {callStatus === "calling" && (
-              <div className="text-center space-y-3 bg-blue-50/60 p-5 rounded-2xl border border-blue-200/60">
-                <div className="w-12 h-12 rounded-full border-4 border-blue-600 border-t-transparent animate-spin mx-auto"></div>
+              <div className="text-center space-y-2.5 bg-blue-50/60 p-3.5 rounded-xl border border-blue-200/60">
+                <div className="w-9 h-9 rounded-full border-3 border-blue-600 border-t-transparent animate-spin mx-auto"></div>
                 <div>
                   <p className="text-xs font-bold text-blue-900">
                     {softphoneMode === "webrtc" && sipRegStatus === "registered"
                       ? "Chamando pelo Ramal WebRTC..."
                       : "Disparando para o smartphone..."}
                   </p>
-                  <p className="text-[11px] text-slate-500 mt-0.5">Aguardando atendimento...</p>
+                  <p className="text-[10px] text-slate-500 mt-0.5">Aguardando atendimento...</p>
                 </div>
                 <button
                   onClick={handleEndCall}
-                  className="w-full bg-rose-600 hover:bg-rose-700 text-white py-2.5 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer"
+                  className="w-full bg-rose-600 hover:bg-rose-700 text-white py-2 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer"
                 >
-                  <PhoneOff size={14} />
+                  <PhoneOff size={13} />
                   <span>Cancelar Chamada</span>
                 </button>
               </div>
@@ -1324,75 +1324,87 @@ export default function DialerWorkspace() {
 
             {/* ESTADO 3: TALKING (Em Conversação Ativa) */}
             {callStatus === "talking" && (
-              <div className="space-y-3">
-                <div className="bg-slate-900 text-white p-5 rounded-2xl text-center shadow-md relative overflow-hidden">
-                  <div className="flex items-center justify-center space-x-1.5 text-[10px] font-bold text-emerald-400 uppercase tracking-widest mb-1">
-                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+              <div className="space-y-2">
+                <div className="bg-slate-900 text-white p-3.5 rounded-xl text-center shadow-md relative overflow-hidden">
+                  <div className="flex items-center justify-center space-x-1.5 text-[9px] font-bold text-emerald-400 uppercase tracking-widest mb-0.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
                     <span>Em Conversação</span>
                   </div>
                   <CallTimerDisplay onTick={useCallback((secs: number) => { callDurationRef.current = secs; }, [])} />
 
-                  <div className="mt-2 flex items-center justify-center gap-1 text-[10px] text-slate-400 font-semibold">
-                    <Radio size={12} className="text-emerald-400" />
+                  <div className="mt-1 flex items-center justify-center gap-1 text-[9px] text-slate-400 font-semibold">
+                    <Radio size={11} className="text-emerald-400" />
                     <span>{softphoneMode === "webrtc" ? "Áudio WebRTC Ativo" : "Linha Celular"}</span>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-2 gap-1.5">
                   <button
                     onClick={handleToggleMute}
-                    className={`py-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition cursor-pointer border ${
+                    className={`py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition cursor-pointer border ${
                       isMuted
                         ? "bg-rose-50 text-rose-700 border-rose-300"
                         : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
                     }`}
                   >
-                    {isMuted ? <MicOff size={15} /> : <Mic size={15} />}
+                    {isMuted ? <MicOff size={13} /> : <Mic size={13} />}
                     <span>{isMuted ? "Mutado" : "Mudo"}</span>
                   </button>
 
                   <button
                     onClick={() => setIsKeypadOpen(true)}
-                    className="py-3 rounded-xl text-xs font-bold bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 flex items-center justify-center gap-1.5 transition cursor-pointer"
+                    className="py-2 rounded-lg text-xs font-bold bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 flex items-center justify-center gap-1.5 transition cursor-pointer"
                   >
-                    <Hash size={15} className="text-blue-600" />
+                    <Hash size={13} className="text-blue-600" />
                     <span>Teclado URA</span>
                   </button>
                 </div>
 
                 <button
                   onClick={handleEndCall}
-                  className="w-full bg-rose-600 hover:bg-rose-700 text-white py-3.5 rounded-xl text-xs font-bold flex items-center justify-center gap-2 shadow-sm transition cursor-pointer"
+                  className="w-full bg-rose-600 hover:bg-rose-700 text-white py-2.5 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs transition cursor-pointer"
                 >
-                  <PhoneOff size={16} />
+                  <PhoneOff size={14} />
                   <span>Desligar Chamada</span>
                 </button>
               </div>
             )}
 
-            {/* ESTADO 4: WRAPUP (Classificar Tabulação) */}
+            {/* ESTADO 4: WRAPUP (Classificar Tabulação em Grade 2 Colunas) */}
             {callStatus === "wrapup" && (
               <div className="space-y-1.5">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-2 text-center">Classificar Resultado</span>
-                {[
-                  { label: "✅ Contrato Fechado", status: "Contrato", cls: "bg-emerald-50 text-emerald-800 border-emerald-200 font-bold" },
-                  { label: "📄 Proposta Enviada", status: "Proposta", cls: "bg-slate-50 text-slate-700 border-slate-200" },
-                  { label: "🔢 Simulação Feita", status: "Simulação", cls: "bg-slate-50 text-slate-700 border-slate-200" },
-                  { label: "📅 Agendar Retorno", status: "Retorno", cls: "bg-amber-50 text-amber-800 border-amber-200 font-bold" },
-                  { label: "👋 Interessado", status: "Interessado", cls: "bg-blue-50 text-blue-800 border-blue-200" },
-                  { label: "📵 Não Atendeu", status: "Não atendeu", cls: "bg-slate-50 text-slate-600 border-slate-200" },
-                  { label: "🚫 Sem Interesse", status: "Não interessado", cls: "bg-slate-50 text-slate-600 border-slate-200" },
-                  { label: "⚠️ Sem Perfil / Saldo", status: "Sem perfil", cls: "bg-slate-50 text-slate-600 border-slate-200" },
-                ].map(({ label, status, cls }) => (
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1 text-center">Classificar Resultado</span>
+                <button
+                  onClick={() => handleDisposition("Contrato")}
+                  className="w-full text-center px-3 py-2 border rounded-xl font-black text-xs transition hover:brightness-95 cursor-pointer bg-emerald-500 text-white shadow-xs flex justify-center items-center gap-1.5"
+                >
+                  <Check size={14} className="stroke-[3]" />
+                  <span>✅ Contrato Fechado</span>
+                </button>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {[
+                    { label: "📄 Proposta", status: "Proposta", cls: "bg-slate-50 text-slate-700 border-slate-200" },
+                    { label: "🔢 Simulação", status: "Simulação", cls: "bg-slate-50 text-slate-700 border-slate-200" },
+                    { label: "📅 Retorno", status: "Retorno", cls: "bg-amber-50 text-amber-800 border-amber-200 font-bold" },
+                    { label: "👋 Interessado", status: "Interessado", cls: "bg-blue-50 text-blue-800 border-blue-200" },
+                    { label: "📵 Não Atendeu", status: "Não atendeu", cls: "bg-slate-50 text-slate-600 border-slate-200" },
+                    { label: "🚫 Sem Interesse", status: "Não interessado", cls: "bg-slate-50 text-slate-600 border-slate-200" },
+                  ].map(({ label, status, cls }) => (
+                    <button
+                      key={status}
+                      onClick={() => handleDisposition(status)}
+                      className={`text-left px-2 py-1.5 border rounded-lg font-medium text-[11px] truncate transition hover:brightness-95 cursor-pointer ${cls}`}
+                    >
+                      {label}
+                    </button>
+                  ))}
                   <button
-                    key={status}
-                    onClick={() => handleDisposition(status)}
-                    className={`w-full text-left px-3 py-2 border rounded-lg font-medium text-xs flex justify-between items-center transition hover:brightness-95 cursor-pointer ${cls}`}
+                    onClick={() => handleDisposition("Sem perfil")}
+                    className="col-span-2 text-center px-2 py-1.5 border rounded-lg font-medium text-[11px] transition hover:brightness-95 cursor-pointer bg-slate-50 text-slate-500 border-slate-200"
                   >
-                    <span>{label}</span>
-                    <ChevronRight size={13} className="opacity-40" />
+                    ⚠️ Sem Perfil / Saldo
                   </button>
-                ))}
+                </div>
               </div>
             )}
           </div>
@@ -1401,7 +1413,7 @@ export default function DialerWorkspace() {
           {callStatus === "idle" && (
             <button
               onClick={() => saveCallRecord("Pulado")}
-              className="w-full py-2 text-slate-400 hover:text-slate-600 text-xs font-semibold flex items-center justify-center gap-1.5 transition border-t border-slate-100 pt-3 cursor-pointer"
+              className="w-full py-1.5 text-slate-400 hover:text-slate-600 text-[11px] font-semibold flex items-center justify-center gap-1.5 transition border-t border-slate-100 pt-2 cursor-pointer shrink-0"
             >
               <FastForward size={12} />
               <span>Pular Lead</span>
