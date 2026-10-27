@@ -152,6 +152,7 @@ export default function SettingsPage() {
   const [novoFantasia, setNovoFantasia] = useState("");
   const [novoCnpj, setNovoCnpj] = useState("");
   const [novoEmailGestor, setNovoEmailGestor] = useState("");
+  const [novaSenhaGestor, setNovaSenhaGestor] = useState("Ak@123456");
   const [novoPlanoId, setNovoPlanoId] = useState("");
   const [novoLimiteOperadores, setNovoLimiteOperadores] = useState("5");
   const [novoStatusEmpresa, setNovoStatusEmpresa] = useState("ativa");
@@ -367,11 +368,41 @@ export default function SettingsPage() {
         return;
       }
 
-      alert(`Empresa "${novaRazao}" cadastrada com sucesso! Ela possui tenant 100% isolado.`);
+      // Cria automaticamente o usuário gestor com a senha escolhida
+      if (data?.id && novoEmailGestor.trim() && novaSenhaGestor.trim()) {
+        try {
+          await supabase.rpc("admin_criar_usuario_completo", {
+            p_nome: novoFantasia.trim() || novaRazao.trim(),
+            p_email: novoEmailGestor.trim().toLowerCase(),
+            p_password: novaSenhaGestor.trim(),
+            p_empresa_id: data.id,
+            p_perfil: "proprietario",
+            p_can_crm: true,
+            p_can_export: false,
+            p_can_reports: true,
+            p_can_scripts: true,
+            p_can_campanhas: true,
+            p_can_dnd: true
+          });
+        } catch (uErr: any) {
+          console.warn("Aviso ao criar login do gestor:", uErr);
+        }
+      }
+
+      alert(
+        `🎉 Empresa "${novaRazao}" cadastrada com sucesso!\n\n` +
+        `👤 Gestor / Responsável: ${novoFantasia.trim() || novaRazao.trim()}\n` +
+        `📧 E-mail de Login: ${novoEmailGestor.trim().toLowerCase()}\n` +
+        `🔑 Senha de Acesso: ${novaSenhaGestor.trim()}\n` +
+        `⏱️ Situação: ${novoStatusEmpresa === "trial" ? `Período de Testes (${novoDiasTeste} dias)` : "Ativa no Plano"}\n\n` +
+        `Você já pode enviar estes dados para o seu cliente acessar o discador!`
+      );
+
       setNovaRazao("");
       setNovoFantasia("");
       setNovoCnpj("");
       setNovoEmailGestor("");
+      setNovaSenhaGestor("Ak@123456");
       setShowModalAddEmpresa(false);
       fetchEmpresas();
     } catch (e: any) {
@@ -1583,6 +1614,33 @@ export default function SettingsPage() {
                     className="w-full text-xs border border-slate-200 rounded-lg p-2 outline-none focus:border-blue-500"
                   />
                 </div>
+              </div>
+
+              {/* Senha Inicial do Gestor da Empresa Cliente */}
+              <div className="bg-blue-50/40 p-3 rounded-xl border border-blue-100">
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-[11px] font-bold text-slate-700 flex items-center gap-1.5">
+                    <Key size={13} className="text-blue-600" />
+                    <span>Senha Inicial de Acesso do Cliente *:</span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setNovaSenhaGestor("Ak@" + Math.floor(100000 + Math.random() * 900000))}
+                    className="text-[10px] text-blue-600 hover:underline font-bold cursor-pointer"
+                  >
+                    Gerar Senha Automática
+                  </button>
+                </div>
+                <input 
+                  type="text" 
+                  placeholder="Ex: Ak@123456 ou 123456"
+                  value={novaSenhaGestor}
+                  onChange={e => setNovaSenhaGestor(e.target.value)}
+                  className="w-full text-xs border border-blue-200 rounded-lg p-2 outline-none focus:border-blue-500 font-mono font-bold text-blue-700 bg-white"
+                />
+                <span className="text-[10px] text-slate-500 mt-1 block">
+                  Ao criar a empresa, o login do cliente já é ativado com este e-mail e senha.
+                </span>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
