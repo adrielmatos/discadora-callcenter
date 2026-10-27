@@ -16,14 +16,41 @@ export default function Sidebar() {
   const router = useRouter();
   const [currentUser, setCurrentUser] = useState<{ email?: string; nome?: string } | null>(null);
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isMaster, setIsMaster] = useState(true);
+  const [allowedModules, setAllowedModules] = useState<string[]>([]);
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data: { user } }) => {
+    supabase.auth.getUser().then(async ({ data: { user } }) => {
       if (user) {
         setCurrentUser({
           email: user.email,
           nome: user.user_metadata?.nome || user.email?.split("@")[0] || "Adriel"
         });
+
+        // Verificação de isolamento: Se pertencer a empresa cliente (não-matriz), restringe acesso
+        try {
+          const userEmpresaId = user.app_metadata?.empresa_id || user.user_metadata?.empresa_id;
+          if (userEmpresaId) {
+            const { data: emp } = await supabase
+              .from("empresas")
+              .select("interna, modulos_liberados")
+              .eq("id", userEmpresaId)
+              .maybeSingle();
+
+            if (emp && emp.interna === false) {
+              setIsMaster(false);
+              setAllowedModules(
+                emp.modulos_liberados && emp.modulos_liberados.length > 0
+                  ? emp.modulos_liberados
+                  : ["dialer", "conversas", "crm", "tasks", "retornos"]
+              );
+              return;
+            }
+          }
+          setIsMaster(true);
+        } catch {
+          setIsMaster(true);
+        }
       }
     });
 
@@ -85,6 +112,46 @@ export default function Sidebar() {
     }
   ];
 
+  // Mapeamento de rotas para controle de módulos por empresa
+  const routeModuleMap: Record<string, string> = {
+    "/dialer": "dialer",
+    "/conversas": "conversas",
+    "/leads": "crm",
+    "/tasks": "tasks",
+    "/retornos": "retornos",
+    "/campanhas": "campanhas",
+    "/omnichannel": "omnichannel",
+    "/download-extensao": "omnichannel",
+    "/scripts": "scripts",
+    "/dnd": "dnd",
+    "/telefonia": "telefonia",
+    "/resultados": "resultados"
+  };
+
+  // Rotas restritas exclusivas da Dona / Master (Bloqueadas para qualquer empresa cliente)
+  const masterOnlyPaths = ["/", "/admin", "/settings?tab=empresas", "/settings"];
+
+  const filteredNavGroups = navGroups.map(group => ({
+    ...group,
+    items: group.items.filter(item => {
+      // Dono / Matriz tem acesso a 100% dos módulos e configurações
+      if (isMaster) return true;
+
+      // Empresas Clientes / Teste: NUNCA acessam as configurações de dono
+      if (masterOnlyPaths.includes(item.path)) {
+        return false;
+      }
+
+      // Se for um módulo gerenciável, verifica se foi liberado no teste
+      const modId = routeModuleMap[item.path];
+      if (modId) {
+        return allowedModules.length === 0 || allowedModules.includes(modId);
+      }
+
+      return true;
+    })
+  })).filter(group => group.items.length > 0);
+
   return (
     <aside className={`${isCollapsed ? "w-16" : "w-64"} bg-[#0a0e17] border-r border-slate-800/80 flex flex-col h-screen text-slate-400 select-none transition-all duration-200 shrink-0`}>
       {/* Brand Header */}
@@ -131,7 +198,7 @@ export default function Sidebar() {
 
       {/* Grouped Navigation */}
       <nav className="flex-1 overflow-y-auto py-3 px-3 space-y-4 custom-scrollbar">
-        {navGroups.map((group) => (
+        {filteredNavGroups.map((group) => (
           <div key={group.title} className="space-y-1">
             {!isCollapsed && (
               <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider px-3 py-0.5 truncate">

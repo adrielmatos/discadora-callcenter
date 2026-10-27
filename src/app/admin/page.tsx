@@ -65,6 +65,20 @@ export default function SuperAdminPage() {
   const fetchAdminData = async () => {
     setLoading(true);
     try {
+      // Trava de segurança: Bloqueia acesso de empresas clientes ao Painel Master
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const userEmpresaId = user.app_metadata?.empresa_id || user.user_metadata?.empresa_id;
+        if (userEmpresaId) {
+          const { data: emp } = await supabase.from("empresas").select("interna").eq("id", userEmpresaId).maybeSingle();
+          if (emp && emp.interna === false) {
+            alert("Acesso Restrito: Este painel master é exclusivo da administração central.");
+            window.location.href = "/leads";
+            return;
+          }
+        }
+      }
+
       // 1. Busca empresas
       const { data: empData } = await supabase
         .from("empresas")

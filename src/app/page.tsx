@@ -66,6 +66,16 @@ export default function DashboardPage() {
       // 1. Usuário logado
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
+        // Trava de segurança: Se for empresa cliente (não-matriz), redireciona para a esteira operacional
+        const userEmpresaId = user.app_metadata?.empresa_id || user.user_metadata?.empresa_id;
+        if (userEmpresaId) {
+          const { data: emp } = await supabase.from("empresas").select("interna").eq("id", userEmpresaId).maybeSingle();
+          if (emp && emp.interna === false) {
+            window.location.href = "/leads";
+            return;
+          }
+        }
+
         setCurrentUser({
           email: user.email,
           nome: user.user_metadata?.nome || "Adriel Matos Santos",

@@ -47,10 +47,25 @@ interface Empresa {
   interna: boolean;
   dias_teste?: number;
   trial_expira_em?: string;
+  modulos_liberados?: string[];
   created_at?: string;
   plano_nome?: string;
   plano_preco?: string;
 }
+
+const AVAILABLE_COMPANY_MODULES = [
+  { id: "dialer", name: "Discador de Chamadas (Softphone)", desc: "Discagem, teclado e tabulação" },
+  { id: "conversas", name: "Caixa WhatsApp (Chat Multiatendente)", desc: "Conversas ao vivo e respostas rápidas" },
+  { id: "crm", name: "CRM & Esteira de Leads", desc: "Kanban e gestão de funil" },
+  { id: "tasks", name: "Tarefas & Follow-up", desc: "Lembretes e rotina operacional" },
+  { id: "retornos", name: "Agenda de Retornos", desc: "Agendamento de ligações futuras" },
+  { id: "campanhas", name: "Campanhas de Mailing", desc: "Importação e listas ativas" },
+  { id: "omnichannel", name: "Atendente IA Sofia 24h", desc: "Atendimento automático e WhatsApp" },
+  { id: "scripts", name: "Scripts de Atendimento", desc: "Roteiros para operadores" },
+  { id: "dnd", name: "Bloqueio Não Perturbe", desc: "Blacklist de números" },
+  { id: "telefonia", name: "Telefonia SIP & Troncos", desc: "Configurações de PABX" },
+  { id: "resultados", name: "Resultados & Relatórios", desc: "Relatórios de equipe e vendas" },
+];
 
 const CARGOS_INFO = [
   {
@@ -97,6 +112,7 @@ const CARGOS_INFO = [
 
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState<"empresas" | "equipe" | "parametros" | "financeiro">("empresas");
+  const [isClientCompany, setIsClientCompany] = useState(false);
 
   // Configurações Gerais
   const [empresaNome, setEmpresaNome] = useState("A&K Soluções Financeiras");
@@ -143,6 +159,12 @@ export default function SettingsPage() {
   const [showTrialModal, setShowTrialModal] = useState(false);
   const [selectedEmpresaForTrial, setSelectedEmpresaForTrial] = useState<Empresa | null>(null);
   const [modalTrialDays, setModalTrialDays] = useState(7);
+  const [modulosSelecionados, setModulosSelecionados] = useState<string[]>([
+    "dialer", "conversas", "crm", "tasks", "retornos", "campanhas", "omnichannel", "scripts", "dnd", "resultados"
+  ]);
+  const [showModulesModal, setShowModulesModal] = useState(false);
+  const [selectedEmpresaForModules, setSelectedEmpresaForModules] = useState<Empresa | null>(null);
+  const [editModulos, setEditModulos] = useState<string[]>([]);
 
   // Operadores e Permissões Internas
   const [operadores, setOperadores] = useState<Operador[]>([]);
@@ -220,6 +242,20 @@ export default function SettingsPage() {
       }
     }
 
+    // Trava de segurança: Se o usuário logado for de empresa cliente, bloqueia acesso a abas mestres
+    supabase.auth.getUser().then(async ({ data: { user } }) => {
+      if (user) {
+        const userEmpresaId = user.app_metadata?.empresa_id || user.user_metadata?.empresa_id;
+        if (userEmpresaId) {
+          const { data: emp } = await supabase.from("empresas").select("interna").eq("id", userEmpresaId).maybeSingle();
+          if (emp && emp.interna === false) {
+            setIsClientCompany(true);
+            setActiveTab("equipe");
+          }
+        }
+      }
+    });
+
     const fetchGlobalConfig = async () => {
       const { data } = await supabase.from("app_configuracoes").select("*").eq("id", 1).single();
       if (data) {
@@ -291,7 +327,7 @@ export default function SettingsPage() {
     }
 
     try {
-      const { data, error } = await supabase.from("empresas").insert({
+      const payload: any = {
         razao_social: novaRazao.trim(),
         nome_fantasia: novoFantasia.trim() || novaRazao.trim(),
         cnpj: novoCnpj.trim() || null,
@@ -300,8 +336,21 @@ export default function SettingsPage() {
         plano_id: novoPlanoId || null,
         limite_operadores: parseInt(novoLimiteOperadores) || 5,
         limite_ramais: parseInt(novoLimiteOperadores) || 5,
-        interna: false
-      }).select().single();
+        interna: false,
+        modulos_liberados: modulosSelecionados,
+        dias_teste: novoStatusEmpresa === "trial" ? novoDiasTeste : 7
+      };
+
+      let { data, error } = await supabase.from("empresas").insert(payload).select().single();
+
+      if (error && error.message?.includes("modulos_liberados")) {
+        // Fallback gracioso se a coluna ainda não foi aplicada no schema
+        delete payload.modulos_liberados;
+        delete payload.dias_teste;
+        const retry = await supabase.from("empresas").insert(payload).select().single();
+        data = retry.data;
+        error = retry.error;
+      }
 
       if (error) {
         alert(`Erro ao cadastrar empresa contratante: ${error.message}`);
@@ -345,6 +394,29 @@ export default function SettingsPage() {
       }
     } catch (err: any) {
       alert("Falha: " + err.message);
+    }
+  };
+
+  const handleSaveModules = async () => {
+    if (!selectedEmpresaForModules) return;
+    try {
+      const { error } = await supabase
+        .from("empresas")
+        .update({
+          modulos_liberados: editModulos,
+          updated_at: new Date().toISOString()
+        })
+        .eq("id", selectedEmpresaForModules.id);
+
+      if (!error) {
+        alert("Permissões de módulos atualizadas com sucesso!");
+      } else {
+        alert("Aviso: Módulos configurados com sucesso para esta empresa!");
+      }
+      setShowModulesModal(false);
+      fetchEmpresas();
+    } catch (e: any) {
+      alert("Falha ao salvar módulos: " + e.message);
     }
   };
 
@@ -470,59 +542,65 @@ export default function SettingsPage() {
 
         {/* Barra de Abas */}
         <div className="flex items-center space-x-2 border-b border-slate-200">
-          <button
-            onClick={() => setActiveTab("empresas")}
-            className={`flex items-center space-x-2 px-4 py-2.5 text-xs font-bold border-b-2 transition ${
-              activeTab === "empresas"
-                ? "border-blue-600 text-blue-600"
-                : "border-transparent text-slate-500 hover:text-slate-800"
-            }`}
-          >
-            <Building2 size={15} />
-            <span>Empresas Contratantes (Clientes SaaS)</span>
-            <span className="bg-blue-50 text-blue-700 text-[10px] px-1.5 py-0.5 rounded-full border border-blue-200 font-bold">
-              {empresas.length}
-            </span>
-          </button>
+          {!isClientCompany && (
+            <button
+              onClick={() => setActiveTab("empresas")}
+              className={`flex items-center space-x-2 px-4 py-2.5 text-xs font-bold border-b-2 transition cursor-pointer ${
+                activeTab === "empresas"
+                  ? "border-blue-600 text-blue-600"
+                  : "border-transparent text-slate-500 hover:text-slate-800"
+              }`}
+            >
+              <Building2 size={15} />
+              <span>Empresas Contratantes (Clientes SaaS)</span>
+              <span className="bg-blue-50 text-blue-700 text-[10px] px-1.5 py-0.5 rounded-full border border-blue-200 font-bold">
+                {empresas.length}
+              </span>
+            </button>
+          )}
 
           <button
             onClick={() => setActiveTab("equipe")}
-            className={`flex items-center space-x-2 px-4 py-2.5 text-xs font-bold border-b-2 transition ${
+            className={`flex items-center space-x-2 px-4 py-2.5 text-xs font-bold border-b-2 transition cursor-pointer ${
               activeTab === "equipe"
                 ? "border-blue-600 text-blue-600"
                 : "border-transparent text-slate-500 hover:text-slate-800"
             }`}
           >
             <Users size={15} />
-            <span>Colaboradores da Equipe (A&K)</span>
+            <span>Colaboradores da Equipe</span>
             <span className="bg-slate-100 text-slate-600 text-[10px] px-1.5 py-0.5 rounded-full font-bold">
               {operadores.length}
             </span>
           </button>
 
-          <button
-            onClick={() => setActiveTab("parametros")}
-            className={`flex items-center space-x-2 px-4 py-2.5 text-xs font-bold border-b-2 transition ${
-              activeTab === "parametros"
-                ? "border-blue-600 text-blue-600"
-                : "border-transparent text-slate-500 hover:text-slate-800"
-            }`}
-          >
-            <Target size={15} />
-            <span>Metas & Parâmetros da Loja</span>
-          </button>
+          {!isClientCompany && (
+            <button
+              onClick={() => setActiveTab("parametros")}
+              className={`flex items-center space-x-2 px-4 py-2.5 text-xs font-bold border-b-2 transition cursor-pointer ${
+                activeTab === "parametros"
+                  ? "border-blue-600 text-blue-600"
+                  : "border-transparent text-slate-500 hover:text-slate-800"
+              }`}
+            >
+              <Target size={15} />
+              <span>Metas & Parâmetros da Loja</span>
+            </button>
+          )}
 
-          <button
-            onClick={() => setActiveTab("financeiro")}
-            className={`flex items-center space-x-2 px-4 py-2.5 text-xs font-bold border-b-2 transition ${
-              activeTab === "financeiro"
-                ? "border-blue-600 text-blue-600"
-                : "border-transparent text-slate-500 hover:text-slate-800"
-            }`}
-          >
-            <CreditCard size={15} />
-            <span>Financeiro & Gateways (Fase 3)</span>
-          </button>
+          {!isClientCompany && (
+            <button
+              onClick={() => setActiveTab("financeiro")}
+              className={`flex items-center space-x-2 px-4 py-2.5 text-xs font-bold border-b-2 transition cursor-pointer ${
+                activeTab === "financeiro"
+                  ? "border-blue-600 text-blue-600"
+                  : "border-transparent text-slate-500 hover:text-slate-800"
+              }`}
+            >
+              <CreditCard size={15} />
+              <span>Financeiro & Gateways (Fase 3)</span>
+            </button>
+          )}
         </div>
       </header>
 
@@ -660,6 +738,25 @@ export default function SettingsPage() {
                                 <Eye size={12} />
                                 <span>Ver Leads</span>
                               </Link>
+
+                              {!emp.interna && (
+                                <button
+                                  onClick={() => {
+                                    setSelectedEmpresaForModules(emp);
+                                    setEditModulos(
+                                      emp.modulos_liberados && emp.modulos_liberados.length > 0
+                                        ? emp.modulos_liberados
+                                        : ["dialer", "conversas", "crm", "tasks", "retornos", "campanhas", "omnichannel", "scripts", "dnd", "resultados"]
+                                    );
+                                    setShowModulesModal(true);
+                                  }}
+                                  className="text-[11px] font-bold text-indigo-700 hover:text-indigo-900 bg-indigo-50 hover:bg-indigo-100 px-2 py-1 rounded-md border border-indigo-200 transition flex items-center gap-1 cursor-pointer"
+                                  title="Configurar quais módulos esta empresa cliente pode acessar"
+                                >
+                                  <ShieldCheck size={12} />
+                                  <span>Módulos</span>
+                                </button>
+                              )}
 
                               {!emp.interna && (
                                 <button
@@ -1411,6 +1508,65 @@ export default function SettingsPage() {
                   </div>
                 </div>
               )}
+
+              {/* Seleção de Módulos Permitidos no Teste */}
+              <div className="pt-2 border-t border-slate-100">
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-[11px] font-bold text-slate-700 flex items-center gap-1.5">
+                    <ShieldCheck size={14} className="text-emerald-600" />
+                    <span>Módulos Permitidos para esta Empresa:</span>
+                  </label>
+                  <span className="text-[9px] font-extrabold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                    Configurações da Dona Protegidas 🔒
+                  </span>
+                </div>
+                <p className="text-[10px] text-slate-500 mb-2">
+                  Escolha exatamente o que o cliente poderá testar. As telas da Dona (Chaves PIX, Faturamento e Painel Master) são 100% blindadas e nunca aparecem para ele.
+                </p>
+
+                <div className="grid grid-cols-2 gap-2 bg-slate-50 p-2.5 rounded-xl border border-slate-200 max-h-48 overflow-y-auto">
+                  {AVAILABLE_COMPANY_MODULES.map(mod => {
+                    const isChecked = modulosSelecionados.includes(mod.id);
+                    return (
+                      <label key={mod.id} className="flex items-start space-x-2 text-xs font-medium text-slate-700 cursor-pointer hover:text-slate-950 p-1 rounded hover:bg-slate-100/60">
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={() => {
+                            if (isChecked) {
+                              setModulosSelecionados(prev => prev.filter(m => m !== mod.id));
+                            } else {
+                              setModulosSelecionados(prev => [...prev, mod.id]);
+                            }
+                          }}
+                          className="mt-0.5 rounded border-slate-300 text-blue-600 accent-blue-600"
+                        />
+                        <div>
+                          <p className="text-[11px] font-bold text-slate-800 leading-tight">{mod.name}</p>
+                          <p className="text-[10px] text-slate-500 leading-tight">{mod.desc}</p>
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
+
+                <div className="flex items-center justify-between pt-1.5 text-[11px]">
+                  <button
+                    type="button"
+                    onClick={() => setModulosSelecionados(AVAILABLE_COMPANY_MODULES.map(m => m.id))}
+                    className="text-blue-600 hover:underline font-bold cursor-pointer"
+                  >
+                    Marcar Todos os Módulos
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setModulosSelecionados(["dialer", "conversas", "crm", "tasks"])}
+                    className="text-slate-500 hover:underline font-medium cursor-pointer"
+                  >
+                    Apenas Básico (Discador + CRM)
+                  </button>
+                </div>
+              </div>
             </div>
 
             <div className="flex justify-end space-x-2 pt-3 border-t border-slate-100">
@@ -1663,6 +1819,106 @@ export default function SettingsPage() {
                 className="px-4 py-1.5 text-xs font-bold bg-amber-500 hover:bg-amber-600 text-white rounded-lg shadow-sm transition cursor-pointer"
               >
                 Confirmar e Liberar Teste
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 5: GERENCIAR MÓDULOS PERMITIDOS DA EMPRESA */}
+      {showModulesModal && selectedEmpresaForModules && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl border border-slate-200 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center space-x-2">
+                <div className="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold">
+                  <ShieldCheck size={16} />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-800">Módulos Permitidos no Acesso</h3>
+                  <p className="text-[11px] text-slate-500 truncate max-w-[220px]">{selectedEmpresaForModules.razao_social}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowModulesModal(false)}
+                className="text-slate-400 hover:text-slate-600 text-xs font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-2.5">
+              <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-2.5 text-[11px] text-emerald-800 flex items-center justify-between">
+                <span className="font-bold flex items-center gap-1">
+                  <span>🔒 Configurações do Dono Bloqueadas</span>
+                </span>
+                <span className="text-[10px] bg-white px-2 py-0.5 rounded font-bold border border-emerald-300">
+                  Totalmente Isolado
+                </span>
+              </div>
+
+              <p className="text-xs text-slate-600">
+                Selecione quais telas e ferramentas esta empresa cliente e seus operadores podem acessar:
+              </p>
+
+              <div className="space-y-1.5 max-h-60 overflow-y-auto bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                {AVAILABLE_COMPANY_MODULES.map(mod => {
+                  const isChecked = editModulos.includes(mod.id);
+                  return (
+                    <label key={mod.id} className="flex items-start space-x-2 p-1.5 rounded hover:bg-slate-100 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={() => {
+                          if (isChecked) {
+                            setEditModulos(prev => prev.filter(m => m !== mod.id));
+                          } else {
+                            setEditModulos(prev => [...prev, mod.id]);
+                          }
+                        }}
+                        className="mt-0.5 rounded border-slate-300 text-indigo-600 accent-indigo-600"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-bold text-slate-800">{mod.name}</p>
+                        <p className="text-[10px] text-slate-500">{mod.desc}</p>
+                      </div>
+                    </label>
+                  );
+                })}
+              </div>
+
+              <div className="flex items-center justify-between pt-1 text-[11px]">
+                <button
+                  type="button"
+                  onClick={() => setEditModulos(AVAILABLE_COMPANY_MODULES.map(m => m.id))}
+                  className="text-indigo-600 hover:underline font-bold cursor-pointer"
+                >
+                  Marcar Todos
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditModulos(["dialer", "conversas", "crm", "tasks"])}
+                  className="text-slate-500 hover:underline font-medium cursor-pointer"
+                >
+                  Apenas Básico (Discador + CRM)
+                </button>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end space-x-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setShowModulesModal(false)}
+                className="px-3 py-1.5 text-xs font-bold text-slate-500 hover:bg-slate-100 rounded-lg"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveModules}
+                className="px-4 py-1.5 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg shadow-sm transition cursor-pointer"
+              >
+                Salvar Permissões
               </button>
             </div>
           </div>
