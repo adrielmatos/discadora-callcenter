@@ -327,6 +327,9 @@ export default function SettingsPage() {
     }
 
     try {
+      const trialExpira = new Date();
+      trialExpira.setDate(trialExpira.getDate() + (novoStatusEmpresa === "trial" ? novoDiasTeste : 7));
+
       const payload: any = {
         razao_social: novaRazao.trim(),
         nome_fantasia: novoFantasia.trim() || novaRazao.trim(),
@@ -338,7 +341,8 @@ export default function SettingsPage() {
         limite_ramais: parseInt(novoLimiteOperadores) || 5,
         interna: false,
         modulos_liberados: modulosSelecionados,
-        dias_teste: novoStatusEmpresa === "trial" ? novoDiasTeste : 7
+        dias_teste: novoStatusEmpresa === "trial" ? novoDiasTeste : 7,
+        trial_expira_em: novoStatusEmpresa === "trial" ? trialExpira.toISOString() : null
       };
 
       let { data, error } = await supabase.from("empresas").insert(payload).select().single();
@@ -377,10 +381,15 @@ export default function SettingsPage() {
 
   const handleLiberarTeste = async (empresaId: string, dias: number) => {
     try {
+      const trialExpira = new Date();
+      trialExpira.setDate(trialExpira.getDate() + dias);
+
       const { error } = await supabase
         .from("empresas")
         .update({
           status: "trial",
+          dias_teste: dias,
+          trial_expira_em: trialExpira.toISOString(),
           updated_at: new Date().toISOString()
         })
         .eq("id", empresaId);

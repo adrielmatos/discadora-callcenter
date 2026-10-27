@@ -142,9 +142,17 @@ export default function SuperAdminPage() {
   };
 
   const handleLiberarTrial = async (tenantId: string, dias: number) => {
+    const trialExpira = new Date();
+    trialExpira.setDate(trialExpira.getDate() + dias);
+
     const { error } = await supabase
       .from("empresas")
-      .update({ status: "trial", updated_at: new Date().toISOString() })
+      .update({
+        status: "trial",
+        dias_teste: dias,
+        trial_expira_em: trialExpira.toISOString(),
+        updated_at: new Date().toISOString()
+      })
       .eq("id", tenantId);
 
     if (!error) {
