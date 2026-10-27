@@ -26,7 +26,7 @@ interface TenantItem {
   nome_fantasia?: string;
   cnpj?: string;
   email_gestor?: string;
-  status: "ativa" | "pausada" | "cancelada";
+  status: "ativa" | "pausada" | "cancelada" | "trial";
   limite_operadores?: number;
   created_at: string;
 }
@@ -124,6 +124,18 @@ export default function SuperAdminPage() {
         resourceId: tenant.id,
         metadata: { novoStatus: nextStatus, empresa: tenant.razao_social }
       });
+    }
+  };
+
+  const handleLiberarTrial = async (tenantId: string, dias: number) => {
+    const { error } = await supabase
+      .from("empresas")
+      .update({ status: "trial", updated_at: new Date().toISOString() })
+      .eq("id", tenantId);
+
+    if (!error) {
+      setTenants(prev => prev.map(t => t.id === tenantId ? { ...t, status: "trial" } : t));
+      alert(`Período de teste de ${dias} dias liberado com sucesso para a empresa!`);
     }
   };
 
@@ -304,26 +316,40 @@ export default function SuperAdminPage() {
                           </td>
                           <td className="py-3.5 px-4">
                             <span
-                              className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
+                              className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold border ${
                                 t.status === "ativa"
-                                  ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
-                                  : "bg-rose-500/10 text-rose-400 border border-rose-500/20"
+                                  ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                                  : t.status === "trial"
+                                  ? "bg-amber-500/10 text-amber-400 border-amber-500/20"
+                                  : "bg-rose-500/10 text-rose-400 border-rose-500/20"
                               }`}
                             >
-                              {t.status.toUpperCase()}
+                              {t.status === "trial" ? "TESTE (TRIAL)" : t.status.toUpperCase()}
                             </span>
                           </td>
                           <td className="py-3.5 px-4 text-right">
-                            <button
-                              onClick={() => handleToggleTenantStatus(t)}
-                              className={`px-3 py-1 rounded-xl text-xs font-bold transition cursor-pointer ${
-                                t.status === "ativa"
-                                  ? "bg-rose-950/40 text-rose-300 hover:bg-rose-900/60 border border-rose-800/50"
-                                  : "bg-emerald-950/40 text-emerald-300 hover:bg-emerald-900/60 border border-emerald-800/50"
-                              }`}
-                            >
-                              {t.status === "ativa" ? "Suspender Acesso" : "Reativar Empresa"}
-                            </button>
+                            <div className="flex items-center justify-end space-x-2">
+                              <button
+                                onClick={() => {
+                                  const dias = prompt("Quantos dias de teste liberar para esta empresa? (Ex: 3, 7, 15, 30)", "7");
+                                  if (dias) handleLiberarTrial(t.id, parseInt(dias) || 7);
+                                }}
+                                className="px-2.5 py-1 rounded-xl text-xs font-bold bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/20 transition cursor-pointer"
+                                title="Liberar dias de teste para a empresa"
+                              >
+                                Liberar Teste
+                              </button>
+                              <button
+                                onClick={() => handleToggleTenantStatus(t)}
+                                className={`px-3 py-1 rounded-xl text-xs font-bold transition cursor-pointer ${
+                                  t.status === "ativa"
+                                    ? "bg-rose-950/40 text-rose-300 hover:bg-rose-900/60 border border-rose-800/50"
+                                    : "bg-emerald-950/40 text-emerald-300 hover:bg-emerald-900/60 border border-emerald-800/50"
+                                }`}
+                              >
+                                {t.status === "ativa" ? "Suspender Acesso" : "Reativar Empresa"}
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ))}

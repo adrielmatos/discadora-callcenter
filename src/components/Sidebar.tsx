@@ -6,7 +6,7 @@ import { useState, useEffect } from "react";
 import { 
   LayoutDashboard, PhoneCall, Kanban, FileText, 
   Settings, PhoneOff, Calendar,
-  BarChart3, Target, Phone, MessageSquare, LogOut, Building2,
+  BarChart3, Target, Phone, MessageSquare, MessagesSquare, LogOut, Building2,
   ShieldCheck, Download, ChevronLeft, ChevronRight, CheckSquare, Shield
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
@@ -56,6 +56,7 @@ export default function Sidebar() {
       title: "Operação Ativa",
       items: [
         { name: "Discador de Chamadas", path: "/dialer", icon: PhoneCall, highlight: true },
+        { name: "Caixa WhatsApp (Chat)", path: "/conversas", icon: MessagesSquare },
         { name: "CRM & Esteira", path: "/leads", icon: Kanban },
         { name: "Tarefas & Follow-up", path: "/tasks", icon: CheckSquare },
         { name: "Agenda de Retornos", path: "/retornos", icon: Calendar },

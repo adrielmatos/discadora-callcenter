@@ -5,7 +5,7 @@ import {
   Settings, Building, Users, Target, Save, CheckCircle2, Plus, Trash2, 
   ShieldCheck, Lock, UserCheck, Briefcase, Eye, ShieldAlert, Award, 
   Building2, DollarSign, Layers, ChevronRight, Check, AlertCircle, RefreshCw,
-  CreditCard, QrCode, Copy, ExternalLink, Key, CheckCheck
+  CreditCard, QrCode, Copy, ExternalLink, Key, CheckCheck, Clock
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import Link from "next/link";
@@ -45,6 +45,8 @@ interface Empresa {
   limite_operadores: number | null;
   limite_ramais: number | null;
   interna: boolean;
+  dias_teste?: number;
+  trial_expira_em?: string;
   created_at?: string;
   plano_nome?: string;
   plano_preco?: string;
@@ -137,6 +139,10 @@ export default function SettingsPage() {
   const [novoPlanoId, setNovoPlanoId] = useState("");
   const [novoLimiteOperadores, setNovoLimiteOperadores] = useState("5");
   const [novoStatusEmpresa, setNovoStatusEmpresa] = useState("ativa");
+  const [novoDiasTeste, setNovoDiasTeste] = useState(7);
+  const [showTrialModal, setShowTrialModal] = useState(false);
+  const [selectedEmpresaForTrial, setSelectedEmpresaForTrial] = useState<Empresa | null>(null);
+  const [modalTrialDays, setModalTrialDays] = useState(7);
 
   // Operadores e Permissões Internas
   const [operadores, setOperadores] = useState<Operador[]>([]);
@@ -318,6 +324,28 @@ export default function SettingsPage() {
     const newStatus = currentStatus === "ativa" ? "bloqueada" : "ativa";
     await supabase.from("empresas").update({ status: newStatus }).eq("id", id);
     fetchEmpresas();
+  };
+
+  const handleLiberarTeste = async (empresaId: string, dias: number) => {
+    try {
+      const { error } = await supabase
+        .from("empresas")
+        .update({
+          status: "trial",
+          updated_at: new Date().toISOString()
+        })
+        .eq("id", empresaId);
+
+      if (!error) {
+        alert(`Período de teste de ${dias} dias liberado com sucesso para a empresa!`);
+        setShowTrialModal(false);
+        fetchEmpresas();
+      } else {
+        alert("Erro ao atualizar status de teste: " + error.message);
+      }
+    } catch (err: any) {
+      alert("Falha: " + err.message);
+    }
   };
 
   // Funções de Operadores Internos
@@ -632,6 +660,21 @@ export default function SettingsPage() {
                                 <Eye size={12} />
                                 <span>Ver Leads</span>
                               </Link>
+
+                              {!emp.interna && (
+                                <button
+                                  onClick={() => {
+                                    setSelectedEmpresaForTrial(emp);
+                                    setModalTrialDays(emp.dias_teste || 7);
+                                    setShowTrialModal(true);
+                                  }}
+                                  className="text-[11px] font-bold text-amber-700 hover:text-amber-900 bg-amber-50 hover:bg-amber-100 px-2 py-1 rounded-md border border-amber-200 transition flex items-center gap-1 cursor-pointer"
+                                  title="Liberar período de teste (3, 7 ou mais dias) para este cliente"
+                                >
+                                  <Clock size={12} />
+                                  <span>Liberar Teste</span>
+                                </button>
+                              )}
 
                               {!emp.interna && (
                                 <button
@@ -1324,13 +1367,50 @@ export default function SettingsPage() {
                 <select 
                   value={novoStatusEmpresa}
                   onChange={e => setNovoStatusEmpresa(e.target.value)}
-                  className="w-full text-xs border border-slate-200 rounded-lg p-2 outline-none focus:border-blue-500 bg-white"
+                  className="w-full text-xs border border-slate-200 rounded-lg p-2 outline-none focus:border-blue-500 bg-white font-medium"
                 >
-                  <option value="ativa">Ativa (Acesso Liberado)</option>
-                  <option value="trial">Período de Testes (Trial 7 dias)</option>
+                  <option value="ativa">Ativa (Acesso Total Liberado)</option>
+                  <option value="trial">Período de Testes (Trial Personalizado)</option>
                   <option value="bloqueada">Bloqueada / Aguardando Pagamento</option>
                 </select>
               </div>
+
+              {novoStatusEmpresa === "trial" && (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 space-y-2">
+                  <label className="text-[11px] font-bold text-amber-900 block flex items-center gap-1">
+                    <Clock size={13} className="text-amber-600" />
+                    <span>Liberar Dias de Teste:</span>
+                  </label>
+                  <div className="grid grid-cols-4 gap-1.5">
+                    {[3, 7, 15, 30].map(dias => (
+                      <button
+                        key={dias}
+                        type="button"
+                        onClick={() => setNovoDiasTeste(dias)}
+                        className={`py-1.5 rounded-lg text-xs font-bold border transition cursor-pointer ${
+                          novoDiasTeste === dias
+                            ? "bg-amber-500 text-white border-amber-600 shadow-xs"
+                            : "bg-white text-slate-700 border-amber-200 hover:bg-amber-100/50"
+                        }`}
+                      >
+                        {dias} dias
+                      </button>
+                    ))}
+                  </div>
+                  <div className="flex items-center gap-2 pt-1 text-xs">
+                    <span className="text-[11px] text-amber-800 font-semibold">Ou digite:</span>
+                    <input
+                      type="number"
+                      min="1"
+                      max="365"
+                      value={novoDiasTeste}
+                      onChange={e => setNovoDiasTeste(Math.max(1, parseInt(e.target.value) || 1))}
+                      className="w-20 text-xs bg-white border border-amber-300 rounded px-2 py-1 font-bold text-center outline-none focus:border-amber-500"
+                    />
+                    <span className="text-[11px] text-amber-800 font-semibold">dias no teste</span>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="flex justify-end space-x-2 pt-3 border-t border-slate-100">
@@ -1501,6 +1581,92 @@ export default function SettingsPage() {
           onConfirmManual={handleConfirmarPagamentoManual}
           cobrancaId={activeCobrancaId}
         />
+      )}
+
+      {/* MODAL 4: LIBERAR PERÍODO DE TESTE PERSONALIZADO */}
+      {showTrialModal && selectedEmpresaForTrial && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl border border-slate-200 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center space-x-2">
+                <div className="w-8 h-8 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center font-bold">
+                  <Clock size={16} />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-800">Liberar Período de Teste</h3>
+                  <p className="text-[11px] text-slate-500 truncate max-w-[200px]">{selectedEmpresaForTrial.razao_social}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowTrialModal(false)}
+                className="text-slate-400 hover:text-slate-600 text-xs font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <p className="text-xs text-slate-600">
+                Selecione quantos dias de acesso de teste gratuito você deseja liberar para esta empresa contratante:
+              </p>
+
+              <div className="grid grid-cols-4 gap-2">
+                {[3, 7, 15, 30].map(dias => (
+                  <button
+                    key={dias}
+                    type="button"
+                    onClick={() => setModalTrialDays(dias)}
+                    className={`py-2 rounded-xl text-xs font-bold border transition cursor-pointer ${
+                      modalTrialDays === dias
+                        ? "bg-amber-500 text-white border-amber-600 shadow-sm"
+                        : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-amber-50 hover:border-amber-200"
+                    }`}
+                  >
+                    {dias} dias
+                  </button>
+                ))}
+              </div>
+
+              <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs">
+                <span className="font-semibold text-slate-700">Ou dias personalizados:</span>
+                <input
+                  type="number"
+                  min="1"
+                  max="365"
+                  value={modalTrialDays}
+                  onChange={e => setModalTrialDays(Math.max(1, parseInt(e.target.value) || 1))}
+                  className="w-20 text-xs border border-slate-300 rounded-lg p-1.5 font-bold text-center outline-none focus:border-amber-500"
+                />
+              </div>
+
+              <div className="bg-amber-50/70 border border-amber-200/80 rounded-xl p-3 text-[11px] text-amber-800 space-y-1">
+                <p className="font-bold flex items-center gap-1">
+                  <span>ℹ️ Como funciona o teste:</span>
+                </p>
+                <p>
+                  A empresa terá acesso total liberado por <strong>{modalTrialDays} dias</strong> a partir de hoje. Ao vencer, o sistema solicita a fatura ou bloqueia o acesso automaticamente.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end space-x-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setShowTrialModal(false)}
+                className="px-3 py-1.5 text-xs font-bold text-slate-500 hover:bg-slate-100 rounded-lg"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => handleLiberarTeste(selectedEmpresaForTrial.id, modalTrialDays)}
+                className="px-4 py-1.5 text-xs font-bold bg-amber-500 hover:bg-amber-600 text-white rounded-lg shadow-sm transition cursor-pointer"
+              >
+                Confirmar e Liberar Teste
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
     </div>

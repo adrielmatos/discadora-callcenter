@@ -15,8 +15,11 @@ export type AuditAction =
   | "TASK_COMPLETE"
   | "TENANT_UPDATE"
   | "TENANT_CREATE"
+  | "URA_DTMF_INTERACTION"
+  | "CHAT_MESSAGE_SENT"
   | "LOGIN_SUCCESS"
-  | "LOGIN_FAILED";
+  | "LOGIN_FAILED"
+  | (string & {});
 
 export interface AuditEventParams {
   action: AuditAction;
