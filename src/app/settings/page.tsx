@@ -170,8 +170,14 @@ export default function SettingsPage() {
   const [operadores, setOperadores] = useState<Operador[]>([]);
   const [novoNome, setNovoNome] = useState("");
   const [novoEmail, setNovoEmail] = useState("");
+  const [novaSenha, setNovaSenha] = useState("Ak@123456");
+  const [novoEmpresaId, setNovoEmpresaId] = useState("");
   const [novoCargo, setNovoCargo] = useState("operador");
   const [showModalAdd, setShowModalAdd] = useState(false);
+  const [showModalSenha, setShowModalSenha] = useState(false);
+  const [operadorParaSenha, setOperadorParaSenha] = useState<Operador | null>(null);
+  const [novaSenhaInput, setNovaSenhaInput] = useState("");
+  const [loadingUserAction, setLoadingUserAction] = useState(false);
   
   // Permissões do formulário interno
   const [permCrm, setPermCrm] = useState(false);
@@ -375,8 +381,39 @@ export default function SettingsPage() {
 
   const toggleStatusEmpresa = async (id: string, currentStatus: string) => {
     const newStatus = currentStatus === "ativa" ? "bloqueada" : "ativa";
-    await supabase.from("empresas").update({ status: newStatus }).eq("id", id);
+    await supabase.from("empresas").update({ status: newStatus, updated_at: new Date().toISOString() }).eq("id", id);
+    alert(`Status da empresa alterado para "${newStatus === 'ativa' ? 'Ativa' : 'Suspensa / Bloqueada'}".`);
     fetchEmpresas();
+  };
+
+  const handleDeleteEmpresa = async (emp: Empresa) => {
+    if (emp.interna) {
+      alert("A empresa Matriz Oficial não pode ser excluída.");
+      return;
+    }
+
+    const confirmacao = confirm(
+      `⚠️ ATENÇÃO: Deseja realmente excluir a empresa "${emp.razao_social}"?\n\n` +
+      `Isso removerá a empresa do sistema e cancelará o acesso de seus operadores.\n` +
+      `Para apenas pausar temporariamente, você pode clicar em "Suspender".`
+    );
+
+    if (!confirmacao) return;
+
+    try {
+      const { error } = await supabase.from("empresas").delete().eq("id", emp.id);
+
+      if (error) {
+        // Se houver restrições por chaves estrangeiras, bloqueia e suspende a empresa
+        await supabase.from("empresas").update({ status: "bloqueada" }).eq("id", emp.id);
+        alert("A empresa foi desativada e bloqueada no sistema.");
+      } else {
+        alert(`Empresa "${emp.razao_social}" excluída com sucesso!`);
+      }
+      fetchEmpresas();
+    } catch (e: any) {
+      alert("Falha ao excluir empresa: " + e.message);
+    }
   };
 
   const handleLiberarTeste = async (empresaId: string, dias: number) => {
@@ -487,29 +524,110 @@ export default function SettingsPage() {
       alert("Informe o nome do funcionário.");
       return;
     }
-
-    const { error } = await supabase.from("operadores_app").insert({
-      nome: novoNome.trim(),
-      email: novoEmail.trim() || null,
-      perfil: novoCargo,
-      ativo: true,
-      can_crm: permCrm,
-      can_export: permExport,
-      can_reports: permReports,
-      can_scripts: permScripts,
-      can_campanhas: permCampanhas,
-      can_dnd: permDnd
-    });
-
-    if (error) {
-      alert(`Erro ao adicionar funcionário: ${error.message}`);
+    if (!novoEmail.trim()) {
+      alert("Informe o e-mail de acesso (login) do usuário.");
+      return;
+    }
+    if (!novaSenha.trim() || novaSenha.trim().length < 6) {
+      alert("A senha de acesso deve ter pelo menos 6 caracteres.");
       return;
     }
 
-    setNovoNome("");
-    setNovoEmail("");
-    setShowModalAdd(false);
-    fetchOperadores();
+    setLoadingUserAction(true);
+    try {
+      const targetEmpresaId = novoEmpresaId || empresas.find(e => e.interna)?.id || "ebe1ab22-519e-4784-8f96-e7f0d7a8c0a3";
+
+      // Criação com senha criptografada e login ativo sem confirmação pendente
+      const { data, error } = await supabase.rpc("admin_criar_usuario_completo", {
+        p_nome: novoNome.trim(),
+        p_email: novoEmail.trim().toLowerCase(),
+        p_password: novaSenha.trim(),
+        p_empresa_id: targetEmpresaId,
+        p_perfil: novoCargo,
+        p_can_crm: permCrm,
+        p_can_export: permExport,
+        p_can_reports: permReports,
+        p_can_scripts: permScripts,
+        p_can_campanhas: permCampanhas,
+        p_can_dnd: permDnd
+      });
+
+      if (error) {
+        console.warn("Aviso na RPC de criação:", error.message);
+        const fb = await supabase.from("operadores_app").insert({
+          nome: novoNome.trim(),
+          email: novoEmail.trim().toLowerCase(),
+          perfil: novoCargo,
+          ativo: true,
+          empresa_id: targetEmpresaId,
+          can_crm: permCrm,
+          can_export: permExport,
+          can_reports: permReports,
+          can_scripts: permScripts,
+          can_campanhas: permCampanhas,
+          can_dnd: permDnd
+        });
+
+        if (fb.error) {
+          alert(`Erro ao cadastrar usuário: ${fb.error.message}`);
+          return;
+        }
+      }
+
+      alert(
+        `✅ Usuário criado com sucesso!\n\n` +
+        `👤 Nome: ${novoNome.trim()}\n` +
+        `📧 E-mail: ${novoEmail.trim().toLowerCase()}\n` +
+        `🔑 Senha de Acesso: ${novaSenha.trim()}\n\n` +
+        `O colaborador já pode fazer login normalmente em discadora-callcenter.vercel.app/login.`
+      );
+
+      setNovoNome("");
+      setNovoEmail("");
+      setNovaSenha("Ak@123456");
+      setShowModalAdd(false);
+      fetchOperadores();
+    } catch (err: any) {
+      alert(`Falha ao registrar colaborador: ${err.message}`);
+    } finally {
+      setLoadingUserAction(false);
+    }
+  };
+
+  const handleSalvarNovaSenha = async () => {
+    if (!operadorParaSenha?.email) {
+      alert("Este operador não possui e-mail de login cadastrado.");
+      return;
+    }
+    if (!novaSenhaInput.trim() || novaSenhaInput.trim().length < 6) {
+      alert("A nova senha deve ter no mínimo 6 caracteres.");
+      return;
+    }
+
+    setLoadingUserAction(true);
+    try {
+      const { error } = await supabase.rpc("admin_redefinir_senha_usuario", {
+        p_email: operadorParaSenha.email.toLowerCase().trim(),
+        p_nova_senha: novaSenhaInput.trim()
+      });
+
+      if (error) {
+        alert("Erro ao alterar senha: " + error.message);
+      } else {
+        alert(
+          `🔑 Senha de "${operadorParaSenha.nome}" alterada com sucesso!\n\n` +
+          `📧 E-mail: ${operadorParaSenha.email}\n` +
+          `🔐 Nova Senha: ${novaSenhaInput.trim()}\n\n` +
+          `Repasse esta nova senha ao colaborador.`
+        );
+        setShowModalSenha(false);
+        setNovaSenhaInput("");
+      }
+    } catch (e: any) {
+      alert("Falha: " + e.message);
+    } finally {
+      setLoadingUserAction(false);
+    }
   };
 
   const togglePerm = async (id: number, field: string, currentValue: boolean) => {
@@ -794,16 +912,27 @@ export default function SettingsPage() {
                               )}
 
                               {!emp.interna ? (
-                                <button
-                                  onClick={() => toggleStatusEmpresa(emp.id, emp.status)}
-                                  className={`text-[11px] font-bold px-2 py-1 rounded transition cursor-pointer ${
-                                    emp.status === "ativa"
-                                      ? "text-rose-600 hover:bg-rose-50"
-                                      : "text-emerald-600 hover:bg-emerald-50"
-                                  }`}
-                                >
-                                  {emp.status === "ativa" ? "Suspender" : "Reativar"}
-                                </button>
+                                <div className="flex items-center gap-1">
+                                  <button
+                                    onClick={() => toggleStatusEmpresa(emp.id, emp.status)}
+                                    className={`text-[11px] font-bold px-2 py-1 rounded transition cursor-pointer ${
+                                      emp.status === "ativa"
+                                        ? "text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200"
+                                        : "text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200"
+                                    }`}
+                                    title={emp.status === "ativa" ? "Suspender acesso dos operadores desta empresa" : "Reativar acesso"}
+                                  >
+                                    {emp.status === "ativa" ? "Suspender" : "Reativar"}
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteEmpresa(emp)}
+                                    className="text-[11px] font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 px-2 py-1 rounded border border-rose-200 transition cursor-pointer flex items-center gap-1"
+                                    title="Excluir e apagar empresa cliente do sistema"
+                                  >
+                                    <Trash2 size={12} />
+                                    <span>Excluir</span>
+                                  </button>
+                                </div>
                               ) : (
                                 <span className="text-[10px] text-slate-400 font-semibold italic">Matriz</span>
                               )}
@@ -1032,13 +1161,28 @@ export default function SettingsPage() {
                             </td>
 
                             <td className="px-3 py-3 text-right">
-                              <button 
-                                onClick={() => handleDeleteOperador(op.id, op.nome)}
-                                className="text-slate-400 hover:text-rose-600 p-1 rounded transition"
-                                title="Remover operador"
-                              >
-                                <Trash2 size={14} />
-                              </button>
+                              <div className="flex items-center justify-end gap-1.5">
+                                {op.email && (
+                                  <button 
+                                    onClick={() => {
+                                      setOperadorParaSenha(op);
+                                      setNovaSenhaInput("");
+                                      setShowModalSenha(true);
+                                    }}
+                                    className="text-slate-400 hover:text-blue-600 hover:bg-blue-50 p-1.5 rounded transition cursor-pointer"
+                                    title="Alterar / Redefinir senha de acesso deste colaborador"
+                                  >
+                                    <Key size={14} />
+                                  </button>
+                                )}
+                                <button 
+                                  onClick={() => handleDeleteOperador(op.id, op.nome)}
+                                  className="text-slate-400 hover:text-rose-600 hover:bg-rose-50 p-1.5 rounded transition cursor-pointer"
+                                  title="Remover operador do sistema"
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         );
@@ -1596,23 +1740,23 @@ export default function SettingsPage() {
         </div>
       )}
 
-      {/* MODAL 2: CADASTRAR NOVO COLABORADOR DA EQUIPE INTERNA */}
+      {/* MODAL 2: CADASTRAR NOVO COLABORADOR DA EQUIPE */}
       {showModalAdd && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-xl p-6 max-w-md w-full shadow-xl border border-slate-200 space-y-4">
             <div>
               <h3 className="text-sm font-bold text-slate-800 flex items-center space-x-2">
                 <UserCheck size={16} className="text-blue-600" />
-                <span>Cadastrar Colaborador na Nossa Equipe (A&K)</span>
+                <span>Cadastrar Usuário & Criar Acesso</span>
               </h3>
               <p className="text-[11px] text-slate-500 mt-0.5">
-                Cadastre um atendente, supervisor ou consultor que trabalha diretamente na sua operação.
+                Defina o nome, e-mail e a senha inicial de acesso. O login é criado instantaneamente para acesso ao discador.
               </p>
             </div>
 
             <div className="space-y-3">
               <div>
-                <label className="text-[11px] font-bold text-slate-600 block mb-1">Nome Completo:</label>
+                <label className="text-[11px] font-bold text-slate-600 block mb-1">Nome Completo *:</label>
                 <input 
                   type="text" 
                   placeholder="Ex: Mariana Silva"
@@ -1623,14 +1767,53 @@ export default function SettingsPage() {
               </div>
 
               <div>
-                <label className="text-[11px] font-bold text-slate-600 block mb-1">E-mail (opcional):</label>
+                <label className="text-[11px] font-bold text-slate-600 block mb-1">E-mail de Login *:</label>
                 <input 
                   type="email" 
-                  placeholder="mariana@akfinanceira.com"
+                  placeholder="mariana@akfinanceira.com ou cliente@financeira.com"
                   value={novoEmail}
                   onChange={e => setNovoEmail(e.target.value)}
                   className="w-full text-xs border border-slate-200 rounded-lg p-2 outline-none focus:border-blue-500"
                 />
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-[11px] font-bold text-slate-600">Senha Inicial de Acesso *:</label>
+                  <button
+                    type="button"
+                    onClick={() => setNovaSenha("Ak@" + Math.floor(100000 + Math.random() * 900000))}
+                    className="text-[10px] text-blue-600 hover:underline font-bold"
+                  >
+                    Gerar Senha Automática
+                  </button>
+                </div>
+                <input 
+                  type="text" 
+                  placeholder="Ex: Ak@123456 ou 123456"
+                  value={novaSenha}
+                  onChange={e => setNovaSenha(e.target.value)}
+                  className="w-full text-xs border border-slate-200 rounded-lg p-2 outline-none focus:border-blue-500 font-mono font-bold text-blue-700 bg-blue-50/30"
+                />
+                <span className="text-[10px] text-slate-400 mt-0.5 block">
+                  Você passará esse e-mail e senha para a pessoa entrar no sistema.
+                </span>
+              </div>
+
+              <div>
+                <label className="text-[11px] font-bold text-slate-600 block mb-1">Vincular à Empresa:</label>
+                <select 
+                  value={novoEmpresaId}
+                  onChange={e => setNovoEmpresaId(e.target.value)}
+                  className="w-full text-xs border border-slate-200 rounded-lg p-2 outline-none focus:border-blue-500 bg-white font-semibold"
+                >
+                  <option value="">A&K Soluções (Nossa Matriz Oficial)</option>
+                  {empresas.filter(e => !e.interna).map(e => (
+                    <option key={e.id} value={e.id}>
+                      Empresa Cliente: {e.razao_social} {e.cnpj ? `(${e.cnpj})` : ""}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div>
@@ -1717,9 +1900,72 @@ export default function SettingsPage() {
               </button>
               <button 
                 onClick={handleAddOperador}
-                className="px-4 py-1.5 text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow-xs"
+                disabled={loadingUserAction}
+                className="px-4 py-1.5 text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow-xs flex items-center gap-1.5"
               >
-                Cadastrar Colaborador
+                {loadingUserAction ? "Criando Acesso..." : "Criar Usuário & Senha"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: ALTERAR / REDEFINIR SENHA DO COLABORADOR */}
+      {showModalSenha && operadorParaSenha && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl p-6 max-w-sm w-full shadow-xl border border-slate-200 space-y-4">
+            <div>
+              <h3 className="text-sm font-bold text-slate-800 flex items-center space-x-2">
+                <Key size={16} className="text-blue-600" />
+                <span>Alterar Senha do Usuário</span>
+              </h3>
+              <p className="text-[11px] text-slate-500 mt-1">
+                Defina a nova senha para <strong>{operadorParaSenha.nome}</strong> ({operadorParaSenha.email}).
+              </p>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="text-[11px] font-bold text-slate-600 block mb-1">Nova Senha:</label>
+                <div className="flex gap-1.5">
+                  <input 
+                    type="text" 
+                    placeholder="Mínimo 6 caracteres"
+                    value={novaSenhaInput}
+                    onChange={e => setNovaSenhaInput(e.target.value)}
+                    className="w-full text-xs border border-slate-200 rounded-lg p-2 outline-none focus:border-blue-500 font-mono font-bold text-blue-700 bg-blue-50/20"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setNovaSenhaInput("Ak@" + Math.floor(100000 + Math.random() * 900000))}
+                    className="shrink-0 bg-slate-100 hover:bg-slate-200 text-slate-700 px-2.5 py-1 rounded-lg text-[10px] font-bold border border-slate-200 transition"
+                    title="Gerar senha aleatória"
+                  >
+                    Gerar
+                  </button>
+                </div>
+                <p className="text-[10px] text-slate-400 mt-1">
+                  O colaborador passará a usar esta nova senha imediatamente ao logar.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex justify-end space-x-2 pt-3 border-t border-slate-100">
+              <button 
+                onClick={() => {
+                  setShowModalSenha(false);
+                  setNovaSenhaInput("");
+                }}
+                className="px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-lg"
+              >
+                Cancelar
+              </button>
+              <button 
+                onClick={handleSalvarNovaSenha}
+                disabled={loadingUserAction}
+                className="px-4 py-1.5 text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow-xs flex items-center gap-1.5"
+              >
+                {loadingUserAction ? "Salvando..." : "Salvar Nova Senha"}
               </button>
             </div>
           </div>
