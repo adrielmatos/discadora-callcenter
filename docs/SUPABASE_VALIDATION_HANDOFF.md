@@ -56,8 +56,7 @@ order by n.nspname, p.proname;
 ```sql
 select to_regclass('public.empresas') as empresas,
        to_regclass('public.operadores_app') as operadores_app,
-       to_regclass('public.app_configuracoes') as app_configuracoes,
-       to_regclass('public.sync_mined_lead') as sync_mined_lead;
+       to_regclass('public.app_configuracoes') as app_configuracoes;
 ```
 
 ## 2. Bloqueadores que precisam ser reconciliados com o schema real
