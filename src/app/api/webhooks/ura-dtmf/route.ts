@@ -5,7 +5,7 @@ import { logAuditEvent } from "@/lib/audit";
 /**
  * Webhook Universal de URA Reversa (DTMF -> WhatsApp + CRM)
  * Segurança Hardened:
- * 1. Apenas POST autorizado por secret (X-URA-Token ou ?token=).
+ * 1. Apenas POST autorizado por secret enviado em header.
  * 2. GET desabilitado para operações mutáveis (retorna 405).
  * 3. Validação obrigatória de empresa_id (sem fallbacks arbitrários de tenant).
  * 4. Validação centralizada de Não Perturbe (DND) antes de qualquer disparo.
@@ -22,9 +22,8 @@ export async function POST(req: NextRequest) {
   try {
     // 1. Validação de autenticidade / Segredo do PABX/URA
     const configuredSecret = process.env.URA_WEBHOOK_SECRET;
-    const providedSecret = req.headers.get("x-ura-token") || 
-      req.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ||
-      new URL(req.url).searchParams.get("token");
+    const providedSecret = req.headers.get("x-ura-token") ||
+      req.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
 
     if (!configuredSecret || !providedSecret || providedSecret !== configuredSecret) {
       return NextResponse.json(
@@ -59,7 +58,9 @@ async function processUraEvent(payload: any, req: NextRequest) {
   const rawNome = payload.nome || payload.name || payload.caller_name || payload.lead_nome || "Lead URA Reversa";
   const digit = String(payload.digit || payload.dtmf || payload.tecla || payload.key || payload.option || "1").trim();
   const campanha = payload.campanha || payload.campaign || "URA Reversa Ativa";
-  const empresaId = payload.empresa_id || payload.empresaId || new URL(req.url).searchParams.get("empresa_id");
+  // O tenant é definido pela configuração do servidor, nunca por campos controlados pelo chamador.
+  // Para URAs multiempresa, configure um segredo/endpoint separado por empresa.
+  const empresaId = process.env.URA_WEBHOOK_EMPRESA_ID || null;
 
   if (!rawTelefone) {
     return NextResponse.json(
@@ -69,10 +70,11 @@ async function processUraEvent(payload: any, req: NextRequest) {
   }
 
   // 2. Isolamento Multiempresa: empresa_id é OBRIGATÓRIO (sem suposição arbitrária)
-  if (!empresaId) {
+  if (!empresaId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(empresaId)) {
+    console.error("[URA-DTMF] URA_WEBHOOK_EMPRESA_ID ausente ou inválido; operação bloqueada.");
     return NextResponse.json(
-      { success: false, error: "Parâmetro 'empresa_id' é obrigatório para direcionar o lead à empresa correta." },
-      { status: 400 }
+      { success: false, error: "Integração URA não configurada para uma empresa válida." },
+      { status: 503 }
     );
   }
 
