@@ -3,7 +3,7 @@ const nextConfig = {
   poweredByHeader: false,
   compress: true,
   eslint: {
-    ignoreDuringBuilds: true,
+    ignoreDuringBuilds: false,
   },
   experimental: {
     optimizePackageImports: ['lucide-react']
