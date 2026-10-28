@@ -3,8 +3,38 @@ import { supabase } from "@/lib/supabase";
 
 export async function POST(req: NextRequest) {
   try {
+    // 1. Autenticação obrigatória
+    const authHeader = req.headers.get("authorization");
+    if (!authHeader) {
+      return NextResponse.json({ error: "Autenticação obrigatória para análise de conversa com IA." }, { status: 401 });
+    }
+
+    const token = authHeader.replace(/^Bearer\s+/i, "");
+    const { data: { user }, error: authErr } = await supabase.auth.getUser(token);
+    if (authErr || !user) {
+      return NextResponse.json({ error: "Sessão inválida ou expirada." }, { status: 401 });
+    }
+
+    // 2. Isolamento estrito de tenant (empresa_id derivado da identidade do usuário)
+    let userEmpresaId = user.app_metadata?.empresa_id || user.user_metadata?.empresa_id;
+    if (!userEmpresaId && user.email) {
+      const { data: op } = await supabase
+        .from("operadores_app")
+        .select("empresa_id")
+        .eq("email", user.email)
+        .maybeSingle();
+      userEmpresaId = op?.empresa_id;
+    }
+
     const body = await req.json();
     const { clientPhone, clientName, messages, chatText, empresaId } = body;
+
+    // Se o usuário possui empresa vinculada, ela é IMUTÁVEL (não permite passar empresaId de outro tenant)
+    const targetEmpresaId = userEmpresaId || empresaId || null;
+
+    if (!targetEmpresaId) {
+      return NextResponse.json({ error: "Nenhuma empresa identificada para processamento da conversa." }, { status: 403 });
+    }
 
     const rawName = (clientName || "").trim();
     let digits = String(clientPhone || "").replace(/\D/g, "");
@@ -23,7 +53,6 @@ export async function POST(req: NextRequest) {
 
     const cleanPhone = digits;
     const cleanName = rawName || `Cliente WhatsApp (${cleanPhone.slice(-4)})`;
-    const targetEmpresaId = empresaId || null;
 
     // Concatena as mensagens para análise semântica
     let fullTranscript = "";
@@ -39,10 +68,11 @@ export async function POST(req: NextRequest) {
       fullTranscript = `Cliente ${cleanName} possui conversa aberta no WhatsApp com interesse em crédito ou simulação financeira.`;
     }
 
-    // Busca credenciais no banco Supabase
+    // Busca credenciais no banco Supabase escopadas pela empresa
     const { data: config } = await supabase
       .from("app_configuracoes")
       .select("gemini_api_key, groq_api_key, empresa_nome")
+      .eq("empresa_id", targetEmpresaId)
       .limit(1)
       .maybeSingle();
 
@@ -133,7 +163,7 @@ Retorne ESTRITAMENTE um JSON válido com esta estrutura exata (sem formatação 
       }
     }
 
-    // Sincroniza e insere/atualiza no CRM (Supabase) via RPC SECURITY DEFINER (imune a bloqueios de RLS)
+    // Sincroniza e insere/atualiza no CRM (Supabase) via RPC SECURITY DEFINER
     const targetEtapa = aiAnalysis.temperatura === "Quente" ? "Simulação" : "Interessado";
     const tabulacaoLabel = `[Mineração WhatsApp] ${aiAnalysis.temperatura}: ${aiAnalysis.produto}`;
 

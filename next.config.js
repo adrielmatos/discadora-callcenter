@@ -20,6 +20,10 @@ const nextConfig = {
           { key: 'X-Content-Type-Options', value: 'nosniff' },
           { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
           { key: 'Permissions-Policy', value: 'camera=(), microphone=(self), geolocation=()' },
+          { 
+            key: 'Content-Security-Policy', 
+            value: "default-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.supabase.co https://*.googleapis.com https://api.groq.com https://api.mercadopago.com wss://*.supabase.co data: blob:; img-src 'self' data: https: blob:; frame-src 'self' https://web.whatsapp.com https://wa.me;" 
+          }
         ],
       },
     ];

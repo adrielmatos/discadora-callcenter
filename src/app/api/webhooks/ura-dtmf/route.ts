@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
       req.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ||
       new URL(req.url).searchParams.get("token");
 
-    if (configuredSecret && providedSecret !== configuredSecret) {
+    if (!configuredSecret || !providedSecret || providedSecret !== configuredSecret) {
       return NextResponse.json(
         { success: false, error: "Acesso negado: token de autenticação de webhook URA inválido." },
         { status: 401 }

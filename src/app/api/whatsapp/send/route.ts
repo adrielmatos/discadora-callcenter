@@ -4,9 +4,10 @@ import { supabase } from "@/lib/supabase";
 /**
  * Envio de Mensagem Individual WhatsApp (API / Web)
  * Segurança Hardened:
- * 1. Verificação centralizada de Não Perturbe (DND).
- * 2. Autenticação por sessão de operador ou segredo interno.
- * 3. Distinção clara entre link gerado (web) e mensagem confirmada (api).
+ * 1. Autenticação obrigatória (operador logado ou secret interno).
+ * 2. Isolamento estrito por empresa_id do operador.
+ * 3. Verificação centralizada de Não Perturbe (DND).
+ * 4. Distinção clara entre link gerado (web) e mensagem confirmada (api).
  */
 export async function POST(req: NextRequest) {
   try {
@@ -15,7 +16,7 @@ export async function POST(req: NextRequest) {
     const adminSecret = process.env.ADMIN_WEBHOOK_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY;
 
     let authUser = null;
-    let isInternalAuthorized = Boolean(token && adminSecret && token === adminSecret);
+    const isInternalAuthorized = Boolean(token && adminSecret && token === adminSecret);
 
     if (token && !isInternalAuthorized) {
       try {
@@ -26,10 +27,31 @@ export async function POST(req: NextRequest) {
       } catch {}
     }
 
+    // Bloqueia requisições não autenticadas
+    if (!authUser && !isInternalAuthorized) {
+      return NextResponse.json({ error: "Autenticação obrigatória para envio de WhatsApp." }, { status: 401 });
+    }
+
     const { telefone, mensagem, lead_id, empresa_id } = await req.json();
 
     if (!telefone || !mensagem) {
       return NextResponse.json({ error: "Telefone e mensagem são obrigatórios" }, { status: 400 });
+    }
+
+    // Isolamento estrito de tenant (operador não pode enviar por outro tenant)
+    let callerEmpresaId = authUser?.app_metadata?.empresa_id || authUser?.user_metadata?.empresa_id;
+    if (!callerEmpresaId && authUser?.email) {
+      const { data: op } = await supabase
+        .from("operadores_app")
+        .select("empresa_id")
+        .eq("email", authUser.email)
+        .maybeSingle();
+      callerEmpresaId = op?.empresa_id;
+    }
+
+    const targetEmpresaId = callerEmpresaId || (isInternalAuthorized ? empresa_id : null);
+    if (!targetEmpresaId) {
+      return NextResponse.json({ error: "Nenhuma empresa identificada para o envio." }, { status: 403 });
     }
 
     const cleanNumber = telefone.replace(/\D/g, "");
@@ -51,109 +73,153 @@ export async function POST(req: NextRequest) {
       }, { status: 403 });
     }
 
-    // 2. Busca configurações de WhatsApp da empresa
-    let userEmpresaId = empresa_id || (authUser?.app_metadata?.empresa_id as string) || null;
-    if (!userEmpresaId && authUser?.email) {
-      const { data: op } = await supabase
-        .from("operadores_app")
-        .select("empresa_id")
-        .eq("email", authUser.email)
-        .maybeSingle();
-      if (op?.empresa_id) {
-        userEmpresaId = op.empresa_id;
-      }
-    }
-
-    let configQuery = supabase
+    // 2. Busca configurações de WhatsApp da empresa autenticada
+    const { data: config } = await supabase
       .from("app_configuracoes")
-      .select("wa_mode, wa_api_url, wa_api_token, wa_instance_name");
+      .select("whatsapp_tipo, zapi_instancia, zapi_token, evolution_url, evolution_api_key")
+      .eq("empresa_id", targetEmpresaId)
+      .maybeSingle();
 
-    if (userEmpresaId) {
-      configQuery = configQuery.eq("empresa_id", userEmpresaId);
+    const tipo = config?.whatsapp_tipo || "web";
+
+    // MODO WEB (WhatsApp Web / Sofia Extension): Gera link wa.me para abertura assistida
+    if (tipo === "web") {
+      const encodedMsg = encodeURIComponent(mensagem);
+      const waLink = `https://web.whatsapp.com/send?phone=${formattedPhone}&text=${encodedMsg}`;
+      const waMobileLink = `https://wa.me/${formattedPhone}?text=${encodedMsg}`;
+
+      if (lead_id) {
+        await supabase
+          .from("leads")
+          .update({
+            ultima_tabulacao: "[WhatsApp Web] Link de atendimento gerado",
+            updated_at: new Date().toISOString()
+          })
+          .eq("id", lead_id)
+          .eq("empresa_id", targetEmpresaId);
+
+        await supabase.from("historico_ligacoes").insert({
+          lead_id,
+          tabulacao: `[WhatsApp Web]: "${mensagem.slice(0, 200)}"`,
+          duracao_segundos: 0
+        });
+      }
+
+      return NextResponse.json({
+        success: true,
+        method: "web",
+        status: "link_prepared",
+        delivered: false,
+        link: waLink,
+        mobileLink: waMobileLink,
+        phone: formattedPhone,
+        message: "Link de envio preparado para o WhatsApp Web. O envio final é concluído no navegador do operador."
+      });
     }
 
-    const { data: config } = await configQuery.limit(1).maybeSingle();
+    // MODO API (Z-API)
+    if (tipo === "zapi" && config?.zapi_instancia && config?.zapi_token) {
+      const zapiUrl = `https://api.z-api.io/instances/${config.zapi_instancia}/token/${config.zapi_token}/send-messages`;
+      
+      const zapiRes = await fetch(zapiUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: formattedPhone, message: mensagem })
+      });
 
-    const waMode = config?.wa_mode || "web";
-    const apiUrl = config?.wa_api_url?.trim() || "";
-    const apiToken = config?.wa_api_token?.trim() || "";
-    const instanceName = config?.wa_instance_name?.trim() || "";
+      const zapiData = await zapiRes.json().catch(() => ({}));
 
-    // ─── MODO 1: ENVIO EM SEGUNDO PLANO VIA API (Evolution API / Z-API) ───
-    if (waMode === "api" && apiUrl && apiToken) {
-      try {
-        let endpoint = "";
-        let headers: Record<string, string> = { "Content-Type": "application/json" };
-        let payload: any = {};
+      if (zapiRes.ok) {
+        if (lead_id) {
+          await supabase
+            .from("leads")
+            .update({
+              ultima_tabulacao: "[Z-API WhatsApp] Mensagem enviada",
+              updated_at: new Date().toISOString()
+            })
+            .eq("id", lead_id)
+            .eq("empresa_id", targetEmpresaId);
 
-        if (apiUrl.includes("z-api.io") || apiUrl.includes("z-api")) {
-          endpoint = `${apiUrl.replace(/\/$/, "")}/instances/${instanceName}/token/${apiToken}/send-text`;
-          headers["Client-Token"] = apiToken;
-          payload = { phone: formattedPhone, message: mensagem };
-        } else {
-          endpoint = `${apiUrl.replace(/\/$/, "")}/message/sendText/${instanceName || "default"}`;
-          headers["apikey"] = apiToken;
-          payload = { number: formattedPhone, text: mensagem };
+          await supabase.from("historico_ligacoes").insert({
+            lead_id,
+            tabulacao: `[Z-API WhatsApp]: "${mensagem.slice(0, 200)}"`,
+            duracao_segundos: 0
+          });
         }
 
-        const response = await fetch(endpoint, {
-          method: "POST",
-          headers,
-          body: JSON.stringify(payload),
-          signal: AbortSignal.timeout(10000)
+        return NextResponse.json({
+          success: true,
+          method: "zapi",
+          status: "sent",
+          delivered: true,
+          zapiResponse: zapiData
         });
-
-        const resData = await response.json().catch(() => ({}));
-
-        if (response.ok) {
-          if (lead_id) {
-            await supabase.from("historico_ligacoes").insert({
-              lead_id,
-              tabulacao: "WhatsApp Enviado (API Confirmada)",
-              duracao_segundos: 0
-            });
-          }
-
-          return NextResponse.json({
-            success: true,
-            method: "api",
-            status: "delivered",
-            message: "Mensagem disparada e confirmada pelo provedor de WhatsApp!",
-            data: resData
-          });
-        } else {
-          const waUrl = `https://wa.me/${formattedPhone}?text=${encodeURIComponent(mensagem)}`;
-          return NextResponse.json({
-            success: false,
-            method: "fallback",
-            status: "link_prepared",
-            error: resData?.message || "Provedor de WhatsApp retornou erro",
-            waUrl
-          });
-        }
-      } catch (apiErr: any) {
-        const waUrl = `https://wa.me/${formattedPhone}?text=${encodeURIComponent(mensagem)}`;
+      } else {
         return NextResponse.json({
           success: false,
-          method: "fallback",
-          status: "link_prepared",
-          error: apiErr?.message || "Provedor de WhatsApp inacessível",
-          waUrl
-        });
+          error: "Falha no envio Z-API: " + (zapiData.message || zapiRes.statusText)
+        }, { status: 502 });
       }
     }
 
-    // ─── MODO 2: NATIVO (Link wa.me gerado para envio manual pelo operador) ───
-    const waUrl = `https://wa.me/${formattedPhone}?text=${encodeURIComponent(mensagem)}`;
+    // MODO EVOLUTION API
+    if (tipo === "evolution" && config?.evolution_url && config?.evolution_api_key) {
+      const evoUrl = `${config.evolution_url.replace(/\/$/, "")}/message/sendText`;
+
+      const evoRes = await fetch(evoUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "apikey": config.evolution_api_key
+        },
+        body: JSON.stringify({
+          number: formattedPhone,
+          options: { delay: 1200, presence: "composing", linkPreview: false },
+          textMessage: { text: mensagem }
+        })
+      });
+
+      const evoData = await evoRes.json().catch(() => ({}));
+
+      if (evoRes.ok) {
+        if (lead_id) {
+          await supabase
+            .from("leads")
+            .update({
+              ultima_tabulacao: "[Evolution API] Mensagem enviada",
+              updated_at: new Date().toISOString()
+            })
+            .eq("id", lead_id)
+            .eq("empresa_id", targetEmpresaId);
+
+          await supabase.from("historico_ligacoes").insert({
+            lead_id,
+            tabulacao: `[Evolution API]: "${mensagem.slice(0, 200)}"`,
+            duracao_segundos: 0
+          });
+        }
+
+        return NextResponse.json({
+          success: true,
+          method: "evolution",
+          status: "sent",
+          delivered: true,
+          evolutionResponse: evoData
+        });
+      } else {
+        return NextResponse.json({
+          success: false,
+          error: "Falha no envio Evolution: " + (evoData.message || evoRes.statusText)
+        }, { status: 502 });
+      }
+    }
+
     return NextResponse.json({
-      success: true,
-      method: "web",
-      status: "link_prepared",
-      delivered: false,
-      waUrl,
-      message: "Link WhatsApp Web preparado para abertura e envio pelo operador."
-    });
-  } catch (err: any) {
-    return NextResponse.json({ error: err?.message || "Erro interno" }, { status: 500 });
+      error: `Provedor de WhatsApp '${tipo}' não configurado corretamente para a empresa.`
+    }, { status: 400 });
+
+  } catch (error: any) {
+    console.error("Erro na rota /api/whatsapp/send:", error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

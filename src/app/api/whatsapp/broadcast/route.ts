@@ -7,6 +7,7 @@ import { supabase, supabaseAdmin } from "@/lib/supabase";
  * 1. Autenticação obrigatória (GET e POST).
  * 2. Isolamento estrito por empresa_id do operador logado.
  * 3. Exclusão cruzada contra lista_nao_perturbe (DND).
+ * 4. Validação de tenant na atualização de leads.
  */
 export async function GET(req: NextRequest) {
   try {
@@ -22,19 +23,23 @@ export async function GET(req: NextRequest) {
     }
 
     const { searchParams } = new URL(req.url);
-    const etapa = searchParams.get("etapa") || "fila";
     const rawLimit = parseInt(searchParams.get("limit") || "50", 10);
     const limit = Math.min(Math.max(isNaN(rawLimit) ? 50 : rawLimit, 1), 200);
 
     // Deriva a empresa do operador autenticado
     let userEmpresaId = user.app_metadata?.empresa_id || user.user_metadata?.empresa_id;
-    if (!userEmpresaId) {
+    if (!userEmpresaId && user.email) {
       const { data: op } = await supabase
         .from("operadores_app")
         .select("empresa_id")
         .eq("email", user.email)
         .maybeSingle();
       userEmpresaId = op?.empresa_id || null;
+    }
+
+    // Se o usuário não tiver empresa associada, bloqueia acesso (não expõe leads globais)
+    if (!userEmpresaId) {
+      return NextResponse.json({ error: "Nenhuma empresa vinculada ao usuário logado." }, { status: 403 });
     }
 
     const clientDb = supabaseAdmin || supabase;
@@ -47,34 +52,23 @@ export async function GET(req: NextRequest) {
 
     const blockedPhones = new Set((dndList || []).map(d => d.telefone));
 
-    let query = clientDb
+    const { data: leads, error } = await clientDb
       .from("leads")
       .select("id, nome, telefone, banco, margem_disponivel, produto, etapa_crm, ultima_tabulacao")
+      .eq("empresa_id", userEmpresaId)
       .neq("status", "bloqueado_dnd")
       .order("id", { ascending: true })
       .limit(limit);
-
-    if (userEmpresaId) {
-      query = query.eq("empresa_id", userEmpresaId);
-    }
-
-    if (etapa === "fila") {
-      query = query.or("etapa_crm.eq.fila,etapa_crm.is.null,etapa_crm.eq.pendente");
-    } else if (etapa !== "all") {
-      query = query.eq("etapa_crm", etapa);
-    }
-
-    const { data: leads, error } = await query;
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    // Filtra DND e telefones válidos
+    // Filtra telefones no DND
     const validLeads = (leads || [])
-      .map((l: any) => {
-        const cleanPhone = (l.telefone || "").replace(/\D/g, "");
-        const formatted = cleanPhone.startsWith("55") ? cleanPhone : `55${cleanPhone}`;
+      .map(l => {
+        const clean = (l.telefone || "").replace(/\D/g, "");
+        const formatted = clean.startsWith("55") ? clean : `55${clean}`;
         return {
           ...l,
           telefoneLimpo: formatted,
@@ -108,6 +102,21 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Sessão inválida." }, { status: 401 });
     }
 
+    // Deriva a empresa do operador autenticado
+    let userEmpresaId = user.app_metadata?.empresa_id || user.user_metadata?.empresa_id;
+    if (!userEmpresaId && user.email) {
+      const { data: op } = await supabase
+        .from("operadores_app")
+        .select("empresa_id")
+        .eq("email", user.email)
+        .maybeSingle();
+      userEmpresaId = op?.empresa_id || null;
+    }
+
+    if (!userEmpresaId) {
+      return NextResponse.json({ error: "Nenhuma empresa vinculada ao usuário para registrar disparo." }, { status: 403 });
+    }
+
     const { leadId, telefone, mensagemEnviada } = await req.json();
 
     if (!leadId) {
@@ -117,7 +126,7 @@ export async function POST(req: NextRequest) {
     const nowIso = new Date().toISOString();
     const clientDb = supabaseAdmin || supabase;
 
-    // Atualiza status do lead no CRM
+    // Atualiza status do lead no CRM garantindo o tenant do operador
     const { error: leadErr } = await clientDb
       .from("leads")
       .update({
@@ -125,7 +134,8 @@ export async function POST(req: NextRequest) {
         ultima_tabulacao: "[Disparo WhatsApp Sofia] Enviado",
         updated_at: nowIso
       })
-      .eq("id", leadId);
+      .eq("id", leadId)
+      .eq("empresa_id", userEmpresaId);
 
     if (leadErr) {
       return NextResponse.json({ error: leadErr.message }, { status: 500 });
@@ -140,11 +150,11 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: `Lead #${leadId} marcado como disparado com sucesso!`
+      message: `Disparo registrado para o lead #${leadId}`
     });
 
   } catch (error: any) {
-    console.error("Erro ao registrar envio do disparo:", error);
+    console.error("Erro ao registrar disparo:", error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

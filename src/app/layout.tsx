@@ -13,14 +13,15 @@ export const viewport: Viewport = {
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || "https://discadora-callcenter.vercel.app"),
   title: {
-    default: "A&K Soluções - Call Center Pro & CRM Omnichannel",
-    template: "%s | A&K Soluções"
+    default: "Discadora Consignado Pro | A&K Soluções - CRM & Discador pelo Celular",
+    template: "%s | Discadora Consignado Pro"
   },
-  description: "Plataforma enterprise de Contact Center, Discador Preditivo, Atendente IA Sofia para WhatsApp e CRM para correspondentes bancários e crédito consignado.",
+  description: "A única discadora desenvolvida para correspondentes de crédito consignado. Zero custo de telefonia VoIP (disque direto pelo chip do celular via PC), esteira Meu INSS, simulador de margem e IA Sofia.",
   keywords: [
+    "discadora consignado pro",
     "discador preditivo", 
-    "call center", 
-    "crm consignado", 
+    "call center consignado", 
+    "crm correspondente bancario", 
     "saque aniversario fgts", 
     "sofia ai", 
     "whatsapp web crm", 
@@ -36,9 +37,9 @@ export const metadata: Metadata = {
     type: "website",
     locale: "pt_BR",
     url: "https://discadora-callcenter.vercel.app",
-    title: "A&K Soluções - Call Center Pro & CRM Omnichannel",
-    description: "Plataforma avançada de Contact Center, Discador Preditivo e IA Sofia integrada ao WhatsApp.",
-    siteName: "A&K Soluções"
+    title: "Discadora Consignado Pro - CRM & Discador pelo Celular",
+    description: "Plataforma de alta conversão para correspondentes bancários. Discagem via chip GSM celular, esteira integrada e atendente IA Sofia.",
+    siteName: "Discadora Consignado Pro"
   },
   robots: {
     index: true,
@@ -54,12 +55,12 @@ export const metadata: Metadata = {
 
 export default function RootLayout({
   children,
-}: Readonly<{
+}: {
   children: React.ReactNode;
-}>) {
+}) {
   return (
     <html lang="pt-BR">
-      <body className="antialiased font-sans">
+      <body className="antialiased bg-slate-950 text-slate-100 min-h-screen">
         <AuthGuard>
           <AppShell>
             {children}

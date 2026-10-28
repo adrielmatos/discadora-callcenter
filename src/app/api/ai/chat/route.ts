@@ -195,6 +195,22 @@ async function callGroq(
 
 export async function POST(req: NextRequest) {
   try {
+    // 1. Autenticação obrigatória (usuário logado ou secret de serviço)
+    const authHeader = req.headers.get("authorization");
+    const token = authHeader ? authHeader.replace(/^Bearer\s+/i, "") : null;
+    const adminSecret = process.env.ADMIN_WEBHOOK_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const isServiceRole = Boolean(token && adminSecret && token === adminSecret);
+
+    let authUser = null;
+    if (token && !isServiceRole) {
+      const { data: { user } } = await supabase.auth.getUser(token);
+      if (user) authUser = user;
+    }
+
+    if (!authUser && !isServiceRole) {
+      return NextResponse.json({ error: "Autenticação obrigatória para acessar a IA Sofia." }, { status: 401 });
+    }
+
     const { 
       message, 
       history, 
@@ -211,13 +227,26 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Mensagem obrigatória" }, { status: 400 });
     }
 
+    // 2. Isolamento estrito por tenant
+    let callerEmpresaId = authUser?.app_metadata?.empresa_id || authUser?.user_metadata?.empresa_id;
+    if (!callerEmpresaId && authUser?.email) {
+      const { data: op } = await supabase
+        .from("operadores_app")
+        .select("empresa_id")
+        .eq("email", authUser.email)
+        .maybeSingle();
+      callerEmpresaId = op?.empresa_id;
+    }
+
+    const targetEmpresaId = callerEmpresaId || (isServiceRole ? empresaId : null);
+
     // Busca configurações no banco Supabase (com suporte a isolamento por empresa)
     let configQuery = supabase
       .from("app_configuracoes")
       .select("gemini_api_key, groq_api_key, ai_knowledge, ai_name, empresa_nome, ai_handoff_triggers");
     
-    if (empresaId) {
-      configQuery = configQuery.eq("empresa_id", empresaId);
+    if (targetEmpresaId) {
+      configQuery = configQuery.eq("empresa_id", targetEmpresaId);
     }
 
     const { data: config } = await configQuery.limit(1).maybeSingle();
@@ -239,7 +268,7 @@ export async function POST(req: NextRequest) {
       
       let syncResult = null;
       if (clientPhone) {
-        syncResult = await syncConversationToCrm(clientPhone, clientName, message, reply, true, empresaId);
+        syncResult = await syncConversationToCrm(clientPhone, clientName, message, reply, true, targetEmpresaId);
       }
 
       return NextResponse.json({
@@ -335,7 +364,7 @@ ESTRATÉGIAS COMERCIAIS POR PERFIL:
             const cleanText = sanitizeBacenReply(result.text);
             let syncResult = null;
             if (clientPhone) {
-              syncResult = await syncConversationToCrm(clientPhone, clientName, message, cleanText, false, empresaId);
+              syncResult = await syncConversationToCrm(clientPhone, clientName, message, cleanText, false, targetEmpresaId);
             }
             return NextResponse.json({
               reply: cleanText,
@@ -352,7 +381,7 @@ ESTRATÉGIAS COMERCIAIS POR PERFIL:
             const cleanText = sanitizeBacenReply(result.text);
             let syncResult = null;
             if (clientPhone) {
-              syncResult = await syncConversationToCrm(clientPhone, clientName, message, cleanText, false, empresaId);
+              syncResult = await syncConversationToCrm(clientPhone, clientName, message, cleanText, false, targetEmpresaId);
             }
             return NextResponse.json({
               reply: cleanText,
