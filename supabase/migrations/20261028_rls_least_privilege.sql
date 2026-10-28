@@ -30,6 +30,7 @@ drop policy if exists history_management on public.historico_chamadas;
 drop policy if exists history_operator_insert on public.historico_chamadas;
 drop policy if exists history_operator_select on public.historico_chamadas;
 drop policy if exists audit_logs_insert_active on public.audit_logs;
+drop policy if exists consent_logs_insert_active on public.consent_logs;
 
 -- LEADS: only owner or privileged manager. Unassigned records are not visible to operators.
 create policy leads_admin_all on public.leads
@@ -97,9 +98,12 @@ create policy crm_conversas_operator_scoped on public.crm_conversas
   )
   with check (
     responsavel_id = (select private.current_operator_id())
-    or exists (select 1 from public.leads l
-               where l.id = crm_conversas.lead_id
-                 and l.operador_id = (select private.current_operator_id()))
+    and (
+      lead_id is null
+      or exists (select 1 from public.leads l
+                 where l.id = crm_conversas.lead_id
+                   and l.operador_id = (select private.current_operator_id()))
+    )
   );
 
 create policy crm_mensagens_admin_all on public.crm_mensagens
@@ -216,5 +220,10 @@ create policy audit_logs_insert_own on public.audit_logs
     operator_id = (select private.current_operator_id())
     and (actor_user_id is null or actor_user_id = auth.uid())
   );
+
+-- Consent events may be inserted by admins only until their ownership columns are verified.
+create policy consent_logs_admin_insert on public.consent_logs
+  for insert to authenticated
+  with check (private.current_role() in ('DONO','GESTOR') or private.current_operator_is_admin());
 
 commit;
