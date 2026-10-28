@@ -1,7 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://vtwyojpsrjyigsnnfawa.supabase.co";
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFyY2FhZWVobnhsdWdpbnpuY2ZzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA5MDMwNzEsImV4cCI6MjEwNjQ3OTA3MX0.sesEcB-EF3yCGa0b84xQ-56kEchoryt4c5sNqm4sup0";
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJ2dHd5b2pwc3JqeWlnc25uZmF3YSIsInJvbGUiOiJhbm9uIiwiaWF0IjoxNzg5OTMwNTU3LCJleHAiOjIxMDU1MDY1NTd9.CFFctYzCuiko-0iljFsT9Rb8NGK9NHtCg7V9fEA3eLw";
 
 // Cliente público com RLS (Row Level Security) aplicado
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
