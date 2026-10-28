@@ -26,3 +26,25 @@ body {
 }
 
 
+
+/* Landing Page Styles */
+.bg-grid-pattern {
+  background-size: 40px 40px;
+  background-image: 
+    linear-gradient(to right, rgba(59, 130, 246, 0.05) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(59, 130, 246, 0.05) 1px, transparent 1px);
+}
+.btn-cta-vibrant {
+  background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 50%, #ea580c 100%);
+  color: #050a18;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  box-shadow: 0 4px 20px -2px rgba(245, 158, 11, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.btn-cta-vibrant:hover {
+  transform: translateY(-2px) scale(1.02);
+  box-shadow: 0 8px 30px 2px rgba(245, 158, 11, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  filter: brightness(1.08);
+}
