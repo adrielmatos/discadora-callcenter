@@ -273,7 +273,7 @@ export default function RetornosPage() {
 
                         {r.observacao && (
                           <p className="text-slate-600 text-xs mt-1.5 italic bg-slate-50 px-2.5 py-1 rounded-md border border-slate-100 inline-block">
-                            "{r.observacao}"
+                            &quot;{r.observacao}&quot;
                           </p>
                         )}
                       </div>
