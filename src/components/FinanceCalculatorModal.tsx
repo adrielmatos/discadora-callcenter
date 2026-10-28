@@ -415,7 +415,7 @@ export default function FinanceCalculatorModal({
               Texto da Simulação para o Lead:
             </span>
             <p className="text-xs text-slate-700 italic leading-relaxed">
-              "{simulationText}"
+              &quot;{simulationText}&quot;
             </p>
           </div>
         </div>
