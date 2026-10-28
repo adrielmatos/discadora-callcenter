@@ -27,7 +27,7 @@ export async function GET(req: NextRequest) {
     const limit = Math.min(Math.max(isNaN(rawLimit) ? 50 : rawLimit, 1), 200);
 
     // Deriva a empresa do operador autenticado
-    let userEmpresaId = user.app_metadata?.empresa_id || user.user_metadata?.empresa_id;
+    let userEmpresaId = user.app_metadata?.empresa_id || null;
     if (!userEmpresaId && user.email) {
       const { data: op } = await supabase
         .from("operadores_app")
@@ -45,12 +45,16 @@ export async function GET(req: NextRequest) {
     const clientDb = supabaseAdmin || supabase;
 
     // Busca números bloqueados no Não Perturbe
-    const { data: dndList } = await clientDb
+    const { data: dndList, error: dndError } = await clientDb
       .from("lista_nao_perturbe")
       .select("telefone")
       .eq("ativo", true);
 
-    const blockedPhones = new Set((dndList || []).map(d => d.telefone));
+    if (dndError) {
+      console.error("[WhatsApp broadcast] Falha ao consultar lista Não Perturbe:", dndError);
+      return NextResponse.json({ error: "Não foi possível validar a lista Não Perturbe." }, { status: 503 });
+    }
+    const blockedPhones = new Set((dndList || []).map(d => String(d.telefone || "").replace(/\D/g, "")));
 
     const { data: leads, error } = await clientDb
       .from("leads")
@@ -103,7 +107,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Deriva a empresa do operador autenticado
-    let userEmpresaId = user.app_metadata?.empresa_id || user.user_metadata?.empresa_id;
+    let userEmpresaId = user.app_metadata?.empresa_id || null;
     if (!userEmpresaId && user.email) {
       const { data: op } = await supabase
         .from("operadores_app")
