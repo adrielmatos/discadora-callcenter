@@ -24,35 +24,42 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
 
     let isMounted = true;
 
-    // Checa sessão ativa e status da empresa
+    // 1. Verifica sessão ativa inicial
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (!isMounted) return;
+
       if (session) {
-        // Valida se a empresa do usuário não está suspensa ou bloqueada
-        const user = session.user;
-        const empresaId = user.app_metadata?.empresa_id || user.user_metadata?.empresa_id;
-        
+        // Obter empresa do usuário
+        const empresaId = session.user.app_metadata?.empresa_id || session.user.user_metadata?.empresa_id;
+
         if (empresaId) {
-          const { data: emp } = await supabase
+          const { data: empresa, error } = await supabase
             .from("empresas")
-            .select("status, interna, trial_expira_em, razao_social")
+            .select("status, data_fim_teste, created_at, interna")
             .eq("id", empresaId)
             .maybeSingle();
 
-          if (emp && !emp.interna) {
-            if (emp.status === "bloqueada" || emp.status === "pausada") {
+          if (error) {
+            console.error("Erro ao validar empresa no AuthGuard:", error);
+          } else if (empresa && !empresa.interna) {
+            // Verificar suspensão
+            if (empresa.status === "suspensa") {
               setIsBlocked(true);
-              setBlockMessage(`O acesso da empresa "${emp.razao_social}" está temporariamente suspenso pela administração.`);
-              setIsAuthenticated(true);
+              setBlockMessage("Esta conta foi suspensa temporariamente pela administração do sistema. Entre em contato com o suporte para reativar.");
+              setIsAuthenticated(false);
               return;
             }
 
-            if (emp.status === "trial" && emp.trial_expira_em) {
-              const expira = new Date(emp.trial_expira_em);
-              if (expira.getTime() < Date.now()) {
+            // Verificar se o teste expirou
+            if (empresa.status === "teste") {
+              const fimTeste = empresa.data_fim_teste 
+                ? new Date(empresa.data_fim_teste).getTime()
+                : (new Date(empresa.created_at).getTime() + 7 * 24 * 60 * 60 * 1000);
+
+              if (Date.now() > fimTeste) {
                 setIsBlocked(true);
-                setBlockMessage(`O período de testes da sua empresa expirou em ${expira.toLocaleDateString("pt-BR")}. Contrate um plano para continuar.`);
-                setIsAuthenticated(true);
+                setBlockMessage("Seu período de testes gratuitos expirou. Escolha um plano para continuar utilizando todas as funcionalidades.");
+                setIsAuthenticated(false);
                 return;
               }
             }
@@ -61,18 +68,20 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
 
         setIsAuthenticated(true);
       } else {
-        setIsAuthenticated(false);
-        router.push("/login");
+        if (!isPublicRoute) {
+          setIsAuthenticated(false);
+          router.push("/login");
+        }
       }
     });
 
-    // Escuta mudanças de sessão em tempo real (ex: logout)
+    // 2. Ouve alterações de autenticação em tempo real
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       if (!isMounted) return;
       if (session) {
         setIsAuthenticated(true);
       } else {
-        if (pathname !== "/login") {
+        if (!isPublicRoute) {
           setIsAuthenticated(false);
           router.push("/login");
         }
@@ -83,49 +92,50 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
       isMounted = false;
       subscription.unsubscribe();
     };
-  }, [pathname, router]);
+  }, [pathname, router, isPublicRoute]);
 
   // Se estiver em rota pública, renderiza direto sem travas
   if (isPublicRoute) {
     return <>{children}</>;
   }
 
-  // Enquanto valida a sessão, exibe tela de carregamento profissional
+  // Enquanto valida a sessão ou se estiver bloqueado
   if (isAuthenticated === null) {
     return (
-      <div className="min-h-screen w-full bg-[#070b14] flex flex-col items-center justify-center text-white font-sans">
-        <div className="w-12 h-12 rounded-xl bg-blue-600 flex items-center justify-center font-bold text-base shadow-lg shadow-blue-500/20 mb-3 animate-pulse">
-          AK
+      <div className="flex h-screen w-full items-center justify-center bg-slate-950 text-slate-400">
+        <div className="flex flex-col items-center space-y-3">
+          <div className="h-6 w-6 animate-spin rounded-full border-2 border-blue-500 border-t-transparent" />
+          <p className="text-xs">Carregando painel...</p>
         </div>
-        <p className="text-xs text-slate-400 font-semibold tracking-wide">
-          A&K Soluções • Carregando ambiente seguro...
-        </p>
       </div>
     );
   }
 
-  // Tela de Bloqueio para Empresas Suspensas / Trial Expirado
   if (isBlocked) {
     return (
-      <div className="min-h-screen w-full bg-[#070b14] flex flex-col items-center justify-center p-4 text-white font-sans">
-        <div className="max-w-md w-full bg-slate-900 border border-slate-800 rounded-2xl p-8 text-center shadow-2xl">
-          <div className="w-16 h-16 bg-rose-500/10 border border-rose-500/30 rounded-2xl flex items-center justify-center mx-auto mb-4 text-rose-500">
-            <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <rect width="18" height="11" x="3" y="11" rx="2" ry="2"/>
-              <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+      <div className="flex h-screen w-full flex-col items-center justify-center bg-slate-950 p-6 text-center text-white">
+        <div className="max-w-md rounded-2xl border border-rose-900/50 bg-rose-950/20 p-8 backdrop-blur-xl">
+          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-rose-600/20 text-rose-400 border border-rose-500/30">
+            <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
             </svg>
           </div>
-          <h2 className="text-xl font-extrabold text-white mb-2">Acesso Temporariamente Suspenso</h2>
-          <p className="text-xs text-slate-400 leading-relaxed mb-6">
-            {blockMessage || "O acesso desta conta está suspenso. Entre em contato com a administração da A&K Soluções para regularização."}
-          </p>
+          <h2 className="text-xl font-bold tracking-tight text-white mb-2">Acesso Interrompido</h2>
+          <p className="text-xs text-rose-200/80 leading-relaxed mb-6">{blockMessage}</p>
           <div className="space-y-3">
-            <button
-              onClick={async () => {
-                await supabase.auth.signOut();
-                router.push("/login");
+            <a 
+              href="https://wa.me/5571999191691?text=Olá,%20preciso%20de%20ajuda%20com%20meu%20plano%20na%20Discadora." 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="block w-full py-2.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs transition shadow-lg shadow-blue-600/20"
+            >
+              Falar com Suporte Comercial
+            </a>
+            <button 
+              onClick={() => {
+                supabase.auth.signOut().then(() => router.push("/login"));
               }}
-              className="w-full bg-slate-800 hover:bg-slate-700 text-white py-2.5 rounded-xl text-xs font-bold transition cursor-pointer"
+              className="block w-full py-2.5 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white font-bold text-xs transition border border-slate-800"
             >
               Sair da Conta
             </button>
@@ -133,11 +143,6 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
         </div>
       </div>
     );
-  }
-
-  // Se não estiver autenticado, não renderiza nada enquanto redireciona
-  if (!isAuthenticated) {
-    return null;
   }
 
   return <>{children}</>;

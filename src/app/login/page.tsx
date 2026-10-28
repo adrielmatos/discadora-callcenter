@@ -2,7 +2,8 @@
 
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { ShieldCheck, Lock, Mail, ArrowRight, AlertCircle, CheckCircle2 } from "lucide-react";
+import Link from "next/link";
+import { ShieldCheck, Lock, Mail, ArrowRight, AlertCircle, CheckCircle2, ArrowLeft } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
 export default function LoginPage() {
@@ -65,6 +66,18 @@ export default function LoginPage() {
 
       {/* Main Login Card */}
       <div className="w-full max-w-md bg-slate-900/90 border border-slate-800 rounded-2xl shadow-2xl p-6 sm:p-8 backdrop-blur-xl relative z-10">
+        
+        {/* Top Back Link */}
+        <div className="mb-6 flex justify-between items-center text-xs">
+          <Link
+            href="/"
+            className="text-slate-400 hover:text-amber-400 flex items-center gap-1.5 transition-colors font-medium group"
+          >
+            <ArrowLeft size={14} className="group-hover:-translate-x-0.5 transition-transform" />
+            <span>Voltar ao site</span>
+          </Link>
+          <span className="text-[10px] text-slate-500 uppercase tracking-widest font-mono">Acesso Operacional</span>
+        </div>
 
         {/* Brand Header */}
         <div className="text-center mb-8">
