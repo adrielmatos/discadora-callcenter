@@ -74,7 +74,7 @@ export default function Sidebar() {
   };
 
   // Se estiver na tela de login, não renderiza a sidebar
-  if (pathname === "/login") {
+  if (pathname === "/login" || pathname === "/") {
     return null;
   }
 
@@ -92,7 +92,7 @@ export default function Sidebar() {
     {
       title: "Gestão & Métricas",
       items: [
-        { name: "Painel da Dona / Master", path: "/", icon: LayoutDashboard },
+        { name: "Painel da Dona / Master", path: "/dashboard", icon: LayoutDashboard },
         { name: "Painel Master (Multi-Tenant)", path: "/admin", icon: Shield },
         { name: "Empresas Assinantes (SaaS)", path: "/settings?tab=empresas", icon: Building2 },
         { name: "Resultados & Relatórios", path: "/resultados", icon: BarChart3 },
@@ -156,7 +156,7 @@ export default function Sidebar() {
     <aside className={`${isCollapsed ? "w-16" : "w-64"} bg-[#0a0e17] border-r border-slate-800/80 flex flex-col h-screen text-slate-400 select-none transition-all duration-200 shrink-0`}>
       {/* Brand Header */}
       <div className={`h-16 flex items-center ${isCollapsed ? "justify-center px-2" : "justify-between px-6"} border-b border-slate-800/60 shrink-0`}>
-        <Link href="/" title="Ir para o Painel Geral" className="flex items-center space-x-3 overflow-hidden group cursor-pointer">
+        <Link href="/dashboard" title="Ir para o Painel Geral" className="flex items-center space-x-3 overflow-hidden group cursor-pointer">
           <div className="w-8 h-8 rounded-lg bg-blue-600 group-hover:bg-blue-500 transition flex items-center justify-center text-white font-bold text-sm tracking-wider shadow-sm shrink-0">
             AK
           </div>
@@ -268,3 +268,4 @@ export default function Sidebar() {
     </aside>
   );
 }
+

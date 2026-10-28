@@ -11,9 +11,11 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
   const [isBlocked, setIsBlocked] = useState(false);
   const [blockMessage, setBlockMessage] = useState("");
 
+  const isPublicRoute = pathname === "/login" || pathname === "/";
+
   useEffect(() => {
-    // A tela de login nunca é bloqueada
-    if (pathname === "/login") {
+    // Rotas públicas (login e landing page /) nunca são bloqueadas
+    if (isPublicRoute) {
       setIsAuthenticated(true);
       return;
     }
@@ -57,8 +59,10 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
 
         setIsAuthenticated(true);
       } else {
-        setIsAuthenticated(false);
-        router.push("/login");
+        if (!isPublicRoute) {
+          setIsAuthenticated(false);
+          router.push("/login");
+        }
       }
     });
 
@@ -68,7 +72,7 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
       if (session) {
         setIsAuthenticated(true);
       } else {
-        if (pathname !== "/login") {
+        if (!isPublicRoute) {
           setIsAuthenticated(false);
           router.push("/login");
         }
@@ -79,10 +83,10 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
       isMounted = false;
       subscription.unsubscribe();
     };
-  }, [pathname, router]);
+  }, [pathname, router, isPublicRoute]);
 
-  // Se estiver na tela de login, renderiza direto
-  if (pathname === "/login") {
+  // Se estiver em rota pública (login ou landing page /), renderiza direto
+  if (isPublicRoute) {
     return <>{children}</>;
   }
 
