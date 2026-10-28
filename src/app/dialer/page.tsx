@@ -1042,7 +1042,7 @@ export default function DialerWorkspace() {
                       </button>
                     </div>
                     <p className="text-xs font-medium leading-tight text-amber-950">
-                      "{renderScriptText(OBJECTION_LIST.find(o => o.id === activeObjection)?.resposta || "")}"
+                      &quot;{renderScriptText(OBJECTION_LIST.find(o => o.id === activeObjection)?.resposta || "")}&quot;
                     </p>
                   </div>
                 )}
@@ -1071,7 +1071,7 @@ export default function DialerWorkspace() {
                       <p className={`text-[11px] sm:text-xs font-medium leading-snug ${
                         step.color === "blue" ? "text-blue-950" : step.color === "emerald" ? "text-emerald-950" : "text-slate-800"
                       }`}>
-                        "{renderScriptText(step.text)}"
+                        &quot;{renderScriptText(step.text)}&quot;
                       </p>
                     </div>
                   ))}
