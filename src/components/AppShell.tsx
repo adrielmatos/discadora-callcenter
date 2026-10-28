@@ -12,7 +12,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   if (isPublicRoute) {
     return (
-      <div className="w-full min-h-screen overflow-y-auto bg-[#070b14] text-slate-100">
+      <div className="w-full min-h-screen bg-[#070b14] text-slate-100">
         {children}
       </div>
     );
