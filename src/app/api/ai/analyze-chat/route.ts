@@ -16,7 +16,8 @@ export async function POST(req: NextRequest) {
     }
 
     // 2. Isolamento estrito de tenant (empresa_id derivado da identidade do usuário)
-    let userEmpresaId = user.app_metadata?.empresa_id || user.user_metadata?.empresa_id;
+    // Apenas metadados administrados pelo servidor são confiáveis para autorização.
+    let userEmpresaId = user.app_metadata?.empresa_id || null;
     if (!userEmpresaId && user.email) {
       const { data: op } = await supabase
         .from("operadores_app")
@@ -27,10 +28,11 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { clientPhone, clientName, messages, chatText, empresaId } = body;
+    const { clientPhone, clientName, messages, chatText } = body;
 
-    // Se o usuário possui empresa vinculada, ela é IMUTÁVEL (não permite passar empresaId de outro tenant)
-    const targetEmpresaId = userEmpresaId || empresaId || null;
+    // empresaId vindo do cliente nunca autoriza acesso a um tenant. O vínculo deve vir
+    // de metadados server-managed ou do cadastro confiável em operadores_app.
+    const targetEmpresaId = userEmpresaId || null;
 
     if (!targetEmpresaId) {
       return NextResponse.json({ error: "Nenhuma empresa identificada para processamento da conversa." }, { status: 403 });
@@ -181,11 +183,15 @@ Retorne ESTRITAMENTE um JSON válido com esta estrutura exata (sem formatação 
       p_empresa_id: targetEmpresaId
     });
 
-    if (rpcError) {
-      console.error("Erro na RPC sync_mined_lead:", rpcError);
+    if (rpcError || !rpcResult?.lead_id) {
+      console.error("Falha ao persistir lead via sync_mined_lead:", rpcError || "RPC não retornou lead_id");
+      return NextResponse.json(
+        { error: "A análise foi concluída, mas não foi possível salvar o lead no CRM." },
+        { status: 502 }
+      );
     }
 
-    const leadId: number | null = rpcResult?.lead_id || null;
+    const leadId: number | null = rpcResult.lead_id;
 
     return NextResponse.json({
       success: true,
