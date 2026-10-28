@@ -198,7 +198,9 @@ export async function POST(req: NextRequest) {
     // 1. Autenticação obrigatória (usuário logado ou secret de serviço)
     const authHeader = req.headers.get("authorization");
     const token = authHeader ? authHeader.replace(/^Bearer\s+/i, "") : null;
-    const adminSecret = process.env.ADMIN_WEBHOOK_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY;
+    // A service_role key nunca deve ser aceita como token HTTP. Use um segredo
+    // dedicado, rotacionável e com escopo próprio para integrações de serviço.
+    const adminSecret = process.env.ADMIN_WEBHOOK_SECRET;
     const isServiceRole = Boolean(token && adminSecret && token === adminSecret);
 
     let authUser = null;
