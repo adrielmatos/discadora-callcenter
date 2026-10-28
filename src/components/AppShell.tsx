@@ -11,8 +11,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const isPublicRoute = PUBLIC_ROUTES.includes(pathname);
 
   if (isPublicRoute) {
+    const isRootLanding = pathname === "/";
     return (
-      <div className="w-full min-h-screen overflow-y-auto bg-[#070b14] text-slate-100">
+      <div className={`w-full ${isRootLanding ? "h-screen overflow-hidden" : "min-h-screen overflow-y-auto"} bg-[#070b14] text-slate-100`}>
         {children}
       </div>
     );

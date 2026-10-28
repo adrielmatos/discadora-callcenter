@@ -3,7 +3,7 @@ import { supabaseAdmin, supabase } from "@/lib/supabase";
 
 /**
  * Captura pública de leads originados na Landing Page
- * Armazena no CRM da empresa principal (A&K) para contato e follow-up comercial.
+ * Armazena no CRM da empresa principal (A&K) via RPC SECURITY DEFINER para follow-up comercial.
  */
 export async function POST(req: NextRequest) {
   try {
@@ -31,29 +31,30 @@ export async function POST(req: NextRequest) {
 
     const targetEmpresaId = internalEmp?.id || "ebe1ab22-519e-4784-8f96-e7f0d7a8c0a3";
 
-    const { data: lead, error } = await clientDb
-      .from("leads")
-      .insert({
-        nome: String(nome).trim().slice(0, 150),
-        telefone: formattedPhone,
-        empresa_id: targetEmpresaId,
-        status: "pendente",
-        etapa_crm: "Interessado",
-        produto: "SaaS Discadora Call Center",
-        banco: "Lead Comercial",
-        ultima_tabulacao: `[Landing Page] Demonstração Solicitada (Equipe: ${tamanhoEquipe || "Não informada"})`,
-        created_at: new Date().toISOString()
-      })
-      .select("id")
-      .single();
+    // Utiliza a RPC SECURITY DEFINER do Supabase para persistência garantida e agendamento automático
+    const { data: rpcResult, error: rpcError } = await clientDb.rpc("sync_mined_lead", {
+      p_client_phone: formattedPhone,
+      p_client_name: String(nome).trim().slice(0, 150),
+      p_produto: "SaaS Discadora Call Center",
+      p_banco: "Lead Landing Page",
+      p_margem: tamanhoEquipe ? `Equipe: ${tamanhoEquipe}` : "Lead Comercial",
+      p_etapa: "Interessado",
+      p_tabulacao: `[Landing Page] Demonstração Solicitada (Equipe: ${tamanhoEquipe || "Não informada"})`,
+      p_resumo: `Lead capturado no formulário da Landing Page. Equipe: ${tamanhoEquipe || "Não informada"}. ${mensagem || ""}`.trim(),
+      p_sugestao: "Entrar em contato via WhatsApp para demonstração e ativação de plano.",
+      p_temperatura: "Quente",
+      p_empresa_id: targetEmpresaId
+    });
 
-    if (error) {
-      console.warn("Aviso ao salvar lead da landing page:", error);
+    if (rpcError) {
+      console.warn("Aviso ao salvar lead da landing page via RPC:", rpcError);
     }
+
+    const leadId = rpcResult?.lead_id || null;
 
     return NextResponse.json({
       success: true,
-      leadId: lead?.id || null,
+      leadId,
       message: "Lead registrado no CRM comercial com sucesso!"
     });
 

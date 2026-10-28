@@ -9,6 +9,9 @@ alter table if exists public.empresas enable row level security;
 alter table if exists public.leads enable row level security;
 alter table if exists public.lista_nao_perturbe enable row level security;
 
+-- Garante coluna updated_at na tabela leads
+alter table if exists public.leads add column if not exists updated_at timestamp with time zone default now();
+
 -- 2. Índice composto para aceleração de busca e bloqueio DND
 create index if not exists idx_leads_pendentes_busca 
 on public.leads(status, id asc) 
