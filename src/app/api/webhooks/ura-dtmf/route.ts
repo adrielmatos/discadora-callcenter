@@ -21,7 +21,7 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   try {
     // 1. Validação de autenticidade / Segredo do PABX/URA
-    const configuredSecret = process.env.URA_WEBHOOK_SECRET || process.env.ADMIN_WEBHOOK_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const configuredSecret = process.env.URA_WEBHOOK_SECRET;
     const providedSecret = req.headers.get("x-ura-token") || 
       req.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ||
       new URL(req.url).searchParams.get("token");
@@ -83,16 +83,25 @@ async function processUraEvent(payload: any, req: NextRequest) {
     formattedPhone = `55${formattedPhone}`;
   }
 
-  const clientDb = supabaseAdmin || supabase;
+  if (!supabaseAdmin) {
+    console.error("[URA-DTMF] SUPABASE_SERVICE_ROLE_KEY ausente; operação bloqueada.");
+    return NextResponse.json({ success: false, error: "Integração temporariamente indisponível." }, { status: 503 });
+  }
+  const clientDb = supabaseAdmin;
   const nowIso = new Date().toISOString();
 
   // 3. Verificação do Não Perturbe (DND)
-  const { data: dndEntry } = await clientDb
+  const { data: dndEntry, error: dndError } = await clientDb
     .from("lista_nao_perturbe")
     .select("id")
     .eq("telefone", formattedPhone)
     .eq("ativo", true)
     .maybeSingle();
+
+  if (dndError) {
+    console.error("[URA-DTMF] Não foi possível consultar Não Perturbe:", dndError);
+    return NextResponse.json({ success: false, error: "Não foi possível validar a lista Não Perturbe." }, { status: 503 });
+  }
 
   if (dndEntry) {
     logAuditEvent({
@@ -111,12 +120,17 @@ async function processUraEvent(payload: any, req: NextRequest) {
   }
 
   // 4. Verificar se o Lead já existe na base desta empresa
-  const { data: existingLead } = await clientDb
+  const { data: existingLead, error: existingLeadError } = await clientDb
     .from("leads")
     .select("id, nome, status, etapa_crm, observacoes, empresa_id")
     .eq("telefone", formattedPhone)
     .eq("empresa_id", empresaId)
     .maybeSingle();
+
+  if (existingLeadError) {
+    console.error("[URA-DTMF] Falha ao consultar lead:", existingLeadError);
+    return NextResponse.json({ success: false, error: "Não foi possível consultar o lead." }, { status: 502 });
+  }
 
   let leadId: number | string | null = null;
   let isNew = false;
@@ -168,7 +182,11 @@ async function processUraEvent(payload: any, req: NextRequest) {
 
   if (digit === "1" || digit.toLowerCase() === "sim") {
     try {
-      const configuredSecret = process.env.URA_WEBHOOK_SECRET || process.env.ADMIN_WEBHOOK_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY;
+      const configuredSecret = process.env.ADMIN_WEBHOOK_SECRET;
+      if (!configuredSecret) {
+        console.error("[URA-DTMF] ADMIN_WEBHOOK_SECRET ausente; envio interno de WhatsApp não executado.");
+        return NextResponse.json({ success: false, error: "Integração de WhatsApp não configurada." }, { status: 503 });
+      }
       const originUrl = req.nextUrl.origin || "http://localhost:3000";
       const primeiroNome = rawNome.split(" ")[0] || "Cliente";
       const msgSofia = `Olá, ${primeiroNome}! Sou a Sofia, consultora virtual autorizada 🚀\n\nRecebemos sua confirmação de interesse pelo telefone na simulação de crédito/FGTS.\n\nPodemos realizar uma simulação gratuita e sem compromisso para você conferir as condições disponíveis?`;
