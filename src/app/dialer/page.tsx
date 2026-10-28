@@ -160,6 +160,9 @@ export default function DialerWorkspace() {
   const [callStatus, setCallStatus] = useState<"idle" | "calling" | "talking" | "wrapup">("idle");
   const [duration, setDuration] = useState(0);
   const callDurationRef = useRef<number>(0);
+  const handleCallTimerTick = useCallback((secs: number) => {
+    callDurationRef.current = secs;
+  }, []);
   const [scriptsList, setScriptsList] = useState<any[]>([]);
   const [selectedScriptProduct, setSelectedScriptProduct] = useState("");
   const [productFilter, setProductFilter] = useState<"all" | "fgts" | "inss" | "consignado">("all");
@@ -1330,7 +1333,7 @@ export default function DialerWorkspace() {
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
                     <span>Em Conversação</span>
                   </div>
-                  <CallTimerDisplay onTick={useCallback((secs: number) => { callDurationRef.current = secs; }, [])} />
+                  <CallTimerDisplay onTick={handleCallTimerTick} />
 
                   <div className="mt-1 flex items-center justify-center gap-1 text-[9px] text-slate-400 font-semibold">
                     <Radio size={11} className="text-emerald-400" />
