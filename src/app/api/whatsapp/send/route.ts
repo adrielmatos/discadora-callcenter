@@ -13,7 +13,7 @@ export async function POST(req: NextRequest) {
   try {
     const authHeader = req.headers.get("authorization");
     const token = authHeader ? authHeader.replace(/^Bearer\s+/i, "") : null;
-    const adminSecret = process.env.ADMIN_WEBHOOK_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const adminSecret = process.env.ADMIN_WEBHOOK_SECRET;
 
     let authUser = null;
     const isInternalAuthorized = Boolean(token && adminSecret && token === adminSecret);
@@ -34,12 +34,15 @@ export async function POST(req: NextRequest) {
 
     const { telefone, mensagem, lead_id, empresa_id } = await req.json();
 
-    if (!telefone || !mensagem) {
+    if (typeof telefone !== "string" || typeof mensagem !== "string" || !telefone.trim() || !mensagem.trim()) {
       return NextResponse.json({ error: "Telefone e mensagem são obrigatórios" }, { status: 400 });
+    }
+    if (mensagem.length > 4000) {
+      return NextResponse.json({ error: "A mensagem excede o limite de 4.000 caracteres." }, { status: 400 });
     }
 
     // Isolamento estrito de tenant (operador não pode enviar por outro tenant)
-    let callerEmpresaId = authUser?.app_metadata?.empresa_id || authUser?.user_metadata?.empresa_id;
+    let callerEmpresaId = authUser?.app_metadata?.empresa_id || null;
     if (!callerEmpresaId && authUser?.email) {
       const { data: op } = await supabase
         .from("operadores_app")
@@ -55,15 +58,34 @@ export async function POST(req: NextRequest) {
     }
 
     const cleanNumber = telefone.replace(/\D/g, "");
-    const formattedPhone = cleanNumber.startsWith("55") ? cleanNumber : `55${cleanNumber}`;
+    if (cleanNumber.length < 10 || cleanNumber.length > 13) {
+      return NextResponse.json({ error: "Número de telefone inválido." }, { status: 400 });
+    }
+    const formattedPhone = cleanNumber.startsWith("55") ? cleanNumber : "55" + cleanNumber;
 
-    // 1. Verificação do Não Perturbe (DND)
-    const { data: dndEntry } = await supabase
+    if (lead_id) {
+      const { data: lead, error: leadError } = await supabase
+        .from("leads")
+        .select("id")
+        .eq("id", lead_id)
+        .eq("empresa_id", targetEmpresaId)
+        .maybeSingle();
+      if (leadError) return NextResponse.json({ error: "Não foi possível validar o lead para o envio." }, { status: 502 });
+      if (!lead) return NextResponse.json({ error: "Lead não encontrado nesta empresa." }, { status: 404 });
+    }
+
+    // Falhar fechado se a lista Não Perturbe não puder ser consultada.
+    const { data: dndEntry, error: dndError } = await supabase
       .from("lista_nao_perturbe")
       .select("id")
       .eq("telefone", formattedPhone)
       .eq("ativo", true)
       .maybeSingle();
+
+    if (dndError) {
+      console.error("[WhatsApp] Falha ao consultar lista Não Perturbe:", dndError);
+      return NextResponse.json({ error: "Não foi possível verificar a lista Não Perturbe; envio bloqueado por segurança." }, { status: 503 });
+    }
 
     if (dndEntry) {
       return NextResponse.json({
