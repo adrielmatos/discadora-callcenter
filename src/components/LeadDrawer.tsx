@@ -394,7 +394,7 @@ export default function LeadDrawer({ isOpen, onClose, lead, onUpdateLead }: Lead
                         <span>Diagnóstico do Histórico no WhatsApp</span>
                       </h4>
                       <div className="bg-white p-3 rounded-xl border border-slate-200/80 text-xs text-slate-700 leading-relaxed font-medium italic">
-                        "{aiResumo || "Cliente demonstrou interesse em crédito nas mensagens do WhatsApp."}"
+                        &quot;{aiResumo || "Cliente demonstrou interesse em crédito nas mensagens do WhatsApp."}&quot;
                       </div>
                     </div>
 
