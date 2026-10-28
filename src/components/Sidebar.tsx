@@ -73,8 +73,9 @@ export default function Sidebar() {
     router.push("/login");
   };
 
-  // Se estiver na tela de login, não renderiza a sidebar
-  if (pathname === "/login") {
+  // Se for rota pública, não renderiza a sidebar
+  const publicRoutes = ["/", "/login", "/download-extensao"];
+  if (publicRoutes.includes(pathname)) {
     return null;
   }
 
@@ -92,7 +93,7 @@ export default function Sidebar() {
     {
       title: "Gestão & Métricas",
       items: [
-        { name: "Painel da Dona / Master", path: "/", icon: LayoutDashboard },
+        { name: "Painel Executivo / Master", path: "/dashboard", icon: LayoutDashboard },
         { name: "Painel Master (Multi-Tenant)", path: "/admin", icon: Shield },
         { name: "Empresas Assinantes (SaaS)", path: "/settings?tab=empresas", icon: Building2 },
         { name: "Resultados & Relatórios", path: "/resultados", icon: BarChart3 },
@@ -129,7 +130,7 @@ export default function Sidebar() {
   };
 
   // Rotas restritas exclusivas da Dona / Master (Bloqueadas para qualquer empresa cliente)
-  const masterOnlyPaths = ["/", "/admin", "/settings?tab=empresas", "/settings"];
+  const masterOnlyPaths = ["/dashboard", "/admin", "/settings?tab=empresas", "/settings"];
 
   const filteredNavGroups = navGroups.map(group => ({
     ...group,

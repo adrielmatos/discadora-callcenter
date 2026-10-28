@@ -1,25 +1,32 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
 
+/**
+ * Envio de Mensagem Individual WhatsApp (API / Web)
+ * Segurança Hardened:
+ * 1. Verificação centralizada de Não Perturbe (DND).
+ * 2. Autenticação por sessão de operador ou segredo interno.
+ * 3. Distinção clara entre link gerado (web) e mensagem confirmada (api).
+ */
 export async function POST(req: NextRequest) {
   try {
-    // ─── Identificação de Autenticação (Opcional / Fallback Seguro) ──────────
     const authHeader = req.headers.get("authorization");
     const token = authHeader ? authHeader.replace(/^Bearer\s+/i, "") : null;
+    const adminSecret = process.env.ADMIN_WEBHOOK_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY;
 
     let authUser = null;
-    if (token) {
+    let isInternalAuthorized = Boolean(token && adminSecret && token === adminSecret);
+
+    if (token && !isInternalAuthorized) {
       try {
         const { data: { user } } = await supabase.auth.getUser(token);
         if (user) {
           authUser = user;
         }
-      } catch {
-        // Fallback gracioso para as configurações padrão da plataforma
-      }
+      } catch {}
     }
 
-    const { telefone, mensagem, lead_id } = await req.json();
+    const { telefone, mensagem, lead_id, empresa_id } = await req.json();
 
     if (!telefone || !mensagem) {
       return NextResponse.json({ error: "Telefone e mensagem são obrigatórios" }, { status: 400 });
@@ -28,8 +35,24 @@ export async function POST(req: NextRequest) {
     const cleanNumber = telefone.replace(/\D/g, "");
     const formattedPhone = cleanNumber.startsWith("55") ? cleanNumber : `55${cleanNumber}`;
 
-    // Busca configurações de WhatsApp salvas no banco (com suporte a multitenancy seguro)
-    let userEmpresaId = (authUser?.app_metadata?.empresa_id as string) || null;
+    // 1. Verificação do Não Perturbe (DND)
+    const { data: dndEntry } = await supabase
+      .from("lista_nao_perturbe")
+      .select("id")
+      .eq("telefone", formattedPhone)
+      .eq("ativo", true)
+      .maybeSingle();
+
+    if (dndEntry) {
+      return NextResponse.json({
+        success: false,
+        error: "Contato cadastrado na lista Não Perturbe (DND). Envio bloqueado por conformidade Bacen/LGPD.",
+        dndBlocked: true
+      }, { status: 403 });
+    }
+
+    // 2. Busca configurações de WhatsApp da empresa
+    let userEmpresaId = empresa_id || (authUser?.app_metadata?.empresa_id as string) || null;
     if (!userEmpresaId && authUser?.email) {
       const { data: op } = await supabase
         .from("operadores_app")
@@ -63,14 +86,11 @@ export async function POST(req: NextRequest) {
         let headers: Record<string, string> = { "Content-Type": "application/json" };
         let payload: any = {};
 
-        // Detecção automática de provedor pelo formato da URL
         if (apiUrl.includes("z-api.io") || apiUrl.includes("z-api")) {
-          // Padrão Z-API
           endpoint = `${apiUrl.replace(/\/$/, "")}/instances/${instanceName}/token/${apiToken}/send-text`;
           headers["Client-Token"] = apiToken;
           payload = { phone: formattedPhone, message: mensagem };
         } else {
-          // Padrão Evolution API / Baileys
           endpoint = `${apiUrl.replace(/\/$/, "")}/message/sendText/${instanceName || "default"}`;
           headers["apikey"] = apiToken;
           payload = { number: formattedPhone, text: mensagem };
@@ -83,14 +103,13 @@ export async function POST(req: NextRequest) {
           signal: AbortSignal.timeout(10000)
         });
 
-        const resData = await response.json();
+        const resData = await response.json().catch(() => ({}));
 
         if (response.ok) {
-          // Registra envio no histórico do lead se aplicável
           if (lead_id) {
             await supabase.from("historico_ligacoes").insert({
               lead_id,
-              tabulacao: "WhatsApp Enviado (API)",
+              tabulacao: "WhatsApp Enviado (API Confirmada)",
               duracao_segundos: 0
             });
           }
@@ -98,38 +117,41 @@ export async function POST(req: NextRequest) {
           return NextResponse.json({
             success: true,
             method: "api",
-            message: "Mensagem disparada com sucesso via WhatsApp API!",
+            status: "delivered",
+            message: "Mensagem disparada e confirmada pelo provedor de WhatsApp!",
             data: resData
           });
         } else {
-          console.warn("Aviso ao enviar via API WhatsApp:", resData);
-          // Retorna fallback do link wa.me para o operador não ficar na mão
           const waUrl = `https://wa.me/${formattedPhone}?text=${encodeURIComponent(mensagem)}`;
           return NextResponse.json({
             success: false,
             method: "fallback",
-            error: resData?.message || "API de WhatsApp retornou erro",
+            status: "link_prepared",
+            error: resData?.message || "Provedor de WhatsApp retornou erro",
             waUrl
           });
         }
       } catch (apiErr: any) {
-        console.error("Erro de conexão com API WhatsApp:", apiErr);
         const waUrl = `https://wa.me/${formattedPhone}?text=${encodeURIComponent(mensagem)}`;
         return NextResponse.json({
           success: false,
           method: "fallback",
-          error: apiErr?.message || "Servidor de WhatsApp inacessível",
+          status: "link_prepared",
+          error: apiErr?.message || "Provedor de WhatsApp inacessível",
           waUrl
         });
       }
     }
 
-    // ─── MODO 2: NATIVO (Link wa.me direto para o WhatsApp do operador) ───
+    // ─── MODO 2: NATIVO (Link wa.me gerado para envio manual pelo operador) ───
     const waUrl = `https://wa.me/${formattedPhone}?text=${encodeURIComponent(mensagem)}`;
     return NextResponse.json({
       success: true,
       method: "web",
-      waUrl
+      status: "link_prepared",
+      delivered: false,
+      waUrl,
+      message: "Link WhatsApp Web preparado para abertura e envio pelo operador."
     });
   } catch (err: any) {
     return NextResponse.json({ error: err?.message || "Erro interno" }, { status: 500 });

@@ -4,15 +4,35 @@ import { logAuditEvent } from "@/lib/audit";
 
 /**
  * Webhook Universal de URA Reversa (DTMF -> WhatsApp + CRM)
- * Compatível com Asterisk, FreePBX, Issabel, TotalVoice/Zenvia, Vono, Kolmeya, FalaFrete e provedores VoIP.
- * 
- * Aceita requisições POST (JSON ou Form-Data) e GET (Query Params).
- * Exemplo de chamada:
- * POST /api/webhooks/ura-dtmf
- * { "telefone": "11987654321", "nome": "Carlos Silva", "digit": "1", "campanha": "FGTS Ativo" }
+ * Segurança Hardened:
+ * 1. Apenas POST autorizado por secret (X-URA-Token ou ?token=).
+ * 2. GET desabilitado para operações mutáveis (retorna 405).
+ * 3. Validação obrigatória de empresa_id (sem fallbacks arbitrários de tenant).
+ * 4. Validação centralizada de Não Perturbe (DND) antes de qualquer disparo.
+ * 5. Textos de mensagens em conformidade com normas do Banco Central.
  */
+export async function GET() {
+  return NextResponse.json(
+    { error: "Método GET não permitido para operações de webhook mutáveis. Utilize POST autenticado." },
+    { status: 405 }
+  );
+}
+
 export async function POST(req: NextRequest) {
   try {
+    // 1. Validação de autenticidade / Segredo do PABX/URA
+    const configuredSecret = process.env.URA_WEBHOOK_SECRET || process.env.ADMIN_WEBHOOK_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const providedSecret = req.headers.get("x-ura-token") || 
+      req.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ||
+      new URL(req.url).searchParams.get("token");
+
+    if (configuredSecret && providedSecret !== configuredSecret) {
+      return NextResponse.json(
+        { success: false, error: "Acesso negado: token de autenticação de webhook URA inválido." },
+        { status: 401 }
+      );
+    }
+
     let payload: any = {};
     const contentType = req.headers.get("content-type") || "";
 
@@ -34,32 +54,24 @@ export async function POST(req: NextRequest) {
   }
 }
 
-export async function GET(req: NextRequest) {
-  try {
-    const { searchParams } = new URL(req.url);
-    const payload: Record<string, string> = {};
-    searchParams.forEach((value, key) => {
-      payload[key] = value;
-    });
-
-    return await processUraEvent(payload, req);
-  } catch (error: any) {
-    console.error("[URA-DTMF Error GET]:", error);
-    return NextResponse.json({ success: false, error: error.message || "Erro interno ao processar URA" }, { status: 500 });
-  }
-}
-
 async function processUraEvent(payload: any, req: NextRequest) {
-  // Mapeamento flexível de parâmetros de qualquer operadora VoIP/PABX
   const rawTelefone = payload.telefone || payload.phone || payload.numero || payload.callerid || payload.from || payload.to || payload.ani || payload.contact;
   const rawNome = payload.nome || payload.name || payload.caller_name || payload.lead_nome || "Lead URA Reversa";
   const digit = String(payload.digit || payload.dtmf || payload.tecla || payload.key || payload.option || "1").trim();
   const campanha = payload.campanha || payload.campaign || "URA Reversa Ativa";
-  const empresaId = payload.empresa_id || payload.empresaId || null;
+  const empresaId = payload.empresa_id || payload.empresaId || new URL(req.url).searchParams.get("empresa_id");
 
   if (!rawTelefone) {
     return NextResponse.json(
       { success: false, error: "Parâmetro 'telefone' é obrigatório para processar o evento da URA" },
+      { status: 400 }
+    );
+  }
+
+  // 2. Isolamento Multiempresa: empresa_id é OBRIGATÓRIO (sem suposição arbitrária)
+  if (!empresaId) {
+    return NextResponse.json(
+      { success: false, error: "Parâmetro 'empresa_id' é obrigatório para direcionar o lead à empresa correta." },
       { status: 400 }
     );
   }
@@ -74,28 +86,40 @@ async function processUraEvent(payload: any, req: NextRequest) {
   const clientDb = supabaseAdmin || supabase;
   const nowIso = new Date().toISOString();
 
-  // 1. Identificar ou buscar empresa_id se não fornecido
-  let targetEmpresaId = empresaId;
-  if (!targetEmpresaId) {
-    const { data: firstEmpresa } = await clientDb
-      .from("empresas")
-      .select("id")
-      .eq("status", "ativa")
-      .limit(1)
-      .maybeSingle();
-    targetEmpresaId = firstEmpresa?.id || null;
+  // 3. Verificação do Não Perturbe (DND)
+  const { data: dndEntry } = await clientDb
+    .from("lista_nao_perturbe")
+    .select("id")
+    .eq("telefone", formattedPhone)
+    .eq("ativo", true)
+    .maybeSingle();
+
+  if (dndEntry) {
+    logAuditEvent({
+      action: "URA_DTMF_BLOCKED_DND",
+      resource: "leads",
+      resourceId: formattedPhone,
+      empresaId,
+      metadata: { telefone: formattedPhone, digit, motivo: "Número cadastrado na lista Não Perturbe (DND)" }
+    });
+
+    return NextResponse.json({
+      success: true,
+      status: "dnd_blocked",
+      message: "Contato bloqueado: número cadastrado na lista Não Perturbe (DND)."
+    });
   }
 
-  // 2. Verificar se o Lead já existe na base
+  // 4. Verificar se o Lead já existe na base desta empresa
   const { data: existingLead } = await clientDb
     .from("leads")
     .select("id, nome, status, etapa_crm, observacoes, empresa_id")
     .eq("telefone", formattedPhone)
+    .eq("empresa_id", empresaId)
     .maybeSingle();
 
   let leadId: number | string | null = null;
   let isNew = false;
-
   const obsInteresse = `[🔥 URA Reversa • DTMF ${digit}] Cliente confirmou interesse pelo telefone na campanha '${campanha}' em ${new Date().toLocaleString("pt-BR")}.`;
 
   if (existingLead) {
@@ -125,7 +149,7 @@ async function processUraEvent(payload: any, req: NextRequest) {
         produto: "FGTS / Consignado",
         origem: "ura_reversa",
         observacoes: obsInteresse,
-        empresa_id: targetEmpresaId,
+        empresa_id: empresaId,
         created_at: nowIso
       })
       .select("id")
@@ -138,23 +162,28 @@ async function processUraEvent(payload: any, req: NextRequest) {
     }
   }
 
-  // 3. Disparo Automático no WhatsApp com a Sofia AI se o dígito for '1' (interesse positivo)
+  // 5. Acionamento do WhatsApp com texto transparente e em conformidade
   let whatsappSent = false;
   let whatsappResult: any = null;
 
   if (digit === "1" || digit.toLowerCase() === "sim") {
     try {
+      const configuredSecret = process.env.URA_WEBHOOK_SECRET || process.env.ADMIN_WEBHOOK_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY;
       const originUrl = req.nextUrl.origin || "http://localhost:3000";
       const primeiroNome = rawNome.split(" ")[0] || "Cliente";
-      const msgSofia = `Olá, ${primeiroNome}! Sou a Sofia, especialista virtual da A&K Soluções Financeiras 🚀\n\nVi que você acabou de confirmar interesse pelo telefone na antecipação do seu FGTS/Crédito Consignado!\n\nJá liberei a simulação sem mexer no seu salário e sem boletos mensais (depósito via PIX hoje).\n\nVocê gostaria de ver quanto liberou para você agora?`;
+      const msgSofia = `Olá, ${primeiroNome}! Sou a Sofia, consultora virtual autorizada 🚀\n\nRecebemos sua confirmação de interesse pelo telefone na simulação de crédito/FGTS.\n\nPodemos realizar uma simulação gratuita e sem compromisso para você conferir as condições disponíveis?`;
 
       const sendResponse = await fetch(`${originUrl}/api/whatsapp/send`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${configuredSecret || ""}`
+        },
         body: JSON.stringify({
           telefone: formattedPhone,
           mensagem: msgSofia,
-          lead_id: leadId
+          lead_id: leadId,
+          empresa_id: empresaId
         })
       });
 
@@ -165,12 +194,12 @@ async function processUraEvent(payload: any, req: NextRequest) {
     }
   }
 
-  // 4. Registrar em Auditoria
+  // 6. Auditoria de Segurança
   logAuditEvent({
     action: "URA_DTMF_INTERACTION",
     resource: "leads",
     resourceId: String(leadId || formattedPhone),
-    empresaId: targetEmpresaId || undefined,
+    empresaId,
     metadata: {
       telefone: formattedPhone,
       digit,
@@ -188,6 +217,6 @@ async function processUraEvent(payload: any, req: NextRequest) {
     dtmf: digit,
     whatsapp_triggered: whatsappSent,
     whatsapp_details: whatsappResult,
-    message: "Interação de URA Reversa recebida com sucesso. Lead qualificado e WhatsApp acionado!"
+    message: "Interação de URA Reversa recebida com sucesso. Lead qualificado com isolamento por empresa."
   });
 }

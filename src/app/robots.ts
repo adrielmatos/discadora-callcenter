@@ -8,7 +8,23 @@ export default function robots(): MetadataRoute.Robots {
       {
         userAgent: "*",
         allow: ["/", "/login", "/download-extensao"],
-        disallow: ["/api/", "/admin", "/settings", "/dnd"]
+        disallow: [
+          "/api/",
+          "/admin",
+          "/dashboard",
+          "/settings",
+          "/dnd",
+          "/dialer",
+          "/leads",
+          "/tasks",
+          "/retornos",
+          "/campanhas",
+          "/omnichannel",
+          "/resultados",
+          "/conversas",
+          "/telefonia",
+          "/scripts"
+        ]
       }
     ],
     sitemap: `${baseUrl}/sitemap.xml`

@@ -5,9 +5,16 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "eyJhbGciOi
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-// Cliente administrativo exclusivo para rotas protegidas de backend e webhooks
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || supabaseAnonKey;
-export const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
-  auth: { persistSession: false, autoRefreshToken: false }
-});
+// Cliente administrativo exclusivo para rotas de backend protegidas e webhooks
+const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+if (!serviceRoleKey && typeof window === "undefined" && process.env.NODE_ENV === "production") {
+  console.warn("[Supabase Security Alert] SUPABASE_SERVICE_ROLE_KEY ausente no servidor de produção.");
+}
 
+export const supabaseAdmin = createClient(
+  supabaseUrl, 
+  serviceRoleKey || supabaseAnonKey, 
+  {
+    auth: { persistSession: false, autoRefreshToken: false }
+  }
+);

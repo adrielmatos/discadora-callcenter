@@ -65,9 +65,25 @@ export default function LeadsCRM() {
 
   const fetchLeads = async () => {
     setLoading(true);
-    const { data } = await supabase.from("leads").select("*").order("id", { ascending: false }).limit(300);
-    if (data) setLeads(data);
-    setLoading(false);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      const userEmpresaId = user?.app_metadata?.empresa_id || user?.user_metadata?.empresa_id;
+
+      let query = supabase.from("leads").select("*").order("id", { ascending: false }).limit(500);
+
+      if (userEmpresaId) {
+        query = query.eq("empresa_id", userEmpresaId);
+      } else if (selectedEmpresa && selectedEmpresa !== "all") {
+        query = query.eq("empresa_id", selectedEmpresa);
+      }
+
+      const { data } = await query;
+      if (data) setLeads(data);
+    } catch (err) {
+      console.error("Erro ao carregar leads:", err);
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -213,7 +229,9 @@ export default function LeadsCRM() {
     }
 
     // Processamento de Inteligência de Base: Validação CPF Receita Federal + Sanitização Telefones Anatel + Deduplicação
-    const targetEmpresaId = selectedEmpresa !== "all" ? selectedEmpresa : "ebe1ab22-519e-4784-8f96-e7f0d7a8c0a3";
+    const { data: { user } } = await supabase.auth.getUser();
+    const userEmpresaId = user?.app_metadata?.empresa_id || user?.user_metadata?.empresa_id;
+    const targetEmpresaId = userEmpresaId || (selectedEmpresa !== "all" ? selectedEmpresa : null);
     const { cleanLeads, stats } = processLeadsBatch(allLeads, targetEmpresaId);
 
     if (cleanLeads.length === 0) {

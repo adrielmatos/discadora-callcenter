@@ -272,7 +272,7 @@ export function processLeadsBatch(rawRows: any[], defaultEmpresaId?: string): {
       ...row,
       telefone: phoneInfo.cleanPhone,
       cpf: validCpfFormatted,
-      empresa_id: row.empresa_id || defaultEmpresaId || "ebe1ab22-519e-4784-8f96-e7f0d7a8c0a3"
+      empresa_id: row.empresa_id || defaultEmpresaId || null
     });
   }
 

@@ -18,11 +18,12 @@ create index if not exists idx_dnd_busca_rapida
 on public.lista_nao_perturbe(telefone, cpf) 
 where ativo = true;
 
--- 3. FUNÇÃO RPC ATÔMICA: Seleciona e trava 1 lead para o operador sem concorrência
--- Evita a colisão onde dois operadores discam para a mesma pessoa ao mesmo tempo.
+-- 3. FUNÇÃO RPC ATÔMICA COM ISOLAMENTO DE TENANT:
+-- Seleciona e trava 1 lead para o operador sem colisão e estritamente restrito à empresa do operador.
 create or replace function public.obter_proximo_lead_disponivel(
   p_operador_id bigint default null,
-  p_produto text default null
+  p_produto text default null,
+  p_empresa_id uuid default null
 )
 returns setof public.leads
 language plpgsql
@@ -31,10 +32,19 @@ set search_path = public
 as $$
 declare
   v_lead public.leads;
+  v_caller_empresa_id uuid;
 begin
+  -- Deriva a empresa do operador autenticado ou do parâmetro fornecido
+  v_caller_empresa_id := coalesce(
+    p_empresa_id,
+    nullif(auth.jwt() -> 'app_metadata' ->> 'empresa_id', '')::uuid,
+    nullif(auth.jwt() -> 'user_metadata' ->> 'empresa_id', '')::uuid
+  );
+
   select l.* into v_lead
   from public.leads l
   where l.status = 'pendente'
+    and (v_caller_empresa_id is null or l.empresa_id = v_caller_empresa_id)
     and (p_produto is null or p_produto = 'all' or l.produto ilike ('%' || p_produto || '%'))
     and not exists (
       select 1 from public.lista_nao_perturbe dnd
@@ -59,6 +69,7 @@ begin
 end;
 $$;
 
-revoke all on function public.obter_proximo_lead_disponivel(bigint, text) from public;
-grant execute on function public.obter_proximo_lead_disponivel(bigint, text) to authenticated;
-grant execute on function public.obter_proximo_lead_disponivel(bigint, text) to anon;
+-- Revoga acesso público e de usuários anônimos (Crítico de Segurança)
+revoke all on function public.obter_proximo_lead_disponivel(bigint, text, uuid) from public;
+revoke all on function public.obter_proximo_lead_disponivel(bigint, text, uuid) from anon;
+grant execute on function public.obter_proximo_lead_disponivel(bigint, text, uuid) to authenticated;

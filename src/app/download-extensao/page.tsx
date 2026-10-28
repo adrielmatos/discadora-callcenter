@@ -8,16 +8,6 @@ import {
 } from "lucide-react";
 
 export default function DownloadExtensaoPage() {
-  const [copied, setCopied] = useState(false);
-
-  const localPath = "C:\\Users\\vinic\\.gemini\\antigravity\\scratch\\discadora-callcenter\\extensions\\sofia-whatsapp-web";
-
-  const handleCopy = () => {
-    navigator.clipboard.writeText(localPath);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2500);
-  };
-
   return (
     <div className="min-h-screen bg-[#0f172a] text-slate-100 flex flex-col">
       {/* Header */}
@@ -85,13 +75,10 @@ export default function DownloadExtensaoPage() {
                 <span>Baixar Pacote da Extensão (.ZIP)</span>
               </a>
 
-              <button
-                onClick={handleCopy}
-                className="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-bold px-4 py-3.5 rounded-2xl text-xs transition flex items-center gap-2 cursor-pointer"
-              >
-                {copied ? <Check size={15} className="text-emerald-400" /> : <Copy size={15} />}
-                <span>{copied ? "Caminho Copiado!" : "Copiar Pasta no Computador"}</span>
-              </button>
+              <span className="text-xs text-slate-400 flex items-center gap-1.5 self-center">
+                <CheckCircle2 size={14} className="text-emerald-400" />
+                <span>Arquivo .ZIP pronto para descompactar</span>
+              </span>
             </div>
           </div>
         </div>

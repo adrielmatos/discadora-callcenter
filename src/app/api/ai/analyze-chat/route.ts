@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
 
     const cleanPhone = digits;
     const cleanName = rawName || `Cliente WhatsApp (${cleanPhone.slice(-4)})`;
-    const targetEmpresaId = empresaId || "ebe1ab22-519e-4784-8f96-e7f0d7a8c0a3";
+    const targetEmpresaId = empresaId || null;
 
     // Concatena as mensagens para análise semântica
     let fullTranscript = "";

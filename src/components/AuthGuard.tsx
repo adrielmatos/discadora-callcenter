@@ -4,16 +4,20 @@ import React, { useState, useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
+const PUBLIC_ROUTES = ["/", "/login", "/download-extensao"];
+
 export default function AuthGuard({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
+  const isPublicRoute = PUBLIC_ROUTES.includes(pathname);
+
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(isPublicRoute ? true : null);
   const [isBlocked, setIsBlocked] = useState(false);
   const [blockMessage, setBlockMessage] = useState("");
 
   useEffect(() => {
-    // A tela de login nunca é bloqueada
-    if (pathname === "/login") {
+    // Rotas públicas nunca são bloqueadas
+    if (isPublicRoute) {
       setIsAuthenticated(true);
       return;
     }
@@ -81,8 +85,8 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
     };
   }, [pathname, router]);
 
-  // Se estiver na tela de login, renderiza direto
-  if (pathname === "/login") {
+  // Se estiver em rota pública, renderiza direto sem travas
+  if (isPublicRoute) {
     return <>{children}</>;
   }
 

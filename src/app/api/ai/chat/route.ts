@@ -58,7 +58,7 @@ async function syncConversationToCrm(
       p_resumo: interactionText,
       p_sugestao: isHandoff ? "Cliente aguardando especialista humano no WhatsApp" : "Em atendimento Sofia",
       p_temperatura: isHandoff ? "Quente" : "Morno",
-      p_empresa_id: empresaId || "ebe1ab22-519e-4784-8f96-e7f0d7a8c0a3"
+      p_empresa_id: empresaId || null
     });
 
     if (rpcErr) {

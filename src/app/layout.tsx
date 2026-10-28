@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
-import Sidebar from "@/components/Sidebar";
+import AppShell from "@/components/AppShell";
 import AuthGuard from "@/components/AuthGuard";
 
 export const viewport: Viewport = {
@@ -59,12 +59,11 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="pt-BR">
-      <body className="antialiased bg-[#f8fafc] text-slate-900 flex h-screen overflow-hidden">
+      <body className="antialiased font-sans">
         <AuthGuard>
-          <Sidebar />
-          <div className="flex-1 flex flex-col h-screen overflow-hidden relative">
+          <AppShell>
             {children}
-          </div>
+          </AppShell>
         </AuthGuard>
       </body>
     </html>

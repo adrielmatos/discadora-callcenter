@@ -65,7 +65,9 @@ export async function logAuditEvent({
         if (session?.user) {
           if (!finalUserId) finalUserId = session.user.id;
           if (!finalEmpresaId) {
-            finalEmpresaId = (session.user.app_metadata?.empresa_id as string) || "ebe1ab22-519e-4784-8f96-e7f0d7a8c0a3";
+            finalEmpresaId = (session.user.app_metadata?.empresa_id as string) || 
+              (session.user.user_metadata?.empresa_id as string) || 
+              null;
           }
         }
       } catch {}
@@ -76,7 +78,7 @@ export async function logAuditEvent({
       resource: finalResource,
       resource_id: rawResourceId ? String(rawResourceId) : null,
       actor_user_id: finalUserId,
-      empresa_id: finalEmpresaId || "ebe1ab22-519e-4784-8f96-e7f0d7a8c0a3",
+      empresa_id: finalEmpresaId || null,
       metadata: {
         ...finalMetadata,
         timestamp: new Date().toISOString(),
