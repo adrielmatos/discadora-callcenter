@@ -34,27 +34,42 @@ create or replace function public.obter_proximo_lead_disponivel(
 returns setof public.leads
 language plpgsql
 security definer
-set search_path = public
+set search_path = pg_catalog, public
 as $$
 declare
   v_lead public.leads;
   v_jwt_empresa_id uuid;
+  v_jwt_operador_id bigint;
   v_caller_empresa_id uuid;
 begin
   -- 1. Extrai a empresa obrigatoriamente do app_metadata do JWT (protegido pelo servidor Supabase)
   v_jwt_empresa_id := nullif(auth.jwt() -> 'app_metadata' ->> 'empresa_id', '')::uuid;
 
-  -- Se o usuário autenticado possui empresa vinculada em app_metadata, ela é IMUTÁVEL
-  if v_jwt_empresa_id is not null then
+  -- Usuários autenticados só podem operar com tenant e operador vindos de claims server-managed.
+  -- Nunca aceitar p_empresa_id ou p_operador_id fornecidos pelo cliente como autoridade.
+  if auth.role() = 'authenticated' then
+    v_jwt_operador_id := nullif(auth.jwt() -> 'app_metadata' ->> 'operador_id', '')::bigint;
+    if v_jwt_empresa_id is null or v_jwt_operador_id is null then
+      raise insufficient_privilege using message = 'Tenant/operador ausente em app_metadata; acesso negado.';
+    end if;
+    if p_empresa_id is not null and p_empresa_id <> v_jwt_empresa_id then
+      raise insufficient_privilege using message = 'Tenant solicitado não corresponde à identidade autenticada.';
+    end if;
+    if p_operador_id is not null and p_operador_id <> v_jwt_operador_id then
+      raise insufficient_privilege using message = 'Operador solicitado não corresponde à identidade autenticada.';
+    end if;
     v_caller_empresa_id := v_jwt_empresa_id;
-  else
-    -- Apenas se for chamada sem JWT de empresa (ex: service_role de worker backend), aceita o parâmetro
+    p_operador_id := v_jwt_operador_id;
+  elsif auth.role() = 'service_role' then
+    -- Somente worker confiável com service_role pode indicar explicitamente empresa/operador.
     v_caller_empresa_id := p_empresa_id;
+  else
+    raise insufficient_privilege using message = 'Papel não autorizado para obter leads.';
   end if;
 
-  -- Se nenhuma empresa foi identificada, rejeita imediatamente (nunca vaza leads sem tenant)
+  -- Falha fechada: nunca retorna leads sem tenant.
   if v_caller_empresa_id is null then
-    return;
+    raise insufficient_privilege using message = 'Tenant não informado; acesso negado.';
   end if;
 
   -- 2. Busca e bloqueia com SKIP LOCKED apenas dentro da empresa garantida
@@ -76,10 +91,11 @@ begin
     -- Marca o lead como em atendimento imediatamente para nenhum outro operador pegar
     update public.leads
     set status = 'em_atendimento',
-        operador_id = coalesce(p_operador_id, (auth.jwt() ->> 'sub')::bigint, operador_id),
+        operador_id = p_operador_id,
         updated_at = now()
-    where id = v_lead.id 
-      and empresa_id = v_caller_empresa_id;
+    where id = v_lead.id
+      and empresa_id = v_caller_empresa_id
+    returning * into v_lead;
 
     return next v_lead;
   end if;
