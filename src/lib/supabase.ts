@@ -26,8 +26,10 @@ export function getSupabaseAdmin() {
   });
 }
 
-export const supabaseAdmin = serviceRoleKey 
+// Não degradar silenciosamente para o cliente público: rotas administrativas
+// devem falhar explicitamente se a chave service_role não estiver configurada.
+export const supabaseAdmin = serviceRoleKey
   ? createClient(supabaseUrl, serviceRoleKey, {
       auth: { persistSession: false, autoRefreshToken: false }
     })
-  : supabase;
+  : null;
