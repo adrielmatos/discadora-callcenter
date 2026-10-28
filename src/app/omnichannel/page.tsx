@@ -502,7 +502,7 @@ export default function OmnichannelPage() {
                     </div>
                     <h4 className="text-xs font-bold text-slate-900">Ative o Modo do Desenvolvedor</h4>
                     <p className="text-[11px] text-slate-600 leading-relaxed">
-                      No canto superior direito da página de extensões, ative a chavinha chamada <strong>"Modo do desenvolvedor"</strong>.
+                      No canto superior direito da página de extensões, ative a chavinha chamada <strong>&quot;Modo do desenvolvedor&quot;</strong>.
                     </p>
                   </div>
 
@@ -512,7 +512,7 @@ export default function OmnichannelPage() {
                     </div>
                     <h4 className="text-xs font-bold text-slate-900">Carregar sem Compactação</h4>
                     <p className="text-[11px] text-slate-600 leading-relaxed">
-                      Clique no botão <strong>"Carregar sem compactação"</strong> e selecione a pasta da extensão descompactada. Pronto! O robô já estará pronto para uso.
+                      Clique no botão <strong>&quot;Carregar sem compactação&quot;</strong> e selecione a pasta da extensão descompactada. Pronto! O robô já estará pronto para uso.
                     </p>
                   </div>
                 </div>
@@ -559,7 +559,7 @@ export default function OmnichannelPage() {
                   <ul className="text-xs text-slate-600 space-y-2">
                     <li className="flex items-start gap-2">
                       <CheckCircle2 size={14} className="text-blue-500 shrink-0 mt-0.5" />
-                      <span><strong>Botão 'Minerar' no WhatsApp:</strong> Abre qualquer conversa antiga e clica em <em>Minerar</em> no topo da tela.</span>
+                      <span><strong>Botão &apos;Minerar&apos; no WhatsApp:</strong> Abre qualquer conversa antiga e clica em <em>Minerar</em> no topo da tela.</span>
                     </li>
                     <li className="flex items-start gap-2">
                       <CheckCircle2 size={14} className="text-blue-500 shrink-0 mt-0.5" />
