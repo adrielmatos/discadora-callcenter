@@ -1,13 +1,13 @@
 import { createClient } from "@supabase/supabase-js";
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://vtwyojpsrjyigsnnfawa.supabase.co";
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJ2dHd5b2pwc3JqeWlnc25uZmF3YSIsInJvbGUiOiJhbm9uIiwiaWF0IjoxNzg5OTMwNTU3LCJleHAiOjIxMDU1MDY1NTd9.CFFctYzCuiko-0iljFsT9Rb8NGK9NHtCg7V9fEA3eLw";
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://arcaaeehnxluginzncfs.supabase.co";
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFyY2FhZWVobnhsdWdpbnpuY2ZzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA5MDMwNzEsImV4cCI6MjEwNjQ3OTA3MX0.sesEcB-EF3yCGa0b84xQ-56kEchoryt4c5sNqm4sup0";
 
 // Cliente público com RLS (Row Level Security) aplicado
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 // Chave administrativa com privilégios de service_role (bypasses RLS para webhooks e tarefas de sistema)
-const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY;
 
 if (!serviceRoleKey && typeof window === "undefined" && process.env.NODE_ENV === "production") {
   console.warn("[Supabase Security Warning] SUPABASE_SERVICE_ROLE_KEY não configurada no ambiente de produção.");

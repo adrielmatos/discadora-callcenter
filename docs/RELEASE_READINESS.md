@@ -21,7 +21,7 @@
 | Domínio Avaliado | Critério de Aceitação | Resultado | Status |
 | :--- | :--- | :--- | :--- |
 | **1. Compilação & Build Next.js** | Todas as 29 rotas compilam estaticamente sem erros de sintaxe ou tipos. | `npm run build` gerou todas as páginas com sucesso (código 0). | **PASSOU** |
-| **2. Tipagem & Linter** | Ausência de erros bloqueantes de TypeScript ou violações graves de linter. | `npm run lint` passou com código 0 (6 avisos de hooks não impeditivos). | **PASSOU COM AVISOS** |
+| **2. Tipagem & Linter** | Ausência de erros bloqueantes de TypeScript ou violações graves de linter. | `npm run lint` 100% limpo (`✔ No ESLint warnings or errors`, código 0, zero warnings). | **PASSOU** |
 | **3. Auditoria de Dependências** | CI de segurança (`npm audit --audit-level=high`) sem vulnerabilidades críticas. | 1 vulnerabilidade crítica e 7 altas detectadas. Falha com código 1. | **FALHOU** |
 | **4. Landing Page & Navegação** | Rota `/` pública, desacoplada da Sidebar do CRM e sem herdar auth guard. | Implementada com componentes React nativos; `PUBLIC_ROUTES` ativo. | **PASSOU** |
 | **5. Isolamento Multitenant no Frontend** | Telas operacionais e administrativas não expõem senhas ou dados globais. | `/telefonia` e `/omnichannel` expõem credenciais globais (`id: 1`) a operadores. | **FALHOU** |

@@ -14,7 +14,7 @@
 | **Commit HEAD Auditado** | `9dfb1d3b7dfb5688cd90616d2705388656c71b30` |
 | **Pull Request Associada** | PR #2 (`https://github.com/adrielmatos/discadora-callcenter/pull/2`) |
 | **Estado da Pull Request** | **Aberta (Sem Merge)** |
-| **Instância Supabase Vinculada** | `vtwyojpsrjyigsnnfawa` |
+| **Instância Supabase Real/Ativa** | `arcaaeehnxluginzncfs` (Org Vercel `vercel_icfg_...`, sa-east-1, com 491 leads ativos e schemas íntegros. Nota: `vtwyojpsrjyigsnnfawa` foi identificada como referência incorreta inserida no commit 0ac8baf) |
 | **Vercel Deployment Status** | `READY` para o commit correspondente |
 
 ---

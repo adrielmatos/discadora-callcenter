@@ -20,7 +20,7 @@
 | **SEC-07** | **ALTO** | Autorização / Bypass | Autorização do painel master `/admin` e `/settings` baseada em checagens client-side bypassáveis | **Corrigido no Código** (Validação server-managed em `admin/page.tsx`) |
 | **SEC-08** | **ALTO** | Dependências / CI | `npm audit --audit-level=high` reprovado por vulnerabilidades em dependências | Em Mitigação de Versão |
 | **SEC-09** | **MÉDIO** | Qualidade / React | Avisos de `react-hooks/exhaustive-deps` em `conversas`, `dialer`, `leads`, `settings`, `BroadcastModal` | **100% Corrigido** (0 warnings no `next lint`) |
-| **SEC-10** | **MÉDIO** | Configuração / Extensão | Hardcoded URL para instância legada do Supabase em `extensions/sofia-whatsapp-web` | **Corrigido no Código** (Apontando para `vtwyojpsrjyigsnnfawa`) |
+| **SEC-10** | **MÉDIO** | Configuração / Extensão | Hardcoded URL incorreto do Supabase em `extensions/sofia-whatsapp-web` e fallback de `supabase.ts` | **100% Corrigido** (Alinhado à instância ativa de produção `arcaaeehnxluginzncfs`) |
 | **SEC-11** | **BAIXO** | SEO / Performance | Utilização de tags `<img>` nativas em vez de `next/image` nos componentes da Landing Page | **100% Corrigido** (`next/image` com fill e prioridade em `Hero` e `FeaturesGrid`) |
 
 ---
@@ -49,7 +49,7 @@
   - Redução do limite inicial de busca de leads de 500 para 200 registros.
   - **Resultado:** `npm run lint` executa limpo com `✔ No ESLint warnings or errors`.
 
-### SEC-10 — Correção da Extensão Chrome Sofia WhatsApp
-- **Arquivo Alterado:** `extensions/sofia-whatsapp-web/content.js`
+### SEC-10 — Correção da Extensão Chrome Sofia WhatsApp e Supabase Fallback
+- **Arquivos Alterados:** `extensions/sofia-whatsapp-web/content.js`, `src/lib/supabase.ts`
 - **Solução Implementada:**
-  - Atualizada a constante `SUPABASE_REST_URL` de `arcaaeehnxluginzncfs.supabase.co` para `https://vtwyojpsrjyigsnnfawa.supabase.co/rest/v1/rpc/sync_mined_lead`, alinhando a extensão com a instância ativa.
+  - Identificada e corrigida a inconsistência entre `vtwyojpsrjyigsnnfawa` e `arcaaeehnxluginzncfs`. A inspeção da infraestrutura via Supabase API confirmou que `arcaaeehnxluginzncfs` é o projeto real ativo da Vercel (491 leads ativos, histórico e scripts). A URL e chaves anon correspondentes foram consolidadas de ponta a ponta.

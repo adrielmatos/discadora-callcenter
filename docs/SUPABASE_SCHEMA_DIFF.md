@@ -2,21 +2,19 @@
 
 **Repositório:** `adrielmatos/discadora-callcenter`  
 **Branch:** `fix/rls-least-privilege-pentest`  
-**Projeto Supabase de Destino:** `vtwyojpsrjyigsnnfawa`  
+**Projeto Supabase Ativo de Produção:** `arcaaeehnxluginzncfs` (sa-east-1 / Org: `vercel_icfg_...`)  
+**Instância Incorreta Identificada:** `vtwyojpsrjyigsnnfawa` (Referência stale inserida no commit 0ac8baf)  
 **Data da Auditoria:** 28 de Outubro de 2026  
 
 ---
 
-## 1. Resumo Executivo das Divergências
+## 1. Resumo Executivo das Divergências e Descoberta Crítica
 
-A auditoria comparou detalhadamente:
-1. As tabelas, colunas e RPCs consumidas pelo código TypeScript (`src/**`).
-2. As tabelas e políticas propostas na migração `supabase/migrations/20261028_rls_least_privilege.sql`.
-3. As migrações existentes no repositório (`20261011_dialer_hardening_queue.sql` e `20261026_tenant_modules_and_trial.sql`).
+Durante a auditoria forense conduzida pelo Antigravity em modo somente leitura via Supabase Management API:
+1. **Descoberta do Banco Real:** O projeto Supabase real vinculado à organização do Vercel é `arcaaeehnxluginzncfs` (São Paulo, `sa-east-1`), contendo 491 leads ativos em `public.leads`, 75 chamadas registradas em `public.historico_ligacoes`, 19 scripts em `public.scripts_ligacao`, 4 planos em `public.planos`, a empresa master `A&K Soluções Financeiras` (`ebe1ab22-519e-4784-8f96-e7f0d7a8c0a3`), o schema `private` com funções utilitárias e a RPC `sync_mined_lead`.
+2. **Origem da Inconsistência:** O commit `0ac8baf` alterou indevidamente as referências de conexão para `vtwyojpsrjyigsnnfawa`. Como essa instância secundária não continha os dados ou esquemas corretos, causou a falsa impressão na auditoria anterior do ChatGPT de que o banco de produção estava vazio ou desprovido de funções.
+3. **Resolução de Código:** O código-fonte em `src/lib/supabase.ts`, `.env.example` e a extensão do Chrome foram realinhados para a instância autêntica `arcaaeehnxluginzncfs`.
 
-> **ALERTA CRÍTICO:**  
-> A migração `20261028_rls_least_privilege.sql` **NÃO PODE SER APLICADA DIRETAMENTE EM PRODUÇÃO** em seu estado atual.  
-> Ela causará quebra imediata do banco ou perda total de acesso aos operadores devido a funções inexistentes no schema `private` e divergência nominal de tabelas essenciais.
 
 ---
 

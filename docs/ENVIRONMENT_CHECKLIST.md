@@ -16,7 +16,7 @@ Todas as variáveis foram catalogadas a partir do código-fonte em `src/**` e do
 
 | Variável | Escopo | Obrigatoriedade | Finalidade Técnica | Status no Ambiente Local / Staging |
 | :--- | :--- | :--- | :--- | :--- |
-| `NEXT_PUBLIC_SUPABASE_URL` | Público (Browser & Server) | **Obrigatória** | URL da instância do Supabase (`https://vtwyojpsrjyigsnnfawa.supabase.co`). | Configurada |
+| `NEXT_PUBLIC_SUPABASE_URL` | Público (Browser & Server) | **Obrigatória** | URL da instância ativa do Supabase (`https://arcaaeehnxluginzncfs.supabase.co`). | Configurada |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Público (Browser & Server) | **Obrigatória** | Chave pública anônima. Requer RLS ativo em todas as tabelas. | Configurada |
 | `SUPABASE_SERVICE_ROLE_KEY` | **Estritamente Servidor** | **Obrigatória** | Chave de serviço com bypass de RLS. Necessária para `/api/leads/landing` e `/api/webhooks/**`. | **AUSENTE (BLOQUEADO)** |
 | `NEXT_PUBLIC_APP_URL` | Público (Browser & Server) | Opcional | URL canônica da aplicação para metadados OpenGraph e redirecionamentos. | Configurada (Fallback) |

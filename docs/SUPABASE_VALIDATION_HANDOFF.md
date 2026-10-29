@@ -1,6 +1,6 @@
 # Handoff de Validação do Supabase — Discadora Call Center
 
-Este documento é o roteiro executivo para validação da migração e isolamento de acesso **sem executar mudanças durante a fase de inspeção**. O projeto Supabase de produção (`vtwyojpsrjyigsnnfawa`) não foi alterado por este repositório.
+Este documento é o roteiro executivo para validação da migração e isolamento de acesso **sem executar mudanças durante a fase de inspeção**. O projeto Supabase de produção ativo (`arcaaeehnxluginzncfs`) foi inspecionado em modo estritamente somente leitura via catálogo do PostgreSQL e não foi alterado por este repositório.
 
 Para aprofundamento técnico, consulte os documentos complementares gerados na auditoria:
 - [AUDIT_ROUTE_MATRIX.md](file:///C:/Users/vinic/.gemini/antigravity/scratch/discadora-callcenter/docs/AUDIT_ROUTE_MATRIX.md) — Matriz completa de superfícies de ataque, autenticação e rotas.
