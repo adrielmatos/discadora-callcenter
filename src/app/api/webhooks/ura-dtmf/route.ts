@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { supabase, supabaseAdmin } from "@/lib/supabase";
+import { timingSafeEqual } from "node:crypto";
+import { supabaseAdmin } from "@/lib/supabase";
 import { logAuditEvent } from "@/lib/audit";
 
 /**
@@ -20,12 +21,19 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
-    // 1. Validação de autenticidade / Segredo do PABX/URA
+    // 1. Validação de autenticidade / Segredo do PABX/URA (Constant-time comparison)
     const configuredSecret = process.env.URA_WEBHOOK_SECRET;
     const providedSecret = req.headers.get("x-ura-token") ||
       req.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
 
-    if (!configuredSecret || !providedSecret || providedSecret !== configuredSecret) {
+    const isSecretValid = !!(
+      configuredSecret &&
+      providedSecret &&
+      Buffer.from(providedSecret).length === Buffer.from(configuredSecret).length &&
+      timingSafeEqual(Buffer.from(providedSecret), Buffer.from(configuredSecret))
+    );
+
+    if (!isSecretValid) {
       return NextResponse.json(
         { success: false, error: "Acesso negado: token de autenticação de webhook URA inválido." },
         { status: 401 }

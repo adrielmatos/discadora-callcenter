@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { timingSafeEqual } from "node:crypto";
 import { supabase } from "@/lib/supabase";
 
 /**
@@ -16,7 +17,11 @@ export async function POST(req: NextRequest) {
     const adminSecret = process.env.ADMIN_WEBHOOK_SECRET;
 
     let authUser = null;
-    const isInternalAuthorized = Boolean(token && adminSecret && token === adminSecret);
+    const isInternalAuthorized = Boolean(
+      token && adminSecret &&
+      Buffer.from(token).length === Buffer.from(adminSecret).length &&
+      timingSafeEqual(Buffer.from(token), Buffer.from(adminSecret))
+    );
 
     if (token && !isInternalAuthorized) {
       try {

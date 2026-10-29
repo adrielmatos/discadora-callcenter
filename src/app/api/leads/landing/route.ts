@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { supabaseAdmin, supabase } from "@/lib/supabase";
+import { supabaseAdmin } from "@/lib/supabase";
 
 /**
  * Captura pública de leads originados na Landing Page

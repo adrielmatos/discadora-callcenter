@@ -83,50 +83,37 @@ export default function Sidebar() {
     {
       title: "Operação Ativa",
       items: [
-        { name: "Painel da Dona / Master", path: "/dashboard", icon: LayoutDashboard },
+        { name: "Painel da Central", path: "/dashboard", icon: LayoutDashboard },
         { name: "Discador Preditivo", path: "/dialer", icon: PhoneCall },
-        { name: "Atendimento Omnichannel", path: "/omnichannel", icon: MessageSquare, badge: "WhatsApp" },
-        { name: "Esteira de Contratos CRM", path: "/esteira", icon: Layers },
-      ]
-    },
-    {
-      title: "Gestão & Métricas",
-      items: [
-        { name: "Painel Master (Multi-Tenant)", path: "/admin", icon: Shield },
-        { name: "Empresas Assinantes (SaaS)", path: "/settings?tab=empresas", icon: Building2 },
-        { name: "Resultados & Relatórios", path: "/resultados", icon: BarChart3 },
-        { name: "Base de Leads", path: "/leads", icon: FileSpreadsheet },
+        { name: "Conversas & IA Sofia", path: "/conversas", icon: MessageSquare, badge: "WhatsApp" },
+        { name: "Base de Leads & CRM", path: "/leads", icon: FileSpreadsheet },
+        { name: "Tarefas & Follow-up", path: "/tasks", icon: Layers },
         { name: "Agenda de Retornos", path: "/retornos", icon: Calendar },
       ]
     },
     {
-      title: "Inteligência & IA",
+      title: "Estratégia & Telefonia",
       items: [
-        { name: "Automação URA Zap", path: "/automacoes", icon: Workflow, isNew: true },
-        { name: "Atendente IA Sofia", path: "/sofia", icon: Bot, isNew: true },
+        { name: "Scripts de Venda", path: "/scripts", icon: Sparkles },
+        { name: "Campanhas & Disparos", path: "/campanhas", icon: Workflow },
+        { name: "Telefonia PABX / SIP", path: "/telefonia", icon: Headphones },
+        { name: "Lista Não Perturbe", path: "/dnd", icon: Shield },
+        { name: "Resultados & Métricas", path: "/resultados", icon: BarChart3 },
       ]
     },
     {
-      title: "Sistema & Suporte",
+      title: "Configurações & Gestão",
       items: [
-        { name: "Configurações Gerais", path: "/settings", icon: Settings },
-        { name: "Central de Ajuda", path: "/ajuda", icon: HelpCircle },
+        { name: "Conexão Omnichannel", path: "/omnichannel", icon: Bot },
+        { name: "Configurações & Equipe", path: "/settings", icon: Settings },
+        { name: "Extensão Sofia Web", path: "/download-extensao", icon: HelpCircle },
+        { name: "Painel Master (Multi-Tenant)", path: "/admin", icon: Shield },
       ]
     }
   ];
 
   // Helper para mapear path para chave de módulo
-  const getModuleKey = (path: string): string => {
-    if (path.startsWith("/dialer")) return "dialer";
-    if (path.startsWith("/leads")) return "leads";
-    if (path.startsWith("/esteira")) return "esteira";
-    if (path.startsWith("/omnichannel")) return "omnichannel";
-    if (path.startsWith("/sofia")) return "sofia";
-    if (path.startsWith("/automacoes")) return "automacoes";
-    if (path.startsWith("/retornos")) return "retornos";
-    if (path.startsWith("/resultados")) return "resultados";
-    return "";
-  };
+  const getModuleKey = (path: string): string => path.split("/")[1]?.split("?")[0] || "";
 
   // Rotas restritas exclusivas da Dona / Master (Bloqueadas para qualquer empresa cliente)
   const masterOnlyPaths = ["/dashboard", "/admin", "/settings?tab=empresas", "/settings"];

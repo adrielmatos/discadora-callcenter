@@ -27,8 +27,12 @@ export async function POST(req: NextRequest) {
 
       let isAuthorized = false;
 
-      if (adminSecret && configuredSecret && adminSecret === configuredSecret) {
-        isAuthorized = true;
+      if (adminSecret && configuredSecret) {
+        const a = Buffer.from(adminSecret);
+        const b = Buffer.from(configuredSecret);
+        if (a.length === b.length && timingSafeEqual(a, b)) {
+          isAuthorized = true;
+        }
       } else if (authHeader) {
         const token = authHeader.replace(/^Bearer\s+/i, "");
         const { data: { user } } = await supabase.auth.getUser(token);
