@@ -1,85 +1,98 @@
-# Handoff de validação do Supabase — Discadora Call Center
+# Handoff de Validação do Supabase — Discadora Call Center
 
-Este documento é um roteiro para o Antigravity validar a migração e o isolamento de acesso **sem executar mudanças durante a fase de inspeção**. O projeto Supabase de produção não foi alterado por este repositório.
+Este documento é o roteiro executivo para validação da migração e isolamento de acesso **sem executar mudanças durante a fase de inspeção**. O projeto Supabase de produção (`vtwyojpsrjyigsnnfawa`) não foi alterado por este repositório.
 
-## 1. Inspeção somente leitura antes de qualquer migração
+Para aprofundamento técnico, consulte os documentos complementares gerados na auditoria:
+- [AUDIT_ROUTE_MATRIX.md](file:///C:/Users/vinic/.gemini/antigravity/scratch/discadora-callcenter/docs/AUDIT_ROUTE_MATRIX.md) — Matriz completa de superfícies de ataque, autenticação e rotas.
+- [SUPABASE_SCHEMA_DIFF.md](file:///C:/Users/vinic/.gemini/antigravity/scratch/discadora-callcenter/docs/SUPABASE_SCHEMA_DIFF.md) — Mapeamento detalhado de divergências de tabelas, funções e colunas.
+- [AUDIT_FINDINGS.md](file:///C:/Users/vinic/.gemini/antigravity/scratch/discadora-callcenter/docs/AUDIT_FINDINGS.md) — Relatório consolidado de não conformidades e vulnerabilidades.
+- [ENVIRONMENT_CHECKLIST.md](file:///C:/Users/vinic/.gemini/antigravity/scratch/discadora-callcenter/docs/ENVIRONMENT_CHECKLIST.md) — Inventário seguro de variáveis de ambiente.
+- [TEST_RESULTS.md](file:///C:/Users/vinic/.gemini/antigravity/scratch/discadora-callcenter/docs/TEST_RESULTS.md) — Resultados das baterias de testes e lint.
+- [AUDIT_BASELINE.md](file:///C:/Users/vinic/.gemini/antigravity/scratch/discadora-callcenter/docs/AUDIT_BASELINE.md) — Registro de rastreabilidade de commits e PR #2.
+- [RELEASE_READINESS.md](file:///C:/Users/vinic/.gemini/antigravity/scratch/discadora-callcenter/docs/RELEASE_READINESS.md) — Matriz de liberação para produção (Gate Go/No-Go).
 
-Execute estas consultas no SQL Editor conectado ao projeto correto. Não selecione nem exporte dados pessoais dos leads.
+---
 
-### Tabelas e colunas realmente existentes
+## 1. Inspeção Somente Leitura Antes de Qualquer Migração
+
+Execute estas consultas no SQL Editor conectado ao projeto Supabase em ambiente de homologação/staging. **Não selecione nem exporte dados pessoais dos leads (LGPD).**
+
+### 1.1. Tabelas e Colunas Existentes no Banco
 
 ```sql
-select table_schema, table_name, column_name, data_type, is_nullable
-from information_schema.columns
-where table_schema = 'public'
-  and table_name = any (array[
+SELECT table_schema, table_name, column_name, data_type, is_nullable
+FROM information_schema.columns
+WHERE table_schema = 'public'
+  AND table_name = ANY (ARRAY[
     'leads','empresas','operadores_app','app_configuracoes',
-    'historico_chamadas','lista_nao_perturbe','cobrancas_saas',
+    'historico_chamadas','historico_ligacoes','lista_nao_perturbe','cobrancas_saas',
     'auditoria','audit_logs','consent_logs','campanhas','importacoes',
     'ligacoes','retornos','telefones','crm_atividades','crm_conversas',
     'crm_lead_tags','crm_mensagens','crm_propostas','crm_tags',
-    'crm_tarefas','crm_etapas'
+    'crm_tarefas','tasks','crm_etapas','scripts_ligacao','planos'
   ])
-order by table_name, ordinal_position;
+ORDER BY table_name, ordinal_position;
 ```
 
-### Políticas RLS atuais
+### 1.2. Políticas RLS Atualmente em Vigor
 
 ```sql
-select schemaname, tablename, policyname, permissive, roles,
+SELECT schemaname, tablename, policyname, permissive, roles,
        cmd, qual, with_check
-from pg_policies
-where schemaname in ('public','private')
-order by schemaname, tablename, policyname;
+FROM pg_policies
+WHERE schemaname IN ('public','private')
+ORDER BY schemaname, tablename, policyname;
 ```
 
-### Funções e permissões da fila
+### 1.3. Funções e Procedimentos no Catálogo
 
 ```sql
-select n.nspname as schema_name, p.proname,
-       pg_get_function_identity_arguments(p.oid) as arguments,
-       p.prosecdef as security_definer,
-       p.proconfig as function_settings,
-       pg_get_functiondef(p.oid) as definition
-from pg_proc p
-join pg_namespace n on n.oid = p.pronamespace
-where p.proname in (
+SELECT n.nspname AS schema_name, p.proname,
+       pg_get_function_identity_arguments(p.oid) AS arguments,
+       p.prosecdef AS security_definer,
+       p.proconfig AS function_settings,
+       pg_get_functiondef(p.oid) AS definition
+FROM pg_proc p
+JOIN pg_namespace n ON n.oid = p.pronamespace
+WHERE p.proname IN (
   'obter_proximo_lead_disponivel','current_role',
   'current_operator_id','current_operator_is_admin',
   'current_operator_active','sync_mined_lead'
 )
-order by n.nspname, p.proname;
+ORDER BY n.nspname, p.proname;
 ```
 
-### Verificar tabelas e colunas ausentes, sem modificar nada
+---
 
-```sql
-select to_regclass('public.empresas') as empresas,
-       to_regclass('public.operadores_app') as operadores_app,
-       to_regclass('public.app_configuracoes') as app_configuracoes;
-```
+## 2. Bloqueadores Críticos a Serem Reconciliados
 
-## 2. Bloqueadores que precisam ser reconciliados com o schema real
+1. **Schema `private` Inexistente:**  
+   A migração `20261028_rls_least_privilege.sql` depende das funções `private.current_role()`, `private.current_operator_id()`, etc. Se o schema `private` não for criado previamente com as funções adequadas, a migration falhará ou causará negação de serviço a todos os operadores.
+2. **Divergências Nominais:**  
+   - O código utiliza `tasks`, enquanto a migration protege `crm_tarefas`.
+   - O código utiliza `historico_ligacoes`, enquanto a migration protege `historico_chamadas`.
+   - A tabela `scripts_ligacao` foi omitida na migration.
+3. **RPC `sync_mined_lead` Ausente do Versionamento:**  
+   A procedure de sincronização de leads da landing page e da IA precisa de migration formal no repositório.
+4. **Isolamento de `app_configuracoes`:**  
+   A tabela precisa ser particionada por `empresa_id` e ter suas colunas sensíveis (SIP password, API keys) protegidas contra leitura indiscriminada por operadores.
+5. **Claims no JWT de Autenticação:**  
+   A RPC `obter_proximo_lead_disponivel` exige `app_metadata.empresa_id` e `app_metadata.operador_id`. É necessário certificar que a trigger/hook de criação de sessão no Supabase Auth realmente injeta essas claims no token emitido.
 
-- A aplicação espera objetos como `empresas`, `operadores_app`, `app_configuracoes` e a RPC `sync_mined_lead`; confirmar existência, assinaturas e colunas antes de qualquer SQL.
-- A migração `20261028_rls_least_privilege.sql` depende de funções no schema `private` e de colunas de propriedade. Confirmar todas as dependências antes de executá-la.
-- A RPC `obter_proximo_lead_disponivel` foi endurecida para que chamadas autenticadas usem `app_metadata.empresa_id` e `app_metadata.operador_id`, e para que apenas `service_role` possa fornecer explicitamente os IDs. Confirmar que o emissor do JWT realmente define essas claims para todos os operadores; caso contrário, a função deve negar acesso (fail closed) até que o vínculo confiável seja implementado.
-- A URA agora usa `URA_WEBHOOK_EMPRESA_ID` configurada no servidor. Definir essa variável no ambiente correto antes de habilitar o webhook. Não voltar a aceitar o tenant do corpo ou query string.
-- A auditoria não deve confiar em `user_metadata.empresa_id`, pois esse campo pode ser alterado pelo usuário.
+---
 
-## 3. Matriz mínima de autorização antes de liberar produção
+## 3. Matriz Mínima de Testes em Staging Pré-Produção
 
-Usar contas de teste já existentes e dados fictícios autorizados. Não usar dados reais de clientes.
+Utilize contas fictícias de teste em banco de homologação isolado:
+- **DONO/GESTOR:** Acesso administrativo limitado estritamente à sua própria empresa.
+- **OPERADOR A:** Consegue listar e alterar apenas os leads atribuídos ao seu `operador_id`. Não tem visibilidade sobre leads do OPERADOR B.
+- **Leads Sem Operador:** Permanecem restritos à visualização de administradores/gestores até serem atribuídos via fila atômica.
+- **Concorrência da Discadora:** Duas chamadas simultâneas à RPC `obter_proximo_lead_disponivel` devem travar leads distintos através de `FOR UPDATE SKIP LOCKED`.
+- **Lista Não Perturbe (DND):** Qualquer falha na verificação da lista deve abortar a discagem/envio imediatamente (fail-closed).
+- **Webhooks:** Rejeição de assinaturas inválidas e idempotência contra duplicidade de pagamentos.
 
-- DONO/GESTOR: acesso administrativo apenas dentro do escopo empresarial autorizado.
-- OPERADOR A: ler/alterar seus leads; não pode ler/alterar leads atribuídos ao OPERADOR B.
-- Lead sem operador: não deve ficar visível nem ser reclamado por um operador sem regra de atribuição verificada.
-- Histórico, conversas, mensagens, propostas, tarefas, retornos e importações: validar isolamento por operador e por empresa em SELECT/INSERT/UPDATE/DELETE.
-- Não Perturbe: qualquer falha na consulta deve bloquear a chamada/envio (fail closed).
-- RPC da discadora: duas chamadas concorrentes não podem receber o mesmo lead; não aceitar IDs de outro operador/empresa enviados pelo cliente.
-- Webhooks: token ausente/inválido rejeitado; repetição do mesmo evento não duplica efeitos; erros de gravação retornam falha e não são reportados como sucesso.
-- CRM/IA: confirmar que a persistência da conversa realmente ocorreu antes de informar sucesso; validar limite de tamanho, autenticação, rate limit e escopo de tenant.
+---
 
-## 4. Critério de liberação
+## 4. Critério de Liberação
 
-Não mesclar/promover para produção enquanto a migração não for validada contra as tabelas e funções reais, as políticas permissivas antigas não forem inventariadas, a matriz acima não passar e os fluxos de cobrança não tiverem tratamento transacional/idempotente confirmado. O status READY de uma prévia ou um guard estático não equivale a pentest nem prova que o banco está seguro.
+**NÃO REALIZAR MERGE DA PR #2 NEM PROMOVER PARA PRODUÇÃO** até que os itens acima sejam validados e o parecer em [RELEASE_READINESS.md](file:///C:/Users/vinic/.gemini/antigravity/scratch/discadora-callcenter/docs/RELEASE_READINESS.md) seja atualizado para aprovação formal.
