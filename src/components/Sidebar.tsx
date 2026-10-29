@@ -74,7 +74,7 @@ export default function Sidebar() {
   };
 
   // Se for rota pública, não renderiza a sidebar
-  const publicRoutes = ["/", "/login", "/download-extensao"];
+  const publicRoutes = ["/", "/login", "/download-extensao", "/privacidade", "/termos"];
   if (publicRoutes.includes(pathname)) {
     return null;
   }
