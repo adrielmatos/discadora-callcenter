@@ -65,17 +65,21 @@ export default function SuperAdminPage() {
   const fetchAdminData = async () => {
     setLoading(true);
     try {
-      // Trava de segurança: Bloqueia acesso de empresas clientes ao Painel Master
+      // Trava de segurança: Bloqueia acesso de usuários não autorizados ao Painel Master
       const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        const userEmpresaId = user.app_metadata?.empresa_id || user.user_metadata?.empresa_id;
-        if (userEmpresaId) {
-          const { data: emp } = await supabase.from("empresas").select("interna").eq("id", userEmpresaId).maybeSingle();
-          if (emp && emp.interna === false) {
-            alert("Acesso Restrito: Este painel master é exclusivo da administração central.");
-            window.location.href = "/leads";
-            return;
-          }
+      if (!user) {
+        window.location.href = "/login";
+        return;
+      }
+
+      // Prioriza claim server-managed app_metadata
+      const userEmpresaId = user.app_metadata?.empresa_id;
+      if (userEmpresaId) {
+        const { data: emp } = await supabase.from("empresas").select("interna").eq("id", userEmpresaId).maybeSingle();
+        if (emp && emp.interna === false) {
+          alert("Acesso Restrito: Este painel master é exclusivo da administração central.");
+          window.location.href = "/leads";
+          return;
         }
       }
 
@@ -94,7 +98,7 @@ export default function SuperAdminPage() {
 
       // 3. Busca contagem de operadores
       const { count: opCount } = await supabase
-        .from("operadores")
+        .from("operadores_app")
         .select("*", { count: "exact", head: true });
 
       // 4. Busca logs de auditoria

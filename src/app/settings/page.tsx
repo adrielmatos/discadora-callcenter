@@ -285,6 +285,7 @@ export default function SettingsPage() {
     };
     fetchGlobalConfig();
     fetchCobrancas();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const fetchCobrancas = async () => {

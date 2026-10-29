@@ -453,6 +453,7 @@ export default function DialerWorkspace() {
         softphoneRef.current.disconnect();
       }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Recarrega conversas do WhatsApp quando muda o lead
@@ -463,6 +464,7 @@ export default function DialerWorkspace() {
     } else {
       setWhatsappInteractions([]);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeLead?.id]);
 
   useEffect(() => {
@@ -500,6 +502,7 @@ export default function DialerWorkspace() {
       const t = setTimeout(() => setAutoNextCountdown(c => (c !== null ? c - 1 : null)), 1000);
       return () => clearTimeout(t);
     } else { setAutoNextCountdown(null); triggerCall(); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoNextCountdown]);
 
   const formatTime = (secs: number) => {

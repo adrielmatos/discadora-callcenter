@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import { logAuditEvent } from "@/lib/audit";
 import {
@@ -67,6 +67,23 @@ export default function ConversasPage() {
   const [isBotActive, setIsBotActive] = useState(true);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
+  const fetchLeads = useCallback(async () => {
+    setLoading(true);
+    const { data } = await supabase
+      .from("leads")
+      .select("id, nome, telefone, cpf, saldo_fgts, margem_disponivel, etapa_crm, status, origem, observacoes, created_at, updated_at")
+      .order("updated_at", { ascending: false })
+      .limit(100);
+
+    if (data && data.length > 0) {
+      setLeads(data);
+      if (!selectedLead) {
+        selectAndLoadChat(data[0]);
+      }
+    }
+    setLoading(false);
+  }, [selectedLead]);
+
   // Busca inicial de leads com conversas
   useEffect(() => {
     fetchLeads();
@@ -82,29 +99,7 @@ export default function ConversasPage() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
-
-  // Rola para a mensagem mais recente
-  useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
-
-  const fetchLeads = async () => {
-    setLoading(true);
-    const { data } = await supabase
-      .from("leads")
-      .select("id, nome, telefone, cpf, saldo_fgts, margem_disponivel, etapa_crm, status, origem, observacoes, created_at, updated_at")
-      .order("updated_at", { ascending: false })
-      .limit(100);
-
-    if (data && data.length > 0) {
-      setLeads(data);
-      if (!selectedLead) {
-        selectAndLoadChat(data[0]);
-      }
-    }
-    setLoading(false);
-  };
+  }, [fetchLeads]);
 
   const selectAndLoadChat = (lead: LeadConversation) => {
     setSelectedLead(lead);
