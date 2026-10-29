@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createHmac, timingSafeEqual } from "node:crypto";
 import { supabase, supabaseAdmin } from "@/lib/supabase";
 import { logAuditEvent } from "@/lib/audit";
 
@@ -12,18 +13,26 @@ import { logAuditEvent } from "@/lib/audit";
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const clientDb = supabaseAdmin || supabase;
+    if (!supabaseAdmin) {
+      console.error("[Billing Webhook] SUPABASE_SERVICE_ROLE_KEY ausente.");
+      return NextResponse.json({ error: "Processamento de cobrança temporariamente indisponível." }, { status: 503 });
+    }
+    const clientDb = supabaseAdmin;
 
     // ─── 1. Confirmação Manual pelo Painel de Controle ─────────────
     if (body.action === "confirm_manual" && body.cobranca_id) {
       const authHeader = req.headers.get("authorization");
       const adminSecret = req.headers.get("x-admin-secret");
-      const configuredSecret = process.env.ADMIN_WEBHOOK_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY;
+      const configuredSecret = process.env.ADMIN_WEBHOOK_SECRET;
 
       let isAuthorized = false;
 
-      if (adminSecret && configuredSecret && adminSecret === configuredSecret) {
-        isAuthorized = true;
+      if (adminSecret && configuredSecret) {
+        const a = Buffer.from(adminSecret);
+        const b = Buffer.from(configuredSecret);
+        if (a.length === b.length && timingSafeEqual(a, b)) {
+          isAuthorized = true;
+        }
       } else if (authHeader) {
         const token = authHeader.replace(/^Bearer\s+/i, "");
         const { data: { user } } = await supabase.auth.getUser(token);
@@ -95,6 +104,28 @@ export async function POST(req: NextRequest) {
 
     // ─── 2. Webhook Mercado Pago ────────────────────────────────────
     if (body.type === "payment" || body.action === "payment.updated" || body.data?.id) {
+      const webhookSecret = process.env.MERCADOPAGO_WEBHOOK_SECRET;
+      const signatureHeader = req.headers.get("x-signature") || "";
+      const requestId = req.headers.get("x-request-id") || "";
+      const signatureParts = Object.fromEntries(signatureHeader.split(",").map((part) => {
+        const [key, ...value] = part.trim().split("=");
+        return [key, value.join("=")];
+      }));
+      const timestamp = signatureParts.ts;
+      const suppliedSignature = signatureParts.v1;
+      const dataId = String(body.data?.id || body.id || "").toLowerCase();
+
+      if (!webhookSecret || !timestamp || !suppliedSignature || !requestId || !dataId) {
+        return NextResponse.json({ error: "Assinatura do webhook Mercado Pago ausente ou não configurada." }, { status: 401 });
+      }
+      const manifest = `id:${dataId};request-id:${requestId};ts:${timestamp};`;
+      const expectedSignature = createHmac("sha256", webhookSecret).update(manifest).digest("hex");
+      const expectedBuffer = Buffer.from(expectedSignature, "hex");
+      const suppliedBuffer = Buffer.from(suppliedSignature, "hex");
+      if (expectedBuffer.length !== suppliedBuffer.length || !timingSafeEqual(expectedBuffer, suppliedBuffer)) {
+        return NextResponse.json({ error: "Assinatura do webhook Mercado Pago inválida." }, { status: 401 });
+      }
+
       const paymentId = body.data?.id || body.id;
 
       const { data: config } = await clientDb
@@ -192,7 +223,7 @@ export async function POST(req: NextRequest) {
     // ─── 4. Webhook EFI / Gerencianet ───────────────────────────────
     if (body.pix && Array.isArray(body.pix)) {
       const efiSecret = req.headers.get("x-efi-secret") || req.headers.get("x-webhook-secret");
-      const expectedEfiSecret = process.env.EFI_WEBHOOK_SECRET || process.env.ADMIN_WEBHOOK_SECRET;
+      const expectedEfiSecret = process.env.EFI_WEBHOOK_SECRET;
 
       if (!expectedEfiSecret || efiSecret !== expectedEfiSecret) {
         return NextResponse.json({ error: "Segredo de webhook EFI/Gerencianet inválido ou ausente." }, { status: 401 });

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef, useEffect, useMemo } from "react";
+import React, { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import dynamic from "next/dynamic";
 import { 
   Upload, Search, Download, RefreshCw, Kanban, Table, 
@@ -63,13 +63,13 @@ export default function LeadsCRM() {
   const [selectedOperador, setSelectedOperador] = useState<string>("all");
   const [filterSofiaAI, setFilterSofiaAI] = useState<"all" | "sofia" | "quente">("all");
 
-  const fetchLeads = async () => {
+  const fetchLeads = useCallback(async () => {
     setLoading(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
       const userEmpresaId = user?.app_metadata?.empresa_id || user?.user_metadata?.empresa_id;
 
-      let query = supabase.from("leads").select("*").order("id", { ascending: false }).limit(500);
+      let query = supabase.from("leads").select("*").order("id", { ascending: false }).limit(200);
 
       if (userEmpresaId) {
         query = query.eq("empresa_id", userEmpresaId);
@@ -84,7 +84,7 @@ export default function LeadsCRM() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [selectedEmpresa]);
 
   useEffect(() => {
     fetchLeads();
@@ -98,7 +98,7 @@ export default function LeadsCRM() {
       const emp = p.get("empresa");
       if (emp) setSelectedEmpresa(emp);
     }
-  }, []);
+  }, [fetchLeads]);
 
   // Helper para buscar valor em objeto com chaves flexíveis
   const findFieldValue = (row: Record<string, any>, candidateKeys: string[]): string => {

@@ -4,7 +4,7 @@ import React, { useState, useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
-const PUBLIC_ROUTES = ["/", "/login", "/download-extensao"];
+const PUBLIC_ROUTES = ["/", "/login", "/download-extensao", "/privacidade", "/termos"];
 
 export default function AuthGuard({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();

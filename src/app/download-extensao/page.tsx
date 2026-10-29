@@ -130,7 +130,7 @@ export default function DownloadExtensaoPage() {
               </div>
               <h3 className="text-sm font-bold text-white">Carregue a Pasta</h3>
               <p className="text-xs text-slate-300 leading-relaxed">
-                Clique no botão <strong>"Carregar sem compactação"</strong> e selecione a pasta extraída do ZIP.
+                Clique no botão <strong>&quot;Carregar sem compactação&quot;</strong> e selecione a pasta extraída do ZIP.
               </p>
               <div className="bg-emerald-950/40 p-2 rounded-lg text-[11px] text-emerald-300 font-semibold border border-emerald-800/50 flex items-center gap-1.5">
                 <CheckCircle2 size={13} className="text-emerald-400 shrink-0" />

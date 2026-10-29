@@ -21,6 +21,7 @@ export default function OmnichannelPage() {
   const [activeTab, setActiveTab] = useState<"ia" | "simulator" | "whatsapp" | "extension">("ia");
   const [loading, setLoading] = useState(true);
   const [saved, setSaved] = useState(false);
+  const [isAuthorized, setIsAuthorized] = useState<boolean | null>(null);
 
   // WhatsApp Config
   const [waMode, setWaMode] = useState<"web" | "api">("web");
@@ -68,6 +69,23 @@ export default function OmnichannelPage() {
 
   // Carrega configurações reais do Supabase (Eliminando localStorage)
   useEffect(() => {
+    supabase.auth.getUser().then(async ({ data: { user } }) => {
+      if (user?.email) {
+        const { data: op } = await supabase
+          .from("operadores_app")
+          .select("perfil")
+          .eq("email", user.email)
+          .maybeSingle();
+
+        if (op && (op.perfil === "proprietario" || op.perfil === "admin" || op.perfil === "gestor")) {
+          setIsAuthorized(true);
+        } else {
+          setIsAuthorized(false);
+        }
+      } else {
+        setIsAuthorized(false);
+      }
+    });
     fetchConfig();
   }, []);
 
@@ -260,6 +278,30 @@ export default function OmnichannelPage() {
       chatBottomRef.current?.scrollIntoView({ behavior: "smooth" });
     }
   };
+
+  if (isAuthorized === false) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center p-8 bg-slate-50 text-slate-800 text-center">
+        <div className="max-w-md bg-white p-8 rounded-3xl border border-slate-200 shadow-lg space-y-4">
+          <div className="w-14 h-14 mx-auto rounded-2xl bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-600">
+            <ShieldCheck size={28} />
+          </div>
+          <h2 className="text-lg font-bold text-slate-900">Configuração Restrita</h2>
+          <p className="text-xs text-slate-500 leading-relaxed">
+            As chaves de API da Sofia AI e as credenciais do WhatsApp são restritas a Gestores e Administradores.
+            Como operador, utilize a tela de Atendimento para conversar com os clientes.
+          </p>
+          <a
+            href="/conversas"
+            className="inline-flex items-center justify-center gap-2 w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs transition"
+          >
+            <MessageSquare size={14} />
+            <span>Ir para Conversas de Atendimento</span>
+          </a>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex-1 flex flex-col h-full bg-[#f8fafc] text-slate-900 font-sans">
@@ -502,7 +544,7 @@ export default function OmnichannelPage() {
                     </div>
                     <h4 className="text-xs font-bold text-slate-900">Ative o Modo do Desenvolvedor</h4>
                     <p className="text-[11px] text-slate-600 leading-relaxed">
-                      No canto superior direito da página de extensões, ative a chavinha chamada <strong>"Modo do desenvolvedor"</strong>.
+                      No canto superior direito da página de extensões, ative a chavinha chamada <strong>&quot;Modo do desenvolvedor&quot;</strong>.
                     </p>
                   </div>
 
@@ -512,7 +554,7 @@ export default function OmnichannelPage() {
                     </div>
                     <h4 className="text-xs font-bold text-slate-900">Carregar sem Compactação</h4>
                     <p className="text-[11px] text-slate-600 leading-relaxed">
-                      Clique no botão <strong>"Carregar sem compactação"</strong> e selecione a pasta da extensão descompactada. Pronto! O robô já estará pronto para uso.
+                      Clique no botão <strong>&quot;Carregar sem compactação&quot;</strong> e selecione a pasta da extensão descompactada. Pronto! O robô já estará pronto para uso.
                     </p>
                   </div>
                 </div>
@@ -559,7 +601,7 @@ export default function OmnichannelPage() {
                   <ul className="text-xs text-slate-600 space-y-2">
                     <li className="flex items-start gap-2">
                       <CheckCircle2 size={14} className="text-blue-500 shrink-0 mt-0.5" />
-                      <span><strong>Botão 'Minerar' no WhatsApp:</strong> Abre qualquer conversa antiga e clica em <em>Minerar</em> no topo da tela.</span>
+                      <span><strong>Botão &apos;Minerar&apos; no WhatsApp:</strong> Abre qualquer conversa antiga e clica em <em>Minerar</em> no topo da tela.</span>
                     </li>
                     <li className="flex items-start gap-2">
                       <CheckCircle2 size={14} className="text-blue-500 shrink-0 mt-0.5" />

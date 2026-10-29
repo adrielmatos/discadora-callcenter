@@ -160,6 +160,9 @@ export default function DialerWorkspace() {
   const [callStatus, setCallStatus] = useState<"idle" | "calling" | "talking" | "wrapup">("idle");
   const [duration, setDuration] = useState(0);
   const callDurationRef = useRef<number>(0);
+  const handleCallTimerTick = useCallback((secs: number) => {
+    callDurationRef.current = secs;
+  }, []);
   const [scriptsList, setScriptsList] = useState<any[]>([]);
   const [selectedScriptProduct, setSelectedScriptProduct] = useState("");
   const [productFilter, setProductFilter] = useState<"all" | "fgts" | "inss" | "consignado">("all");
@@ -450,6 +453,7 @@ export default function DialerWorkspace() {
         softphoneRef.current.disconnect();
       }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Recarrega conversas do WhatsApp quando muda o lead
@@ -460,6 +464,7 @@ export default function DialerWorkspace() {
     } else {
       setWhatsappInteractions([]);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeLead?.id]);
 
   useEffect(() => {
@@ -497,6 +502,7 @@ export default function DialerWorkspace() {
       const t = setTimeout(() => setAutoNextCountdown(c => (c !== null ? c - 1 : null)), 1000);
       return () => clearTimeout(t);
     } else { setAutoNextCountdown(null); triggerCall(); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoNextCountdown]);
 
   const formatTime = (secs: number) => {
@@ -1039,7 +1045,7 @@ export default function DialerWorkspace() {
                       </button>
                     </div>
                     <p className="text-xs font-medium leading-tight text-amber-950">
-                      "{renderScriptText(OBJECTION_LIST.find(o => o.id === activeObjection)?.resposta || "")}"
+                      &quot;{renderScriptText(OBJECTION_LIST.find(o => o.id === activeObjection)?.resposta || "")}&quot;
                     </p>
                   </div>
                 )}
@@ -1068,7 +1074,7 @@ export default function DialerWorkspace() {
                       <p className={`text-[11px] sm:text-xs font-medium leading-snug ${
                         step.color === "blue" ? "text-blue-950" : step.color === "emerald" ? "text-emerald-950" : "text-slate-800"
                       }`}>
-                        "{renderScriptText(step.text)}"
+                        &quot;{renderScriptText(step.text)}&quot;
                       </p>
                     </div>
                   ))}
@@ -1330,7 +1336,7 @@ export default function DialerWorkspace() {
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
                     <span>Em Conversação</span>
                   </div>
-                  <CallTimerDisplay onTick={useCallback((secs: number) => { callDurationRef.current = secs; }, [])} />
+                  <CallTimerDisplay onTick={handleCallTimerTick} />
 
                   <div className="mt-1 flex items-center justify-center gap-1 text-[9px] text-slate-400 font-semibold">
                     <Radio size={11} className="text-emerald-400" />

@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { supabase, supabaseAdmin } from "@/lib/supabase";
+import { timingSafeEqual } from "node:crypto";
+import { supabaseAdmin } from "@/lib/supabase";
 import { logAuditEvent } from "@/lib/audit";
 
 /**
  * Webhook Universal de URA Reversa (DTMF -> WhatsApp + CRM)
  * Segurança Hardened:
- * 1. Apenas POST autorizado por secret (X-URA-Token ou ?token=).
+ * 1. Apenas POST autorizado por secret enviado em header.
  * 2. GET desabilitado para operações mutáveis (retorna 405).
  * 3. Validação obrigatória de empresa_id (sem fallbacks arbitrários de tenant).
  * 4. Validação centralizada de Não Perturbe (DND) antes de qualquer disparo.
@@ -20,13 +21,19 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
-    // 1. Validação de autenticidade / Segredo do PABX/URA
-    const configuredSecret = process.env.URA_WEBHOOK_SECRET || process.env.ADMIN_WEBHOOK_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY;
-    const providedSecret = req.headers.get("x-ura-token") || 
-      req.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ||
-      new URL(req.url).searchParams.get("token");
+    // 1. Validação de autenticidade / Segredo do PABX/URA (Constant-time comparison)
+    const configuredSecret = process.env.URA_WEBHOOK_SECRET;
+    const providedSecret = req.headers.get("x-ura-token") ||
+      req.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
 
-    if (!configuredSecret || !providedSecret || providedSecret !== configuredSecret) {
+    const isSecretValid = !!(
+      configuredSecret &&
+      providedSecret &&
+      Buffer.from(providedSecret).length === Buffer.from(configuredSecret).length &&
+      timingSafeEqual(Buffer.from(providedSecret), Buffer.from(configuredSecret))
+    );
+
+    if (!isSecretValid) {
       return NextResponse.json(
         { success: false, error: "Acesso negado: token de autenticação de webhook URA inválido." },
         { status: 401 }
@@ -59,7 +66,9 @@ async function processUraEvent(payload: any, req: NextRequest) {
   const rawNome = payload.nome || payload.name || payload.caller_name || payload.lead_nome || "Lead URA Reversa";
   const digit = String(payload.digit || payload.dtmf || payload.tecla || payload.key || payload.option || "1").trim();
   const campanha = payload.campanha || payload.campaign || "URA Reversa Ativa";
-  const empresaId = payload.empresa_id || payload.empresaId || new URL(req.url).searchParams.get("empresa_id");
+  // O tenant é definido pela configuração do servidor, nunca por campos controlados pelo chamador.
+  // Para URAs multiempresa, configure um segredo/endpoint separado por empresa.
+  const empresaId = process.env.URA_WEBHOOK_EMPRESA_ID || null;
 
   if (!rawTelefone) {
     return NextResponse.json(
@@ -69,10 +78,11 @@ async function processUraEvent(payload: any, req: NextRequest) {
   }
 
   // 2. Isolamento Multiempresa: empresa_id é OBRIGATÓRIO (sem suposição arbitrária)
-  if (!empresaId) {
+  if (!empresaId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(empresaId)) {
+    console.error("[URA-DTMF] URA_WEBHOOK_EMPRESA_ID ausente ou inválido; operação bloqueada.");
     return NextResponse.json(
-      { success: false, error: "Parâmetro 'empresa_id' é obrigatório para direcionar o lead à empresa correta." },
-      { status: 400 }
+      { success: false, error: "Integração URA não configurada para uma empresa válida." },
+      { status: 503 }
     );
   }
 
@@ -83,16 +93,25 @@ async function processUraEvent(payload: any, req: NextRequest) {
     formattedPhone = `55${formattedPhone}`;
   }
 
-  const clientDb = supabaseAdmin || supabase;
+  if (!supabaseAdmin) {
+    console.error("[URA-DTMF] SUPABASE_SERVICE_ROLE_KEY ausente; operação bloqueada.");
+    return NextResponse.json({ success: false, error: "Integração temporariamente indisponível." }, { status: 503 });
+  }
+  const clientDb = supabaseAdmin;
   const nowIso = new Date().toISOString();
 
   // 3. Verificação do Não Perturbe (DND)
-  const { data: dndEntry } = await clientDb
+  const { data: dndEntry, error: dndError } = await clientDb
     .from("lista_nao_perturbe")
     .select("id")
     .eq("telefone", formattedPhone)
     .eq("ativo", true)
     .maybeSingle();
+
+  if (dndError) {
+    console.error("[URA-DTMF] Não foi possível consultar Não Perturbe:", dndError);
+    return NextResponse.json({ success: false, error: "Não foi possível validar a lista Não Perturbe." }, { status: 503 });
+  }
 
   if (dndEntry) {
     logAuditEvent({
@@ -111,12 +130,17 @@ async function processUraEvent(payload: any, req: NextRequest) {
   }
 
   // 4. Verificar se o Lead já existe na base desta empresa
-  const { data: existingLead } = await clientDb
+  const { data: existingLead, error: existingLeadError } = await clientDb
     .from("leads")
     .select("id, nome, status, etapa_crm, observacoes, empresa_id")
     .eq("telefone", formattedPhone)
     .eq("empresa_id", empresaId)
     .maybeSingle();
+
+  if (existingLeadError) {
+    console.error("[URA-DTMF] Falha ao consultar lead:", existingLeadError);
+    return NextResponse.json({ success: false, error: "Não foi possível consultar o lead." }, { status: 502 });
+  }
 
   let leadId: number | string | null = null;
   let isNew = false;
@@ -168,7 +192,11 @@ async function processUraEvent(payload: any, req: NextRequest) {
 
   if (digit === "1" || digit.toLowerCase() === "sim") {
     try {
-      const configuredSecret = process.env.URA_WEBHOOK_SECRET || process.env.ADMIN_WEBHOOK_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY;
+      const configuredSecret = process.env.ADMIN_WEBHOOK_SECRET;
+      if (!configuredSecret) {
+        console.error("[URA-DTMF] ADMIN_WEBHOOK_SECRET ausente; envio interno de WhatsApp não executado.");
+        return NextResponse.json({ success: false, error: "Integração de WhatsApp não configurada." }, { status: 503 });
+      }
       const originUrl = req.nextUrl.origin || "http://localhost:3000";
       const primeiroNome = rawNome.split(" ")[0] || "Cliente";
       const msgSofia = `Olá, ${primeiroNome}! Sou a Sofia, consultora virtual autorizada 🚀\n\nRecebemos sua confirmação de interesse pelo telefone na simulação de crédito/FGTS.\n\nPodemos realizar uma simulação gratuita e sem compromisso para você conferir as condições disponíveis?`;

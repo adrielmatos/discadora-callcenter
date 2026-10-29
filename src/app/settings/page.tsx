@@ -285,6 +285,7 @@ export default function SettingsPage() {
     };
     fetchGlobalConfig();
     fetchCobrancas();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const fetchCobrancas = async () => {
@@ -975,7 +976,7 @@ export default function SettingsPage() {
                       {empresas.length === 0 && (
                         <tr>
                           <td colSpan={7} className="px-4 py-8 text-center text-slate-400">
-                            Nenhuma empresa cadastrada. Clique em "+ Cadastrar Nova Empresa Assinante".
+                            Nenhuma empresa cadastrada. Clique em &quot;+ Cadastrar Nova Empresa Assinante&quot;.
                           </td>
                         </tr>
                       )}
@@ -1506,7 +1507,7 @@ export default function SettingsPage() {
                       <div className="p-3.5 bg-blue-50/60 border border-blue-200/80 rounded-xl text-xs text-blue-900 space-y-1">
                         <p className="font-bold">Como funciona o modo PIX Direto?</p>
                         <p className="text-[11px] text-blue-800 leading-relaxed">
-                          O cliente vê o QR Code com a sua chave PIX e transfere direto para você. Você confere o comprovante e clica em <strong>"Cobrar PIX ➔ Dar Baixa Manual"</strong> na lista de empresas. Acesso liberado sem taxa bancária.
+                          O cliente vê o QR Code com a sua chave PIX e transfere direto para você. Você confere o comprovante e clica em <strong>&quot;Cobrar PIX ➔ Dar Baixa Manual&quot;</strong> na lista de empresas. Acesso liberado sem taxa bancária.
                         </p>
                       </div>
                     )}
