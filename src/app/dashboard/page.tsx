@@ -113,18 +113,16 @@ export default function DashboardPage() {
 
       const retornos = retornosData || [];
 
-      // Parâmetros de cálculo reais
-      const ticketMedioPadrao = 4500;
-      const comissaoPercent = 0.11;
+      // Não estimar faturamento/comissão sem dados reais de contratos no banco.
 
       const contratos = leads.filter(l => l.etapa_crm === "finalizado");
       const emAndamento = leads.filter(l => l.etapa_crm === "simulacao" || l.etapa_crm === "esteira_docs");
       const pendentes = leads.filter(l => l.status === "pendente");
       const anuenciasReais = leads.filter(l => l.etapa_crm === "anuencia" || l.etapa_crm === "esteira_docs");
 
-      const volConfirmado = contratos.length * ticketMedioPadrao;
-      const volEmAndamento = emAndamento.length * ticketMedioPadrao;
-      const comissao = volConfirmado * comissaoPercent;
+      const volConfirmado = 0;
+      const volEmAndamento = 0;
+      const comissao = 0;
 
       const efetivas = calls.filter(c => 
         c.tabulacao && !["Pulado", "Não atendeu", "Ocupado", "Caixa Postal"].includes(c.tabulacao)
@@ -166,7 +164,7 @@ export default function DashboardPage() {
             contatosEfetivos: idx === 0 ? efetivas : Math.max(0, Math.floor(efetivas / (idx + 1))),
             taxaContato: taxa,
             tma: "03m 15s",
-            volume: `R$ ${volConfirmado > 0 ? (volConfirmado / (idx + 1)).toLocaleString("pt-BR") : "0,00"}`
+            volume: "Não informado"
           }))
         );
       } else {
@@ -279,7 +277,7 @@ export default function DashboardPage() {
             </div>
             <p className="text-2xl font-black text-slate-900 mt-2">{metrics.contratosFechados}</p>
             <p className="text-xs font-bold text-emerald-600 mt-2">
-              R$ {metrics.volumeConfirmado.toLocaleString("pt-BR", { minimumFractionDigits: 2 })} faturado
+              Valores financeiros não cadastrados
             </p>
           </div>
 
