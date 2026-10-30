@@ -202,7 +202,11 @@ export default function DialerWorkspace() {
   const activeLead = leadsList[currentLeadIndex];
   const cleanActivePhone = activeLead?.telefone?.replace(/\D/g, "") || "";
   const cleanActiveCpf = activeLead?.cpf?.replace(/\D/g, "") || "";
-  const isDndBlocked = Boolean((cleanActivePhone && dndBlockedSet.has(cleanActivePhone)) || (cleanActiveCpf && dndBlockedSet.has(cleanActiveCpf)));
+  const alternateActivePhone = cleanActivePhone.startsWith("55") ? cleanActivePhone.slice(2) : `55${cleanActivePhone}`;
+  const isDndBlocked = Boolean(
+    (cleanActivePhone && (dndBlockedSet.has(cleanActivePhone) || dndBlockedSet.has(alternateActivePhone))) ||
+    (cleanActiveCpf && dndBlockedSet.has(cleanActiveCpf))
+  );
   const leadsRestantes = leadsList.length - currentLeadIndex;
 
   const getLeadDiagnosis = (lead?: Lead) => {
