@@ -326,8 +326,25 @@ export default function LeadsCRM() {
   };
 
   const changeEtapa = async (leadId: number, nextEtapa: string) => {
-    await supabase.from("leads").update({ etapa_crm: nextEtapa }).eq("id", leadId);
-    setLeads(prev => prev.map(l => l.id === leadId ? { ...l, etapa_crm: nextEtapa } : l));
+    const previousLead = leads.find(lead => lead.id === leadId);
+    if (!previousLead || previousLead.etapa_crm === nextEtapa) return;
+
+    const { data, error } = await supabase
+      .from("leads")
+      .update({ etapa_crm: nextEtapa, updated_at: new Date().toISOString() })
+      .eq("id", leadId)
+      .select("id")
+      .maybeSingle();
+
+    if (error || !data) {
+      console.error("Não foi possível salvar a etapa do lead:", error);
+      alert(error?.message || "A etapa não foi alterada. Verifique sua permissão e tente novamente.");
+      return;
+    }
+
+    setLeads(prev => prev.map(lead =>
+      lead.id === leadId ? { ...lead, etapa_crm: nextEtapa } : lead
+    ));
   };
 
   const filteredLeads = useMemo(() => {
@@ -595,9 +612,9 @@ export default function LeadsCRM() {
 
               <div className="bg-white p-3.5 rounded-xl border border-slate-200/80 shadow-xs flex items-center justify-between">
                 <div>
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Volume Bruto em Esteira</span>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Volume Contratado</span>
                   <span className="text-xl font-bold text-blue-600 mt-0.5 block">
-                    R$ {(filteredLeads.filter(l => (l.etapa_crm || "").includes("esteira_") || l.etapa_crm === "Contrato").length * 4500).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    Não informado
                   </span>
                 </div>
                 <div className="w-9 h-9 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold">
@@ -619,9 +636,9 @@ export default function LeadsCRM() {
 
               <div className="bg-white p-3.5 rounded-xl border border-slate-200/80 shadow-xs flex items-center justify-between">
                 <div>
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Comissão Estimada A&K (11%)</span>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Comissão A&K</span>
                   <span className="text-xl font-bold text-teal-600 mt-0.5 block">
-                    R$ {(filteredLeads.filter(l => (l.etapa_crm || "").includes("esteira_") || l.etapa_crm === "Contrato").length * 4500 * 0.11).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    Não calculável
                   </span>
                 </div>
                 <div className="w-9 h-9 rounded-lg bg-teal-50 text-teal-600 flex items-center justify-center font-bold">
