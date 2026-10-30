@@ -368,40 +368,39 @@ export default function DialerWorkspace() {
     const msg = (customText || operatorInput).trim();
     if (!msg || !activeLead?.id || !activeLead?.telefone) return;
 
+    const formattedPhone = normalizeBrazilPhone(activeLead.telefone);
+    if (!formattedPhone) {
+      window.alert("Telefone inválido para abrir o WhatsApp.");
+      return;
+    }
+
     setSendingMessage(true);
     try {
-      const cleanPhone = activeLead.telefone.replace(/\D/g, "");
-      const formattedPhone = cleanPhone.startsWith("55") ? cleanPhone : `55${cleanPhone}`;
-
-      // Salva no CRM como mensagem do operador
-      await supabase.from("historico_ligacoes").insert({
-        lead_id: activeLead.id,
-        tabulacao: `[WhatsApp Operador] Operador: "${msg}"`,
-        duracao_segundos: 0
-      });
-
-      // Tenta enviar via API de WhatsApp
-      const res = await fetch("/api/whatsapp/send", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          telefone: formattedPhone,
-          mensagem: msg,
-          lead_id: activeLead.id
-        })
-      });
-
-      const resJson = await res.json();
-      if (resJson.method === "web" || resJson.waUrl) {
-        window.open(resJson.waUrl || `https://wa.me/${formattedPhone}?text=${encodeURIComponent(msg)}`, "_blank");
+      // O operador usa a própria sessão do WhatsApp Web; não depende de API/BSP.
+      const waWindow = window.open(
+        `https://web.whatsapp.com/send?phone=${formattedPhone}&text=${encodeURIComponent(msg)}`,
+        "_blank",
+        "noopener,noreferrer"
+      );
+      if (!waWindow) {
+        window.alert("O navegador bloqueou a abertura do WhatsApp. Permita pop-ups para este site e tente novamente.");
+        return;
       }
 
+      const { error } = await supabase.from("historico_ligacoes").insert({
+        lead_id: activeLead.id,
+        tabulacao: `[WhatsApp Web - link aberto; envio não confirmado] Operador: "${msg.slice(0, 500)}"`,
+        duracao_segundos: 0
+      });
+      if (error) {
+        console.error("WhatsApp aberto, mas o histórico não foi salvo:", error);
+        window.alert("O WhatsApp foi aberto, mas não foi possível registrar o histórico no CRM.");
+      }
       setOperatorInput("");
       await loadWhatsappHistory(activeLead.id);
     } catch (err) {
-      console.error("Erro ao enviar mensagem do operador:", err);
-      const cleanPhone = activeLead.telefone.replace(/\D/g, "");
-      window.open(`https://wa.me/55${cleanPhone}?text=${encodeURIComponent(msg)}`, "_blank");
+      console.error("Erro ao abrir WhatsApp Web:", err);
+      window.alert("Não foi possível abrir o WhatsApp Web. Verifique o navegador e tente novamente.");
     } finally {
       setSendingMessage(false);
     }
