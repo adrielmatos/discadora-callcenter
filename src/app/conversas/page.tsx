@@ -156,7 +156,7 @@ export default function ConversasPage() {
     const text = (textToSend || inputText).trim();
     if (!text || !selectedLead) return;
 
-    const digits = (selectedLead.telefone || "").replace(/\\D/g, "");
+    const digits = (selectedLead.telefone || "").replace(/\D/g, "");
     const phone = digits.startsWith("55") ? digits : `55${digits}`;
     if (phone.length < 12 || phone.length > 13) {
       window.alert("Telefone inválido. Confira o número cadastrado antes de abrir o WhatsApp.");
