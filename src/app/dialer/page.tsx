@@ -519,34 +519,32 @@ export default function DialerWorkspace() {
 
   // Disparo da Chamada: WebRTC nativo ou Ponte Smartphone
   const triggerCall = async (customNumber?: string) => {
-    const targetNumber = customNumber || activeLead?.telefone;
-    if (!targetNumber) return;
+    // Bloqueia também o disparo automático para contatos Não Perturbe.
+    if (!customNumber && isDndBlocked) {
+      setCallStatus("idle");
+      setAutoNextCountdown(null);
+      window.alert("Ligação bloqueada: este contato está na lista Não Perturbe (DND).");
+      return;
+    }
 
+    const targetNumber = customNumber || activeLead?.telefone;
+    const normalizedNumber = normalizeBrazilPhone(targetNumber);
+    if (!normalizedNumber) return;
+
+    setCallStatus("calling");
     if (softphoneMode === "webrtc" && softphoneRef.current && sipRegStatus === "registered") {
-      setCallStatus("calling");
-      const success = await softphoneRef.current.makeCall(targetNumber);
-      if (!success) {
-        window.location.href = `tel:+55${targetNumber.replace(/\D/g, "")}`;
-        setTimeout(() => setCallStatus("talking"), 2000);
-      }
+      const success = await softphoneRef.current.makeCall(normalizedNumber);
+      if (!success) window.location.href = `tel:+${normalizedNumber}`;
     } else {
-      phoneAudio.startRinging();
-      window.location.href = `tel:+55${targetNumber.replace(/\D/g, "")}`;
-      setCallStatus("calling");
-      setTimeout(() => {
-        phoneAudio.stopRinging();
-        setCallStatus("talking");
-      }, 2000);
+      // Phone Link não informa à página quando a chamada é atendida.
+      // Mantém "calling" até a confirmação manual, sem simular atendimento.
+      window.location.href = `tel:+${normalizedNumber}`;
     }
   };
 
   const handleStartCall = () => {
-    if (isDndBlocked) {
-      const ok = window.confirm("⚠️ Este contato está no Não Perturbe (DND). Deseja ligar mesmo assim?");
-      if (!ok) return;
-    }
     setAutoNextCountdown(null);
-    triggerCall();
+    void triggerCall();
   };
 
   const handleEndCall = () => {
