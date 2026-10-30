@@ -153,46 +153,46 @@ export default function ConversasPage() {
   };
 
   const handleSendMessage = async (textToSend?: string) => {
-    const text = textToSend || inputText;
-    if (!text.trim() || !selectedLead) return;
+    const text = (textToSend || inputText).trim();
+    if (!text || !selectedLead) return;
 
-    const newMsg: ChatMsg = {
-      id: String(Date.now()),
-      sender: "operator",
-      text: text.trim(),
-      time: new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
-    };
+    const digits = (selectedLead.telefone || "").replace(/\D/g, "");
+    const phone = digits.startsWith("55") ? digits : `55${digits}`;
+    if (phone.length < 12 || phone.length > 13) {
+      window.alert("Telefone inválido. Confira o número cadastrado antes de abrir o WhatsApp.");
+      return;
+    }
 
-    setMessages(prev => [...prev, newMsg]);
-    setInputText("");
     setSending(true);
-
     try {
-      // Envia via API de WhatsApp do sistema
-      await fetch("/api/whatsapp/send", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          telefone: selectedLead.telefone,
-          mensagem: text.trim(),
-          lead_id: selectedLead.id
-        })
-      });
+      // Abre a sessão já autenticada do operador no WhatsApp Web.
+      // Não chama API oficial, Z-API ou Evolution e não afirma que a mensagem foi entregue.
+      const waUrl = `https://web.whatsapp.com/send?phone=${phone}&text=${encodeURIComponent(text)}`;
+      const waWindow = window.open(waUrl, "_blank");
+      if (!waWindow) {
+        window.alert("O navegador bloqueou a abertura do WhatsApp. Permita pop-ups para este site e tente novamente.");
+        return;
+      }
 
-      // Ao operador assumir e enviar manualmente, desativa a resposta automática da Sofia
+      const newMsg: ChatMsg = {
+        id: String(Date.now()),
+        sender: "operator",
+        text: `[Link aberto no WhatsApp Web — envio não confirmado] ${text}`,
+        time: new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
+      };
+      setMessages(prev => [...prev, newMsg]);
+      setInputText("");
       setIsBotActive(false);
 
       logAuditEvent({
-        action: "CHAT_MESSAGE_SENT",
+        action: "CHAT_WHATSAPP_LINK_OPENED",
         resource: "leads",
         resourceId: String(selectedLead.id),
-        metadata: {
-          destinatario: selectedLead.telefone,
-          tamanho: text.length
-        }
+        metadata: { destinatario: selectedLead.telefone, tamanho: text.length, delivered: false }
       });
     } catch (e) {
-      console.error("Erro ao enviar mensagem:", e);
+      console.error("Erro ao abrir WhatsApp Web:", e);
+      window.alert("Não foi possível abrir o WhatsApp Web. Verifique o navegador e tente novamente.");
     } finally {
       setSending(false);
     }
