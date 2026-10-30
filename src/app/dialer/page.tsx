@@ -291,14 +291,14 @@ export default function DialerWorkspace() {
       const blocked = new Set<string>();
       (data || []).forEach((item: any) => {
         if (item.telefone) {
-          const digits = String(item.telefone).replace(/\\D/g, "");
+          const digits = String(item.telefone).replace(/\D/g, "");
           if (digits) {
             blocked.add(digits);
             blocked.add(digits.startsWith("55") ? digits.slice(2) : `55${digits}`);
           }
         }
         if (item.cpf) {
-          const cpf = String(item.cpf).replace(/\\D/g, "");
+          const cpf = String(item.cpf).replace(/\D/g, "");
           if (cpf) blocked.add(cpf);
         }
       });
