@@ -40,7 +40,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState<any>(null);
   
-  // Métricas da Operação & Faturamento (100% Reais com base no banco)
+  // Métricas da Operação. Valores financeiros dependem de campos de contrato reais no banco.
   const [metrics, setMetrics] = useState({
     totalLeads: 0,
     pendentesFila: 0,
@@ -82,7 +82,7 @@ export default function DashboardPage() {
         });
       }
 
-      // 2. Leads e Esteira
+      // 2. Leads e Esteira (a listagem abaixo é uma amostra dos 200 mais recentes)
       const [{ count: totalLeadsCount }, { data: leadsData }] = await Promise.all([
         supabase.from("leads").select("*", { count: "exact", head: true }),
         supabase.from("leads").select("id, nome, telefone, cpf, margem_disponivel, banco, status, etapa_crm, produto, created_at").order("id", { ascending: false }).limit(200)
@@ -90,12 +90,17 @@ export default function DashboardPage() {
 
       const leads: Lead[] = (leadsData as Lead[]) || [];
 
-      // 3. Histórico de Ligações (Recentes)
-      const { data: callsData } = await supabase
+      // 3. Ligações de hoje: total exato no banco + amostra recente para classificar tabulações.
+      const startOfToday = new Date();
+      startOfToday.setHours(0, 0, 0, 0);
+      const { data: callsData, count: callsTodayCount, error: callsError } = await supabase
         .from("historico_ligacoes")
-        .select("id, tabulacao, duracao_segundos, created_at")
+        .select("id, tabulacao, duracao_segundos, created_at", { count: "exact" })
+        .gte("created_at", startOfToday.toISOString())
         .order("created_at", { ascending: false })
         .limit(200);
+
+      if (callsError) throw callsError;
 
       const calls = callsData || [];
 
@@ -130,7 +135,7 @@ export default function DashboardPage() {
       setMetrics({
         totalLeads: totalLeadsCount ?? leads.length,
         pendentesFila: pendentes.length,
-        ligacoesHoje: calls.length,
+        ligacoesHoje: callsTodayCount ?? calls.length,
         contatosEfetivos: efetivas,
         taxaContatoGeral: taxa,
         contratosFechados: contratos.length,
