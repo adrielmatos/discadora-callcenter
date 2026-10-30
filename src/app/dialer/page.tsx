@@ -86,6 +86,12 @@ const DDD_REGIONS: Record<string, { uf: string, regiao: string }> = {
   "99": { uf: "MA", regiao: "Imperatriz" }
 };
 
+const normalizeBrazilPhone = (phone?: string) => {
+  const digits = (phone || "").replace(/\\D/g, "");
+  if (!digits) return "";
+  return digits.startsWith("55") ? digits : `55${digits}`;
+};
+
 const formatPhone = (phone?: string) => {
   if (!phone) return "";
   const clean = phone.replace(/\D/g, "");
@@ -579,13 +585,35 @@ export default function DialerWorkspace() {
   const saveCallRecord = async (status: string, notes?: string) => {
     if (!activeLead?.id) return;
     const duracaoFinal = callDurationRef.current || duration;
-    await supabase.from("historico_ligacoes").insert({ lead_id: activeLead.id, tabulacao: status, duracao_segundos: duracaoFinal });
+    const { error: historyError } = await supabase.from("historico_ligacoes").insert({
+      lead_id: activeLead.id,
+      tabulacao: notes ? `${status} — ${notes}` : status,
+      duracao_segundos: duracaoFinal
+    });
+    if (historyError) {
+      console.error("Falha ao salvar histórico da ligação:", historyError);
+      window.alert("Não foi possível salvar o histórico. O lead foi mantido na fila para evitar perda do atendimento.");
+      return;
+    }
+
     let etapaCrm = "finalizado";
     if (status === "Contrato") etapaCrm = "contrato";
     else if (status === "Proposta") etapaCrm = "proposta";
     else if (status === "Simulação") etapaCrm = "simulacao";
     else if (status === "Interessado") etapaCrm = "contato";
-    await supabase.from("leads").update({ status: "finalizado", etapa_crm: etapaCrm, ultima_tabulacao: status, tentativas: 1 }).eq("id", activeLead.id);
+
+    const { data: updatedLead, error: leadError } = await supabase
+      .from("leads")
+      .update({ status: "finalizado", etapa_crm: etapaCrm, ultima_tabulacao: status, tentativas: 1 })
+      .eq("id", activeLead.id)
+      .select("id")
+      .maybeSingle();
+
+    if (leadError || !updatedLead) {
+      console.error("Falha ao atualizar lead após a ligação:", leadError);
+      window.alert("O histórico foi salvo, mas não foi possível atualizar o lead. Ele permanecerá nesta tela para conferência.");
+      return;
+    }
     handleNextLead();
   };
 
