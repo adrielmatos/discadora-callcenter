@@ -176,6 +176,7 @@ export default function DialerWorkspace() {
   const [scheduleTime, setScheduleTime] = useState("");
   const [scheduleNotes, setScheduleNotes] = useState("");
   const [dndBlockedSet, setDndBlockedSet] = useState<Set<string>>(new Set());
+  const [dndStatus, setDndStatus] = useState<"loading" | "ready" | "error">("loading");
   const [showCalc, setShowCalc] = useState(false);
   const [activeObjection, setActiveObjection] = useState<string | null>(null);
 
@@ -279,17 +280,34 @@ export default function DialerWorkspace() {
   };
 
   const fetchDnd = async () => {
+    setDndStatus("loading");
     try {
-      const { data } = await supabase.from("lista_nao_perturbe").select("telefone, cpf").eq("ativo", true);
-      if (data) {
-        const blocked = new Set<string>();
-        data.forEach((item: any) => {
-          if (item.telefone) blocked.add(item.telefone.replace(/\D/g, ""));
-          if (item.cpf) blocked.add(item.cpf.replace(/\D/g, ""));
-        });
-        setDndBlockedSet(blocked);
-      }
-    } catch (e) { console.error("Erro DND:", e); }
+      const { data, error } = await supabase
+        .from("lista_nao_perturbe")
+        .select("telefone, cpf")
+        .eq("ativo", true);
+      if (error) throw error;
+
+      const blocked = new Set<string>();
+      (data || []).forEach((item: any) => {
+        if (item.telefone) {
+          const digits = String(item.telefone).replace(/\\D/g, "");
+          if (digits) {
+            blocked.add(digits);
+            blocked.add(digits.startsWith("55") ? digits.slice(2) : `55${digits}`);
+          }
+        }
+        if (item.cpf) {
+          const cpf = String(item.cpf).replace(/\\D/g, "");
+          if (cpf) blocked.add(cpf);
+        }
+      });
+      setDndBlockedSet(blocked);
+      setDndStatus("ready");
+    } catch (e) {
+      console.error("Não foi possível validar a lista Não Perturbe:", e);
+      setDndStatus("error");
+    }
   };
 
   // Parser das conversas do WhatsApp salvas no histórico de ligações
@@ -522,6 +540,14 @@ export default function DialerWorkspace() {
 
   // Disparo da Chamada: WebRTC nativo ou Ponte Smartphone
   const triggerCall = async (customNumber?: string) => {
+    // Não disca enquanto a lista NPO não foi validada com sucesso.
+    if (!customNumber && dndStatus !== "ready") {
+      setCallStatus("idle");
+      setAutoNextCountdown(null);
+      window.alert("Discagem bloqueada: não foi possível confirmar a lista Não Perturbe. Atualize a tela e tente novamente.");
+      return;
+    }
+
     // Bloqueia também o disparo automático para contatos Não Perturbe.
     if (!customNumber && isDndBlocked) {
       setCallStatus("idle");
