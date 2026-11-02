@@ -80,11 +80,14 @@ export async function POST(req: NextRequest) {
     }
 
     // Falhar fechado se a lista Não Perturbe não puder ser consultada.
+    // Verifica tanto com DDI (55...) quanto sem DDI para evitar bypass de formato
+    const cleanWithoutDdi = formattedPhone.replace(/^55/, "");
     const { data: dndEntry, error: dndError } = await supabase
       .from("lista_nao_perturbe")
       .select("id")
-      .eq("telefone", formattedPhone)
+      .or(`telefone.eq.${formattedPhone},telefone.eq.${cleanWithoutDdi}`)
       .eq("ativo", true)
+      .limit(1)
       .maybeSingle();
 
     if (dndError) {
@@ -101,13 +104,18 @@ export async function POST(req: NextRequest) {
     }
 
     // 2. Busca configurações de WhatsApp da empresa autenticada
+    // Compatibilidade bidirecional: sincroniza com wa_mode, wa_api_url, wa_api_token, wa_instance_name
     const { data: config } = await supabase
       .from("app_configuracoes")
-      .select("whatsapp_tipo, zapi_instancia, zapi_token, evolution_url, evolution_api_key")
+      .select("whatsapp_tipo, zapi_instancia, zapi_token, evolution_url, evolution_api_key, wa_mode, wa_api_url, wa_api_token, wa_instance_name")
       .eq("empresa_id", targetEmpresaId)
       .maybeSingle();
 
-    const tipo = config?.whatsapp_tipo || "web";
+    const tipo = config?.wa_mode || config?.whatsapp_tipo || "web";
+    const evolutionUrl = config?.wa_api_url || config?.evolution_url || "";
+    const evolutionApiKey = config?.wa_api_token || config?.evolution_api_key || "";
+    const zapiInstancia = config?.wa_instance_name || config?.zapi_instancia || "";
+    const zapiToken = config?.wa_api_token || config?.zapi_token || "";
 
     // MODO WEB (WhatsApp Web / Sofia Extension): Gera link wa.me para abertura assistida
     if (tipo === "web") {
@@ -145,8 +153,8 @@ export async function POST(req: NextRequest) {
     }
 
     // MODO API (Z-API)
-    if (tipo === "zapi" && config?.zapi_instancia && config?.zapi_token) {
-      const zapiUrl = `https://api.z-api.io/instances/${config.zapi_instancia}/token/${config.zapi_token}/send-messages`;
+    if (tipo === "zapi" && zapiInstancia && zapiToken) {
+      const zapiUrl = `https://api.z-api.io/instances/${zapiInstancia}/token/${zapiToken}/send-messages`;
       
       const zapiRes = await fetch(zapiUrl, {
         method: "POST",
@@ -190,14 +198,14 @@ export async function POST(req: NextRequest) {
     }
 
     // MODO EVOLUTION API
-    if (tipo === "evolution" && config?.evolution_url && config?.evolution_api_key) {
-      const evoUrl = `${config.evolution_url.replace(/\/$/, "")}/message/sendText`;
+    if (tipo === "evolution" && evolutionUrl && evolutionApiKey) {
+      const evoUrl = `${evolutionUrl.replace(/\/$/, "")}/message/sendText`;
 
       const evoRes = await fetch(evoUrl, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "apikey": config.evolution_api_key
+          "apikey": evolutionApiKey
         },
         body: JSON.stringify({
           number: formattedPhone,

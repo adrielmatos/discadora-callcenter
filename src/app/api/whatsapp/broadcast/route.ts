@@ -54,7 +54,16 @@ export async function GET(req: NextRequest) {
       console.error("[WhatsApp broadcast] Falha ao consultar lista Não Perturbe:", dndError);
       return NextResponse.json({ error: "Não foi possível validar a lista Não Perturbe." }, { status: 503 });
     }
-    const blockedPhones = new Set((dndList || []).map(d => String(d.telefone || "").replace(/\D/g, "")));
+    // Normalização completa DND: armazena variantes com e sem DDI 55 para garantir bloqueio estrito
+    const blockedPhones = new Set<string>();
+    (dndList || []).forEach(d => {
+      const clean = String(d.telefone || "").replace(/\D/g, "");
+      if (clean) {
+        blockedPhones.add(clean);
+        blockedPhones.add(clean.replace(/^55/, ""));
+        if (!clean.startsWith("55")) blockedPhones.add("55" + clean);
+      }
+    });
 
     const { data: leads, error } = await clientDb
       .from("leads")
@@ -79,7 +88,10 @@ export async function GET(req: NextRequest) {
           primeiroNome: (l.nome || "Cliente").trim().split(" ")[0]
         };
       })
-      .filter((l: any) => l.telefoneLimpo.length >= 12 && !blockedPhones.has(l.telefoneLimpo));
+      .filter((l: any) => {
+        const cleanWithout55 = l.telefoneLimpo.replace(/^55/, "");
+        return l.telefoneLimpo.length >= 12 && !blockedPhones.has(l.telefoneLimpo) && !blockedPhones.has(cleanWithout55);
+      });
 
     return NextResponse.json({
       success: true,

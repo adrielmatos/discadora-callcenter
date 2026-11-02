@@ -326,8 +326,16 @@ export default function LeadsCRM() {
   };
 
   const changeEtapa = async (leadId: number, nextEtapa: string) => {
-    await supabase.from("leads").update({ etapa_crm: nextEtapa }).eq("id", leadId);
-    setLeads(prev => prev.map(l => l.id === leadId ? { ...l, etapa_crm: nextEtapa } : l));
+    const { error } = await supabase
+      .from("leads")
+      .update({ etapa_crm: nextEtapa, updated_at: new Date().toISOString() })
+      .eq("id", leadId);
+    if (!error) {
+      setLeads(prev => prev.map(l => l.id === leadId ? { ...l, etapa_crm: nextEtapa } : l));
+    } else {
+      console.error("Erro ao alterar etapa do lead:", error);
+      alert("Falha ao mover etapa: " + error.message);
+    }
   };
 
   const filteredLeads = useMemo(() => {

@@ -1,30 +1,71 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 
+// Rate limiter em memória por IP (5 envios a cada 10 minutos por IP)
+const ipSubmissions = new Map<string, { count: number; resetAt: number }>();
+
+function checkRateLimit(ip: string): boolean {
+  const now = Date.now();
+  const record = ipSubmissions.get(ip);
+  if (!record || now > record.resetAt) {
+    ipSubmissions.set(ip, { count: 1, resetAt: now + 10 * 60 * 1000 });
+    return true;
+  }
+  if (record.count >= 5) {
+    return false;
+  }
+  record.count += 1;
+  return true;
+}
+
 /**
  * Captura pública de leads originados na Landing Page
  * Armazena no CRM da empresa principal (A&K) via RPC SECURITY DEFINER para follow-up comercial.
  */
 export async function POST(req: NextRequest) {
   try {
+    const clientIp = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "127.0.0.1";
+    if (!checkRateLimit(clientIp)) {
+      return NextResponse.json(
+        { error: "Limite de solicitações atingido. Por favor, aguarde alguns minutos antes de enviar novamente." },
+        { status: 429 }
+      );
+    }
+
     const body = await req.json();
-    const { nome, telefone, tamanhoEquipe, mensagem } = body;
+    const { nome, telefone, tamanhoEquipe, mensagem, website_url, empresa_fake } = body;
+
+    // Honeypot anti-bot silencioso
+    if (website_url || empresa_fake) {
+      return NextResponse.json({ success: true, message: "Recebido com sucesso." });
+    }
 
     if (typeof nome !== "string" || typeof telefone !== "string" || !nome.trim() || !telefone.trim()) {
       return NextResponse.json({ error: "Nome e WhatsApp são obrigatórios." }, { status: 400 });
     }
 
     const cleanPhone = telefone.replace(/\D/g, "");
-    if (cleanPhone.length < 10 || cleanPhone.length > 13) {
-      return NextResponse.json({ error: "Número de telefone inválido." }, { status: 400 });
+    const cleanDigits = cleanPhone.replace(/^55/, "");
+    if (cleanDigits.length < 10 || cleanDigits.length > 11) {
+      return NextResponse.json(
+        { error: "Número de WhatsApp inválido. Digite o DDD + número (10 ou 11 dígitos)." },
+        { status: 400 }
+      );
     }
+
+    // Validação de DDD brasileiro válido (11 a 99)
+    const ddd = parseInt(cleanDigits.substring(0, 2), 10);
+    if (isNaN(ddd) || ddd < 11 || ddd > 99) {
+      return NextResponse.json({ error: "DDD brasileiro inválido." }, { status: 400 });
+    }
+
     if (nome.trim().length > 150) {
       return NextResponse.json({ error: "O nome deve ter no máximo 150 caracteres." }, { status: 400 });
     }
 
-    const formattedPhone = cleanPhone.startsWith("55") ? cleanPhone : `55${cleanPhone}`;
-    // A captura pública precisa de credenciais administrativas explícitas; não degradar
-    // silenciosamente para o cliente anon com permissões/RLS diferentes.
+    const formattedPhone = cleanPhone.startsWith("55") ? cleanPhone : `55${cleanDigits}`;
+
+    // A captura pública precisa de credenciais administrativas explícitas
     if (!supabaseAdmin) {
       console.error("[Landing leads] SUPABASE_SERVICE_ROLE_KEY ausente.");
       return NextResponse.json({ error: "Captura temporariamente indisponível. Tente novamente mais tarde." }, { status: 503 });

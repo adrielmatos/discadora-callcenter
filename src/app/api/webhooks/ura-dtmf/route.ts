@@ -100,12 +100,14 @@ async function processUraEvent(payload: any, req: NextRequest) {
   const clientDb = supabaseAdmin;
   const nowIso = new Date().toISOString();
 
-  // 3. Verificação do Não Perturbe (DND)
+  // 3. Verificação do Não Perturbe (DND) com e sem DDI 55
+  const phoneWithoutDdi = formattedPhone.replace(/^55/, "");
   const { data: dndEntry, error: dndError } = await clientDb
     .from("lista_nao_perturbe")
     .select("id")
-    .eq("telefone", formattedPhone)
+    .or(`telefone.eq.${formattedPhone},telefone.eq.${phoneWithoutDdi}`)
     .eq("ativo", true)
+    .limit(1)
     .maybeSingle();
 
   if (dndError) {

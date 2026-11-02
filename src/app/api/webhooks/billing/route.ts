@@ -128,13 +128,18 @@ export async function POST(req: NextRequest) {
 
       const paymentId = body.data?.id || body.id;
 
-      const { data: config } = await clientDb
-        .from("app_configuracoes")
-        .select("mercadopago_access_token")
-        .eq("id", 1)
-        .single();
+      let mpAccessToken = process.env.MERCADOPAGO_ACCESS_TOKEN;
+      if (!mpAccessToken) {
+        const { data: config } = await clientDb
+          .from("app_configuracoes")
+          .select("mercadopago_access_token")
+          .order("id", { ascending: true })
+          .limit(1)
+          .maybeSingle();
+        mpAccessToken = config?.mercadopago_access_token;
+      }
 
-      if (!config?.mercadopago_access_token) {
+      if (!mpAccessToken) {
         return NextResponse.json({ error: "Mercado Pago não configurado na plataforma" }, { status: 400 });
       }
 
@@ -142,7 +147,7 @@ export async function POST(req: NextRequest) {
         try {
           const mpRes = await fetch(`https://api.mercadopago.com/v1/payments/${paymentId}`, {
             headers: {
-              Authorization: `Bearer ${config.mercadopago_access_token}`
+              Authorization: `Bearer ${mpAccessToken}`
             }
           });
 
@@ -151,25 +156,53 @@ export async function POST(req: NextRequest) {
             if (paymentData.status === "approved") {
               const externalReference = paymentData.external_reference;
               if (externalReference) {
+                // Idempotência e validação de integridade da cobrança
+                const { data: cob, error: cobError } = await clientDb
+                  .from("cobrancas_saas")
+                  .select("id, empresa_id, status, valor")
+                  .eq("id", externalReference)
+                  .maybeSingle();
+
+                if (cobError || !cob) {
+                  console.warn("[Billing MP] Cobrança não localizada:", externalReference);
+                  return NextResponse.json({ error: "Cobrança de referência não encontrada." }, { status: 404 });
+                }
+
+                // Se já confirmada, encerra com idempotência sem duplicar
+                if (cob.status === "paga") {
+                  return NextResponse.json({ success: true, message: "Pagamento já confirmado anteriormente (idempotente)." });
+                }
+
+                // Validação de valor: montante pago deve ser maior ou igual ao valor da fatura
+                const paidAmount = Number(paymentData.transaction_amount || 0);
+                const expectedAmount = Number(cob.valor || 0);
+                if (expectedAmount > 0 && paidAmount < expectedAmount) {
+                  console.error(`[Billing MP] Divergência de valor: pago R$ ${paidAmount}, esperado R$ ${expectedAmount}`);
+                  return NextResponse.json({ error: "Valor pago inferior ao montante da cobrança." }, { status: 400 });
+                }
+
                 await clientDb
                   .from("cobrancas_saas")
                   .update({
                     status: "paga",
-                    pago_em: new Date().toISOString()
+                    pago_em: new Date().toISOString(),
+                    metodo_pagamento: "mercadopago"
                   })
                   .eq("id", externalReference);
-
-                const { data: cob } = await clientDb
-                  .from("cobrancas_saas")
-                  .select("empresa_id")
-                  .eq("id", externalReference)
-                  .single();
 
                 if (cob?.empresa_id) {
                   await clientDb
                     .from("empresas")
                     .update({ status: "ativa", updated_at: new Date().toISOString() })
                     .eq("id", cob.empresa_id);
+
+                  logAuditEvent({
+                    action: "BILLING_CONFIRMED_WEBHOOK",
+                    resource: "cobrancas_saas",
+                    resourceId: String(externalReference),
+                    empresaId: cob.empresa_id,
+                    metadata: { payment_id: paymentId, gateway: "mercadopago", valor: paidAmount }
+                  });
                 }
               }
             }
@@ -198,21 +231,36 @@ export async function POST(req: NextRequest) {
 
       if (event === "PAYMENT_RECEIVED" || event === "PAYMENT_CONFIRMED") {
         if (externalRef) {
-          await clientDb
+          const { data: cob } = await clientDb
             .from("cobrancas_saas")
-            .update({ status: "paga", pago_em: new Date().toISOString() })
-            .eq("id", externalRef);
+            .select("id, empresa_id, status")
+            .eq("id", externalRef)
+            .maybeSingle();
 
-          const { data: cob } = await clientDb.from("cobrancas_saas").select("empresa_id").eq("id", externalRef).single();
-          if (cob?.empresa_id) {
-            await clientDb.from("empresas").update({ status: "ativa" }).eq("id", cob.empresa_id);
+          if (cob && cob.status !== "paga") {
+            await clientDb
+              .from("cobrancas_saas")
+              .update({ status: "paga", pago_em: new Date().toISOString(), metodo_pagamento: "asaas" })
+              .eq("id", externalRef);
+
+            if (cob.empresa_id) {
+              await clientDb.from("empresas").update({ status: "ativa", updated_at: new Date().toISOString() }).eq("id", cob.empresa_id);
+
+              logAuditEvent({
+                action: "BILLING_CONFIRMED_WEBHOOK",
+                resource: "cobrancas_saas",
+                resourceId: String(externalRef),
+                empresaId: cob.empresa_id,
+                metadata: { gateway: "asaas", event }
+              });
+            }
           }
         }
       } else if (event === "PAYMENT_OVERDUE") {
         if (externalRef) {
           const { data: cob } = await clientDb.from("cobrancas_saas").select("empresa_id").eq("id", externalRef).single();
           if (cob?.empresa_id) {
-            await clientDb.from("empresas").update({ status: "bloqueada" }).eq("id", cob.empresa_id);
+            await clientDb.from("empresas").update({ status: "bloqueada", updated_at: new Date().toISOString() }).eq("id", cob.empresa_id);
           }
         }
       }
@@ -232,14 +280,29 @@ export async function POST(req: NextRequest) {
       for (const pix of body.pix) {
         const txid = pix.txid;
         if (txid) {
-          await clientDb
+          const { data: cob } = await clientDb
             .from("cobrancas_saas")
-            .update({ status: "paga", pago_em: new Date().toISOString() })
-            .eq("id", txid);
+            .select("id, empresa_id, status")
+            .eq("id", txid)
+            .maybeSingle();
 
-          const { data: cob } = await clientDb.from("cobrancas_saas").select("empresa_id").eq("id", txid).single();
-          if (cob?.empresa_id) {
-            await clientDb.from("empresas").update({ status: "ativa" }).eq("id", cob.empresa_id);
+          if (cob && cob.status !== "paga") {
+            await clientDb
+              .from("cobrancas_saas")
+              .update({ status: "paga", pago_em: new Date().toISOString(), metodo_pagamento: "pix_efi" })
+              .eq("id", txid);
+
+            if (cob.empresa_id) {
+              await clientDb.from("empresas").update({ status: "ativa", updated_at: new Date().toISOString() }).eq("id", cob.empresa_id);
+
+              logAuditEvent({
+                action: "BILLING_CONFIRMED_WEBHOOK",
+                resource: "cobrancas_saas",
+                resourceId: String(txid),
+                empresaId: cob.empresa_id,
+                metadata: { gateway: "efi_pix", txid }
+              });
+            }
           }
         }
       }

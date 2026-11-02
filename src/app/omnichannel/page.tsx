@@ -32,6 +32,10 @@ export default function OmnichannelPage() {
     "Olá, [NOME]! Sou o Adriel da A&K Soluções Financeiras. Conforme conversamos, segue a sua simulação de crédito com margem de [VALOR] pelo banco [BANCO]. Ficou com alguma dúvida nas condições?"
   );
 
+  // Estado de Tenant
+  const [empresaId, setEmpresaId] = useState<string | null>(null);
+  const [configId, setConfigId] = useState<number | null>(null);
+
   // Teste de Disparo
   const [testPhone, setTestPhone] = useState("");
   const [testSending, setTestSending] = useState(false);
@@ -87,30 +91,61 @@ export default function OmnichannelPage() {
       }
     });
     fetchConfig();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const fetchConfig = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from("app_configuracoes")
-        .select(`
-          wa_mode, wa_api_url, wa_api_token, wa_instance_name, wa_default_message,
-          ai_enabled, ai_name, ai_tone, ai_greeting, ai_knowledge, ai_handoff_triggers,
-          gemini_api_key, groq_api_key, empresa_nome
-        `)
-        .eq("id", 1)
-        .single();
+      let targetEmpresaId = empresaId;
+      if (!targetEmpresaId) {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user?.email) {
+          const { data: op } = await supabase
+            .from("operadores_app")
+            .select("empresa_id")
+            .eq("email", user.email)
+            .maybeSingle();
+          if (op?.empresa_id) {
+            targetEmpresaId = op.empresa_id;
+            setEmpresaId(op.empresa_id);
+          }
+        }
+      }
+
+      let query = supabase.from("app_configuracoes").select(`
+        id, empresa_id, wa_mode, wa_api_url, wa_api_token, wa_instance_name, wa_default_message,
+        whatsapp_tipo, evolution_url, evolution_api_key, zapi_instancia, zapi_token,
+        ai_enabled, ai_name, ai_tone, ai_greeting, ai_knowledge, ai_handoff_triggers,
+        gemini_api_key, groq_api_key, empresa_nome
+      `);
+
+      if (targetEmpresaId) {
+        query = query.eq("empresa_id", targetEmpresaId);
+      } else {
+        query = query.order("id", { ascending: true }).limit(1);
+      }
+
+      const { data, error } = await query.maybeSingle();
 
       if (data && !error) {
-        if (data.wa_mode) setWaMode(data.wa_mode as any);
-        if (data.wa_api_url) setApiUrl(data.wa_api_url);
-        if (data.wa_api_token) setApiToken(data.wa_api_token);
-        if (data.wa_instance_name) setInstanceName(data.wa_instance_name);
+        setConfigId(data.id);
+        const resolvedMode = data.wa_mode || data.whatsapp_tipo || "web";
+        setWaMode(resolvedMode as any);
+        setApiUrl(data.wa_api_url || data.evolution_url || "");
+        setApiToken(data.wa_api_token || data.evolution_api_key || data.zapi_token || "");
+        setInstanceName(data.wa_instance_name || data.zapi_instancia || "");
         if (data.wa_default_message) setDefaultMessage(data.wa_default_message);
 
-        if (data.gemini_api_key) setGeminiApiKey(data.gemini_api_key);
-        if (data.groq_api_key) setGroqApiKey(data.groq_api_key);
+        // Mascaramento de segurança para visualização no navegador
+        if (data.gemini_api_key) {
+          const key = data.gemini_api_key;
+          setGeminiApiKey(key.length > 8 ? `${key.slice(0, 4)}••••••••${key.slice(-4)}` : "••••••••");
+        }
+        if (data.groq_api_key) {
+          const key = data.groq_api_key;
+          setGroqApiKey(key.length > 8 ? `${key.slice(0, 4)}••••••••${key.slice(-4)}` : "••••••••");
+        }
         if (data.ai_enabled !== undefined && data.ai_enabled !== null) setAiEnabled(data.ai_enabled);
         if (data.ai_name) setAiName(data.ai_name);
         if (data.ai_tone) setAiTone(data.ai_tone as any);
@@ -126,34 +161,52 @@ export default function OmnichannelPage() {
     }
   };
 
-  // Salva no banco de dados Supabase
+  // Salva no banco de dados Supabase com isolamento de tenant e sincronização de nomes de colunas
   const handleSave = async () => {
     try {
-      const { error } = await supabase
-        .from("app_configuracoes")
-        .update({
-          wa_mode: waMode,
-          wa_api_url: apiUrl.trim(),
-          wa_api_token: apiToken.trim(),
-          wa_instance_name: instanceName.trim(),
-          wa_default_message: defaultMessage,
-          gemini_api_key: geminiApiKey.trim(),
-          groq_api_key: groqApiKey.trim(),
-          ai_enabled: aiEnabled,
-          ai_name: aiName.trim(),
-          ai_tone: aiTone,
-          ai_greeting: aiGreeting,
-          ai_knowledge: aiKnowledge,
-          ai_handoff_triggers: handoffTriggers,
-          updated_at: new Date().toISOString()
-        })
-        .eq("id", 1);
+      const updatePayload: Record<string, any> = {
+        wa_mode: waMode,
+        whatsapp_tipo: waMode,
+        wa_api_url: apiUrl.trim(),
+        evolution_url: apiUrl.trim(),
+        wa_api_token: apiToken.trim(),
+        evolution_api_key: apiToken.trim(),
+        zapi_token: apiToken.trim(),
+        wa_instance_name: instanceName.trim(),
+        zapi_instancia: instanceName.trim(),
+        wa_default_message: defaultMessage,
+        ai_enabled: aiEnabled,
+        ai_name: aiName.trim(),
+        ai_tone: aiTone,
+        ai_greeting: aiGreeting,
+        ai_knowledge: aiKnowledge,
+        ai_handoff_triggers: handoffTriggers,
+        empresa_nome: aiCompany.trim(),
+        updated_at: new Date().toISOString()
+      };
 
-      if (!error) {
+      // Preserva chaves de API já salvas se o usuário não tiver digitado uma nova em texto claro
+      if (geminiApiKey.trim() && !geminiApiKey.includes("••••")) {
+        updatePayload.gemini_api_key = geminiApiKey.trim();
+      }
+      if (groqApiKey.trim() && !groqApiKey.includes("••••")) {
+        updatePayload.groq_api_key = groqApiKey.trim();
+      }
+
+      let res;
+      if (configId) {
+        res = await supabase.from("app_configuracoes").update(updatePayload).eq("id", configId);
+      } else if (empresaId) {
+        res = await supabase.from("app_configuracoes").update(updatePayload).eq("empresa_id", empresaId);
+      } else {
+        res = await supabase.from("app_configuracoes").update(updatePayload).order("id", { ascending: true }).limit(1);
+      }
+
+      if (!res.error) {
         setSaved(true);
         setTimeout(() => setSaved(false), 2500);
       } else {
-        alert("Erro ao salvar parâmetros: " + error.message);
+        alert("Erro ao salvar parâmetros: " + res.error.message);
       }
     } catch (err: any) {
       alert("Erro ao salvar: " + err.message);
@@ -192,17 +245,19 @@ export default function OmnichannelPage() {
 
       const data = await res.json();
 
-      if (data.method === "api") {
-        setTestResult({
-          success: true,
-          message: "Sucesso! Mensagem disparada em segundo plano via WhatsApp API."
-        });
-      } else if (data.waUrl) {
-        setTestResult({
-          success: true,
-          message: "Modo Nativo (Web): O link do WhatsApp foi gerado com sucesso. Clique no botão abaixo para abrir a conversa.",
-          waUrl: data.waUrl
-        });
+      if (data.success) {
+        if (data.method === "web" || data.link || data.mobileLink || data.waUrl) {
+          setTestResult({
+            success: true,
+            message: "Modo Nativo (Web): O link do WhatsApp foi gerado com sucesso. Clique no botão abaixo para abrir a conversa.",
+            waUrl: data.link || data.mobileLink || data.waUrl
+          });
+        } else {
+          setTestResult({
+            success: true,
+            message: `Sucesso! Mensagem disparada em segundo plano via API (${data.method || "Gateway"}).`
+          });
+        }
       } else {
         setTestResult({
           success: false,
@@ -508,13 +563,13 @@ export default function OmnichannelPage() {
                     </a>
                     <button
                       onClick={() => {
-                        navigator.clipboard.writeText("C:\\Users\\vinic\\.gemini\\antigravity\\scratch\\discadora-callcenter\\extensions\\sofia-whatsapp-web");
-                        alert("Caminho da pasta copiado para a área de transferência!");
+                        navigator.clipboard.writeText("sofia-whatsapp-web");
+                        alert("Nome da pasta copiado! Após descompactar o arquivo sofia-whatsapp-web.zip, selecione a pasta extraída no Chrome.");
                       }}
                       className="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-3.5 py-2.5 rounded-xl font-bold text-xs transition flex items-center justify-center gap-1.5 cursor-pointer"
                     >
                       <Copy size={14} />
-                      <span>Copiar Caminho Local</span>
+                      <span>Copiar Nome da Pasta</span>
                     </button>
                   </div>
                 </div>

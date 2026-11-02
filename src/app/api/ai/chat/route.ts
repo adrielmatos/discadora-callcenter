@@ -15,13 +15,24 @@ interface ProviderCandidate {
 // Output Guardrail para Conformidade Bacen nº 3.954/2011 e CDC Art. 39
 function sanitizeBacenReply(text: string): string {
   if (!text) return "";
+
+  // Se o texto já esclarece expressamente que NÃO cobra taxas ou depósitos, é uma resposta educativa legítima
+  const isClarification = /n[aã]o\s+(cobramos|tem|h[aá]|exigimos|pedimos)\s+(nenhuma\s+)?(taxa|dep[oó]sito|valor)/i.test(text);
+  if (isClarification) {
+    return text;
+  }
+
   const forbiddenPatterns = [
+    /(?:precisa|deve|ter[aá]\s+que|exigimos)\s+pagar\s+(?:taxa|dep[oó]sito|valor)\s+(?:antecipad|pr[eé]vi|antes)/i,
+    /(?:cobramos|exigimos)\s+taxa\s+(?:de\s+)?(?:cadastro|abertura|seguro|antecipada)/i,
+    /(?:fa[çc]a|exige-se)\s+dep[oó]sito\s+pr[eé]vio/i,
+    /pagar\s+(?:algo|valor|taxa)\s+antes\s+de\s+liberar/i,
     /taxa\s+(de\s+)?(cadastro|abertura|seguro|antecipada)/i,
-    /dep[oó]sito\s+pr[eé]vio/i,
-    /pagar\s+(algo|valor|taxa)\s+antes/i
+    /dep[oó]sito\s+pr[eé]vio/i
   ];
+
   if (forbiddenPatterns.some(pattern => pattern.test(text))) {
-    return "Nosso atendimento é 100% gratuito e não cobramos nenhuma taxa antecipada, em estrita conformidade com as normas do Banco Central. Deseja realizar sua simulação gratuita agora?";
+    return "Nosso atendimento é 100% gratuito e não cobramos nenhuma taxa antecipada, em estrita conformidade com as normas do Banco Central. O crédito é liberado integralmente na sua conta bancária. Deseja realizar sua simulação gratuita agora?";
   }
   return text;
 }
@@ -80,7 +91,7 @@ async function callGemini(
   history: ChatHistoryItem[],
   message: string
 ): Promise<{ text: string } | { error: string; status: number }> {
-  const modelCandidates = ["gemini-3.5-flash-lite", "gemini-flash-latest", "gemini-2.5-flash-lite", "gemini-1.5-flash-latest", "gemini-1.5-flash"];
+  const modelCandidates = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"];
   
   const contents: any[] = [];
   if (Array.isArray(history)) {

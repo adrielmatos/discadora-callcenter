@@ -142,6 +142,8 @@ export default function SuperAdminPage() {
         resourceId: tenant.id,
         metadata: { novoStatus: nextStatus, empresa: tenant.razao_social }
       });
+    } else {
+      alert("Erro ao atualizar status da empresa: " + error.message);
     }
   };
 
@@ -161,7 +163,15 @@ export default function SuperAdminPage() {
 
     if (!error) {
       setTenants(prev => prev.map(t => t.id === tenantId ? { ...t, status: "trial" } : t));
+      logAuditEvent({
+        action: "TENANT_UPDATE",
+        resource: "empresas",
+        resourceId: tenantId,
+        metadata: { status: "trial", dias_teste: dias }
+      });
       alert(`Período de teste de ${dias} dias liberado com sucesso para a empresa!`);
+    } else {
+      alert("Erro ao liberar período de teste: " + error.message);
     }
   };
 

@@ -131,7 +131,6 @@ function createPNG(size) {
 }
 
 const targets = [
-  'C:\\Users\\vinic\\Desktop\\sofia-whatsapp-web',
   path.join(__dirname, '..', 'extensions', 'sofia-whatsapp-web'),
   path.join(__dirname, '..', 'public', 'sofia-extension')
 ];
