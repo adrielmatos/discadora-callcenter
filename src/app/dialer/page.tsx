@@ -86,6 +86,12 @@ const DDD_REGIONS: Record<string, { uf: string, regiao: string }> = {
   "99": { uf: "MA", regiao: "Imperatriz" }
 };
 
+const normalizeBrazilPhone = (phone?: string) => {
+  const digits = (phone || "").replace(/\D/g, "");
+  if (!digits) return "";
+  return digits.startsWith("55") ? digits : `55${digits}`;
+};
+
 const formatPhone = (phone?: string) => {
   if (!phone) return "";
   const clean = phone.replace(/\D/g, "");
@@ -176,6 +182,7 @@ export default function DialerWorkspace() {
   const [scheduleTime, setScheduleTime] = useState("");
   const [scheduleNotes, setScheduleNotes] = useState("");
   const [dndBlockedSet, setDndBlockedSet] = useState<Set<string>>(new Set());
+  const [dndStatus, setDndStatus] = useState<"loading" | "ready" | "error">("loading");
   const [showCalc, setShowCalc] = useState(false);
   const [activeObjection, setActiveObjection] = useState<string | null>(null);
 
@@ -207,8 +214,9 @@ export default function DialerWorkspace() {
   const cleanActivePhone = activeLead?.telefone?.replace(/\D/g, "") || "";
   const phoneWithout55 = cleanActivePhone.replace(/^55/, "");
   const cleanActiveCpf = activeLead?.cpf?.replace(/\D/g, "") || "";
+  const alternateActivePhone = cleanActivePhone.startsWith("55") ? cleanActivePhone.slice(2) : `55${cleanActivePhone}`;
   const isDndBlocked = Boolean(
-    (cleanActivePhone && (dndBlockedSet.has(cleanActivePhone) || dndBlockedSet.has(phoneWithout55) || dndBlockedSet.has("55" + phoneWithout55))) ||
+    (cleanActivePhone && (dndBlockedSet.has(cleanActivePhone) || dndBlockedSet.has(phoneWithout55) || dndBlockedSet.has(alternateActivePhone))) ||
     (cleanActiveCpf && dndBlockedSet.has(cleanActiveCpf))
   );
   const leadsRestantes = totalPendingCount > 0 ? totalPendingCount : Math.max(0, leadsList.length - currentLeadIndex);
@@ -310,22 +318,35 @@ export default function DialerWorkspace() {
   };
 
   const fetchDnd = async () => {
+    setDndStatus("loading");
     try {
-      const { data } = await supabase.from("lista_nao_perturbe").select("telefone, cpf").eq("ativo", true);
-      if (data) {
-        const blocked = new Set<string>();
-        data.forEach((item: any) => {
-          if (item.telefone) {
-            const raw = item.telefone.replace(/\D/g, "");
+      const { data, error } = await supabase
+        .from("lista_nao_perturbe")
+        .select("telefone, cpf")
+        .eq("ativo", true);
+      if (error) throw error;
+
+      const blocked = new Set<string>();
+      (data || []).forEach((item: any) => {
+        if (item.telefone) {
+          const raw = String(item.telefone).replace(/\D/g, "");
+          if (raw) {
             blocked.add(raw);
             blocked.add(raw.replace(/^55/, ""));
             if (!raw.startsWith("55")) blocked.add("55" + raw);
           }
-          if (item.cpf) blocked.add(item.cpf.replace(/\D/g, ""));
-        });
-        setDndBlockedSet(blocked);
-      }
-    } catch (e) { console.error("Erro DND:", e); }
+        }
+        if (item.cpf) {
+          const cpf = String(item.cpf).replace(/\D/g, "");
+          if (cpf) blocked.add(cpf);
+        }
+      });
+      setDndBlockedSet(blocked);
+      setDndStatus("ready");
+    } catch (e) {
+      console.error("Não foi possível validar a lista Não Perturbe:", e);
+      setDndStatus("error");
+    }
   };
 
   // Parser das conversas do WhatsApp salvas no histórico de ligações
@@ -408,40 +429,39 @@ export default function DialerWorkspace() {
     const msg = (customText || operatorInput).trim();
     if (!msg || !activeLead?.id || !activeLead?.telefone) return;
 
+    const formattedPhone = normalizeBrazilPhone(activeLead.telefone);
+    if (!formattedPhone) {
+      window.alert("Telefone inválido para abrir o WhatsApp.");
+      return;
+    }
+
     setSendingMessage(true);
     try {
-      const cleanPhone = activeLead.telefone.replace(/\D/g, "");
-      const formattedPhone = cleanPhone.startsWith("55") ? cleanPhone : `55${cleanPhone}`;
-
-      // Salva no CRM como mensagem do operador
-      await supabase.from("historico_ligacoes").insert({
-        lead_id: activeLead.id,
-        tabulacao: `[WhatsApp Operador] Operador: "${msg}"`,
-        duracao_segundos: 0
-      });
-
-      // Tenta enviar via API de WhatsApp
-      const res = await fetch("/api/whatsapp/send", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          telefone: formattedPhone,
-          mensagem: msg,
-          lead_id: activeLead.id
-        })
-      });
-
-      const resJson = await res.json();
-      if (resJson.method === "web" || resJson.waUrl) {
-        window.open(resJson.waUrl || `https://wa.me/${formattedPhone}?text=${encodeURIComponent(msg)}`, "_blank");
+      // O operador usa a própria sessão do WhatsApp Web; não depende de API/BSP.
+      const waWindow = window.open(
+        `https://web.whatsapp.com/send?phone=${formattedPhone}&text=${encodeURIComponent(msg)}`,
+        "_blank",
+        "noopener,noreferrer"
+      );
+      if (!waWindow) {
+        window.alert("O navegador bloqueou a abertura do WhatsApp. Permita pop-ups para este site e tente novamente.");
+        return;
       }
 
+      const { error } = await supabase.from("historico_ligacoes").insert({
+        lead_id: activeLead.id,
+        tabulacao: `[WhatsApp Web - link aberto; envio não confirmado] Operador: "${msg.slice(0, 500)}"`,
+        duracao_segundos: 0
+      });
+      if (error) {
+        console.error("WhatsApp aberto, mas o histórico não foi salvo:", error);
+        window.alert("O WhatsApp foi aberto, mas não foi possível registrar o histórico no CRM.");
+      }
       setOperatorInput("");
       await loadWhatsappHistory(activeLead.id);
     } catch (err) {
-      console.error("Erro ao enviar mensagem do operador:", err);
-      const cleanPhone = activeLead.telefone.replace(/\D/g, "");
-      window.open(`https://wa.me/55${cleanPhone}?text=${encodeURIComponent(msg)}`, "_blank");
+      console.error("Erro ao abrir WhatsApp Web:", err);
+      window.alert("Não foi possível abrir o WhatsApp Web. Verifique o navegador e tente novamente.");
     } finally {
       setSendingMessage(false);
     }
@@ -562,8 +582,17 @@ export default function DialerWorkspace() {
 
   // Disparo da Chamada: WebRTC nativo ou Ponte Smartphone com bloqueio DND intransponível
   const triggerCall = async (customNumber?: string) => {
+    // Não disca enquanto a lista NPO não foi validada com sucesso.
+    if (!customNumber && dndStatus !== "ready") {
+      setCallStatus("idle");
+      setAutoNextCountdown(null);
+      window.alert("Discagem bloqueada: não foi possível confirmar a lista Não Perturbe. Atualize a tela e tente novamente.");
+      return;
+    }
+
     const targetNumber = customNumber || activeLead?.telefone;
-    if (!targetNumber) return;
+    const normalizedNumber = normalizeBrazilPhone(targetNumber);
+    if (!normalizedNumber) return;
 
     // Verificação estrita de conformidade Não Perturbe (DND)
     const cleanTarget = targetNumber.replace(/\D/g, "");
@@ -574,25 +603,20 @@ export default function DialerWorkspace() {
       dndBlockedSet.has("55" + cleanWithout55) ||
       (!customNumber && isDndBlocked)
     ) {
+      setCallStatus("idle");
+      setAutoNextCountdown(null);
       alert("🚫 Bloqueio DND Ativo: Este número consta na Lista Não Perturbe e não pode ser discado.");
       return;
     }
 
+    setCallStatus("calling");
     if (softphoneMode === "webrtc" && softphoneRef.current && sipRegStatus === "registered") {
-      setCallStatus("calling");
-      const success = await softphoneRef.current.makeCall(targetNumber);
-      if (!success) {
-        window.location.href = `tel:+55${targetNumber.replace(/\D/g, "")}`;
-        setTimeout(() => setCallStatus("talking"), 2000);
-      }
+      const success = await softphoneRef.current.makeCall(normalizedNumber);
+      if (!success) window.location.href = `tel:+${normalizedNumber}`;
     } else {
-      phoneAudio.startRinging();
-      window.location.href = `tel:+55${targetNumber.replace(/\D/g, "")}`;
-      setCallStatus("calling");
-      setTimeout(() => {
-        phoneAudio.stopRinging();
-        setCallStatus("talking");
-      }, 2000);
+      // Phone Link não informa à página quando a chamada é atendida.
+      // Mantém "calling" até a confirmação manual, sem simular atendimento.
+      window.location.href = `tel:+${normalizedNumber}`;
     }
   };
 
@@ -602,7 +626,7 @@ export default function DialerWorkspace() {
       return;
     }
     setAutoNextCountdown(null);
-    triggerCall();
+    void triggerCall();
   };
 
   const handleEndCall = () => {
@@ -646,13 +670,19 @@ export default function DialerWorkspace() {
       const currentAttempts = (activeLead as any).tentativas || 0;
       const nextAttempts = currentAttempts + 1;
 
-      // 1. Grava no histórico de chamadas
-      await supabase.from("historico_ligacoes").insert({
+      // 1. Grava no histórico de chamadas com verificação de erro
+      const { error: historyError } = await supabase.from("historico_ligacoes").insert({
         lead_id: activeLead.id,
-        tabulacao: status,
+        tabulacao: notes ? `${status} — ${notes}` : status,
         duracao_segundos: duracaoFinal,
         observacao: notes || null
       });
+
+      if (historyError) {
+        console.error("Falha ao salvar histórico da ligação:", historyError);
+        window.alert("Não foi possível salvar o histórico da chamada: " + historyError.message);
+        return;
+      }
 
       let etapaCrm = "finalizado";
       let nextStatus = "finalizado";
@@ -686,17 +716,17 @@ export default function DialerWorkspace() {
       }
 
       // 3. Atualização no banco com validação explícita de erro
-      const { error } = await supabase.from("leads").update({
+      const { data: updatedLead, error: leadError } = await supabase.from("leads").update({
         status: nextStatus,
         etapa_crm: etapaCrm,
         ultima_tabulacao: status,
         tentativas: nextAttempts,
         updated_at: new Date().toISOString()
-      }).eq("id", activeLead.id);
+      }).eq("id", activeLead.id).select("id").maybeSingle();
 
-      if (error) {
-        console.error("Falha ao atualizar lead:", error);
-        alert("Erro ao salvar tabulação: " + error.message);
+      if (leadError || !updatedLead) {
+        console.error("Falha ao atualizar lead:", leadError);
+        window.alert("O histórico foi salvo, mas não foi possível atualizar o lead. Erro: " + (leadError?.message || "Registro não localizado."));
         return;
       }
 
