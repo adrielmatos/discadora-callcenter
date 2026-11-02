@@ -87,8 +87,10 @@ export default function Footer() {
           <div>
             © {new Date().getFullYear()} AK Soluções Financeiras. Todos os direitos reservados.
           </div>
-          <div>
-            Desenvolvido exclusivamente para Correspondentes Bancários e Promotoras de Crédito.
+          <div className="flex items-center gap-4">
+            <a href="/termos" className="hover:text-amber-400 transition-colors">Termos de Uso</a>
+            <span>•</span>
+            <a href="/privacidade" className="hover:text-amber-400 transition-colors">Privacidade & Cookies (LGPD)</a>
           </div>
         </div>
       </div>

@@ -3,21 +3,30 @@ import { supabase } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
 
+let cachedDbStatus = "healthy";
+let cachedDbLatency = 0;
+let lastDbCheck = 0;
+const DB_CACHE_TTL_MS = 2500; // Cache de 2.5s para proteger o pool de conexões contra tempestade de probes
+
 export async function GET() {
   const startTime = Date.now();
-  let dbStatus = "healthy";
-  let dbLatencyMs = 0;
+  const now = Date.now();
 
-  try {
-    const dbCheckStart = Date.now();
-    const { error } = await supabase.from("empresas").select("id").limit(1);
-    dbLatencyMs = Date.now() - dbCheckStart;
-    if (error) {
-      dbStatus = "degraded";
+  if (now - lastDbCheck > DB_CACHE_TTL_MS) {
+    try {
+      const dbCheckStart = Date.now();
+      const { error } = await supabase.from("empresas").select("id").limit(1);
+      cachedDbLatency = Date.now() - dbCheckStart;
+      cachedDbStatus = error ? "degraded" : "healthy";
+      lastDbCheck = Date.now();
+    } catch {
+      cachedDbStatus = "unreachable";
+      cachedDbLatency = 0;
     }
-  } catch (err) {
-    dbStatus = "unreachable";
   }
+
+  const dbStatus = cachedDbStatus;
+  const dbLatencyMs = cachedDbLatency;
 
   const memory = process.memoryUsage();
   const uptime = process.uptime();

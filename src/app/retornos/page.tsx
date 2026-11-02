@@ -213,7 +213,7 @@ export default function RetornosPage() {
               <div className="bg-white border border-slate-200/80 rounded-xl p-12 text-center shadow-xs">
                 <Clock size={40} className="mx-auto text-slate-300 mb-2" />
                 <h3 className="text-sm font-bold text-slate-800">Nenhum retorno encontrado</h3>
-                <p className="text-slate-500 text-xs mt-1">Ao tabular como "Retorno" no discador, a chamada aparecerá aqui automaticamente.</p>
+                <p className="text-slate-500 text-xs mt-1">Ao tabular como &quot;Retorno&quot; no discador, a chamada aparecerá aqui automaticamente.</p>
               </div>
             ) : (
               filtered.map(r => {
@@ -273,7 +273,7 @@ export default function RetornosPage() {
 
                         {r.observacao && (
                           <p className="text-slate-600 text-xs mt-1.5 italic bg-slate-50 px-2.5 py-1 rounded-md border border-slate-100 inline-block">
-                            "{r.observacao}"
+                            &quot;{r.observacao}&quot;
                           </p>
                         )}
                       </div>

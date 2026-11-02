@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { 
   X, Send, ShieldCheck, Sparkles, CheckCircle2, AlertCircle, 
   Play, Pause, Clock, User, Phone, RefreshCw, ExternalLink, Zap
@@ -50,19 +50,7 @@ export default function BroadcastModal({ isOpen, onClose, onSuccess, defaultEtap
     isPausedRef.current = isPaused;
   }, [isRunning, isPaused]);
 
-  // Carrega leads da etapa selecionada
-  useEffect(() => {
-    if (isOpen) {
-      fetchQueue();
-    } else {
-      setIsRunning(false);
-      setIsPaused(false);
-      setCurrentIndex(0);
-      setCountdown(0);
-    }
-  }, [isOpen, targetEtapa, limit]);
-
-  const fetchQueue = async () => {
+  const fetchQueue = useCallback(async () => {
     setLoadingLeads(true);
     try {
       const res = await fetch(`/api/whatsapp/broadcast?etapa=${targetEtapa}&limit=${limit}`);
@@ -75,7 +63,19 @@ export default function BroadcastModal({ isOpen, onClose, onSuccess, defaultEtap
     } finally {
       setLoadingLeads(false);
     }
-  };
+  }, [targetEtapa, limit]);
+
+  // Carrega leads da etapa selecionada
+  useEffect(() => {
+    if (isOpen) {
+      fetchQueue();
+    } else {
+      setIsRunning(false);
+      setIsPaused(false);
+      setCurrentIndex(0);
+      setCountdown(0);
+    }
+  }, [isOpen, fetchQueue]);
 
   const insertVariable = (variable: string) => {
     setMessageTemplate(prev => prev + ` ${variable} `);

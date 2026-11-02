@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createHmac, timingSafeEqual } from "node:crypto";
 import { supabase, supabaseAdmin } from "@/lib/supabase";
 import { logAuditEvent } from "@/lib/audit";
 
@@ -10,25 +11,39 @@ import { logAuditEvent } from "@/lib/audit";
  * 3. Idempotência e registro de auditoria em cada ativação.
  */
 export async function POST(req: NextRequest) {
+  let body: any;
   try {
-    const body = await req.json();
-    const clientDb = supabaseAdmin || supabase;
+    body = await req.json();
+  } catch {
+    return NextResponse.json(
+      { error: "Corpo da requisição inválido ou JSON malformado." },
+      { status: 400 }
+    );
+  }
 
+  try {
     // ─── 1. Confirmação Manual pelo Painel de Controle ─────────────
     if (body.action === "confirm_manual" && body.cobranca_id) {
       const authHeader = req.headers.get("authorization");
       const adminSecret = req.headers.get("x-admin-secret");
-      const configuredSecret = process.env.ADMIN_WEBHOOK_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY;
+      const configuredSecret = process.env.ADMIN_WEBHOOK_SECRET;
 
       let isAuthorized = false;
 
-      if (adminSecret && configuredSecret && adminSecret === configuredSecret) {
-        isAuthorized = true;
+      if (adminSecret && configuredSecret) {
+        const a = Buffer.from(adminSecret);
+        const b = Buffer.from(configuredSecret);
+        if (a.length === b.length && timingSafeEqual(a, b)) {
+          isAuthorized = true;
+        }
       } else if (authHeader) {
+        if (!supabaseAdmin) {
+          return NextResponse.json({ error: "Processamento de cobrança indisponível." }, { status: 503 });
+        }
         const token = authHeader.replace(/^Bearer\s+/i, "");
         const { data: { user } } = await supabase.auth.getUser(token);
         if (user) {
-          const { data: op } = await clientDb
+          const { data: op } = await supabaseAdmin
             .from("operadores_app")
             .select("perfil")
             .eq("email", user.email)
@@ -46,6 +61,12 @@ export async function POST(req: NextRequest) {
           { status: 403 }
         );
       }
+
+      if (!supabaseAdmin) {
+        console.error("[Billing Webhook] SUPABASE_SERVICE_ROLE_KEY ausente.");
+        return NextResponse.json({ error: "Processamento de cobrança temporariamente indisponível." }, { status: 503 });
+      }
+      const clientDb = supabaseAdmin;
 
       const { data: cobranca, error: findError } = await clientDb
         .from("cobrancas_saas")
@@ -95,15 +116,48 @@ export async function POST(req: NextRequest) {
 
     // ─── 2. Webhook Mercado Pago ────────────────────────────────────
     if (body.type === "payment" || body.action === "payment.updated" || body.data?.id) {
+      const webhookSecret = process.env.MERCADOPAGO_WEBHOOK_SECRET;
+      const signatureHeader = req.headers.get("x-signature") || "";
+      const requestId = req.headers.get("x-request-id") || "";
+      const signatureParts = Object.fromEntries(signatureHeader.split(",").map((part) => {
+        const [key, ...value] = part.trim().split("=");
+        return [key, value.join("=")];
+      }));
+      const timestamp = signatureParts.ts;
+      const suppliedSignature = signatureParts.v1;
+      const dataId = String(body.data?.id || body.id || "").toLowerCase();
+
+      if (!webhookSecret || !timestamp || !suppliedSignature || !requestId || !dataId) {
+        return NextResponse.json({ error: "Assinatura do webhook Mercado Pago ausente ou não configurada." }, { status: 401 });
+      }
+      const manifest = `id:${dataId};request-id:${requestId};ts:${timestamp};`;
+      const expectedSignature = createHmac("sha256", webhookSecret).update(manifest).digest("hex");
+      const expectedBuffer = Buffer.from(expectedSignature, "hex");
+      const suppliedBuffer = Buffer.from(suppliedSignature, "hex");
+      if (expectedBuffer.length !== suppliedBuffer.length || !timingSafeEqual(expectedBuffer, suppliedBuffer)) {
+        return NextResponse.json({ error: "Assinatura do webhook Mercado Pago inválida." }, { status: 401 });
+      }
+
+      if (!supabaseAdmin) {
+        console.error("[Billing Webhook] SUPABASE_SERVICE_ROLE_KEY ausente.");
+        return NextResponse.json({ error: "Processamento de cobrança temporariamente indisponível." }, { status: 503 });
+      }
+      const clientDb = supabaseAdmin;
+
       const paymentId = body.data?.id || body.id;
 
-      const { data: config } = await clientDb
-        .from("app_configuracoes")
-        .select("mercadopago_access_token")
-        .eq("id", 1)
-        .single();
+      let mpAccessToken = process.env.MERCADOPAGO_ACCESS_TOKEN;
+      if (!mpAccessToken) {
+        const { data: config } = await clientDb
+          .from("app_configuracoes")
+          .select("mercadopago_access_token")
+          .order("id", { ascending: true })
+          .limit(1)
+          .maybeSingle();
+        mpAccessToken = config?.mercadopago_access_token;
+      }
 
-      if (!config?.mercadopago_access_token) {
+      if (!mpAccessToken) {
         return NextResponse.json({ error: "Mercado Pago não configurado na plataforma" }, { status: 400 });
       }
 
@@ -111,7 +165,7 @@ export async function POST(req: NextRequest) {
         try {
           const mpRes = await fetch(`https://api.mercadopago.com/v1/payments/${paymentId}`, {
             headers: {
-              Authorization: `Bearer ${config.mercadopago_access_token}`
+              Authorization: `Bearer ${mpAccessToken}`
             }
           });
 
@@ -120,25 +174,53 @@ export async function POST(req: NextRequest) {
             if (paymentData.status === "approved") {
               const externalReference = paymentData.external_reference;
               if (externalReference) {
+                // Idempotência e validação de integridade da cobrança
+                const { data: cob, error: cobError } = await clientDb
+                  .from("cobrancas_saas")
+                  .select("id, empresa_id, status, valor")
+                  .eq("id", externalReference)
+                  .maybeSingle();
+
+                if (cobError || !cob) {
+                  console.warn("[Billing MP] Cobrança não localizada:", externalReference);
+                  return NextResponse.json({ error: "Cobrança de referência não encontrada." }, { status: 404 });
+                }
+
+                // Se já confirmada, encerra com idempotência sem duplicar
+                if (cob.status === "paga") {
+                  return NextResponse.json({ success: true, message: "Pagamento já confirmado anteriormente (idempotente)." });
+                }
+
+                // Validação de valor: montante pago deve ser maior ou igual ao valor da fatura
+                const paidAmount = Number(paymentData.transaction_amount || 0);
+                const expectedAmount = Number(cob.valor || 0);
+                if (expectedAmount > 0 && paidAmount < expectedAmount) {
+                  console.error(`[Billing MP] Divergência de valor: pago R$ ${paidAmount}, esperado R$ ${expectedAmount}`);
+                  return NextResponse.json({ error: "Valor pago inferior ao montante da cobrança." }, { status: 400 });
+                }
+
                 await clientDb
                   .from("cobrancas_saas")
                   .update({
                     status: "paga",
-                    pago_em: new Date().toISOString()
+                    pago_em: new Date().toISOString(),
+                    metodo_pagamento: "mercadopago"
                   })
                   .eq("id", externalReference);
-
-                const { data: cob } = await clientDb
-                  .from("cobrancas_saas")
-                  .select("empresa_id")
-                  .eq("id", externalReference)
-                  .single();
 
                 if (cob?.empresa_id) {
                   await clientDb
                     .from("empresas")
                     .update({ status: "ativa", updated_at: new Date().toISOString() })
                     .eq("id", cob.empresa_id);
+
+                  logAuditEvent({
+                    action: "BILLING_CONFIRMED_WEBHOOK",
+                    resource: "cobrancas_saas",
+                    resourceId: String(externalReference),
+                    empresaId: cob.empresa_id,
+                    metadata: { payment_id: paymentId, gateway: "mercadopago", valor: paidAmount }
+                  });
                 }
               }
             }
@@ -161,27 +243,48 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "Token de webhook Asaas não autorizado ou ausente" }, { status: 401 });
       }
 
+      if (!supabaseAdmin) {
+        console.error("[Billing Webhook] SUPABASE_SERVICE_ROLE_KEY ausente.");
+        return NextResponse.json({ error: "Processamento de cobrança temporariamente indisponível." }, { status: 503 });
+      }
+      const clientDb = supabaseAdmin;
+
       const event = body.event;
       const payment = body.payment;
       const externalRef = payment.externalReference;
 
       if (event === "PAYMENT_RECEIVED" || event === "PAYMENT_CONFIRMED") {
         if (externalRef) {
-          await clientDb
+          const { data: cob } = await clientDb
             .from("cobrancas_saas")
-            .update({ status: "paga", pago_em: new Date().toISOString() })
-            .eq("id", externalRef);
+            .select("id, empresa_id, status")
+            .eq("id", externalRef)
+            .maybeSingle();
 
-          const { data: cob } = await clientDb.from("cobrancas_saas").select("empresa_id").eq("id", externalRef).single();
-          if (cob?.empresa_id) {
-            await clientDb.from("empresas").update({ status: "ativa" }).eq("id", cob.empresa_id);
+          if (cob && cob.status !== "paga") {
+            await clientDb
+              .from("cobrancas_saas")
+              .update({ status: "paga", pago_em: new Date().toISOString(), metodo_pagamento: "asaas" })
+              .eq("id", externalRef);
+
+            if (cob.empresa_id) {
+              await clientDb.from("empresas").update({ status: "ativa", updated_at: new Date().toISOString() }).eq("id", cob.empresa_id);
+
+              logAuditEvent({
+                action: "BILLING_CONFIRMED_WEBHOOK",
+                resource: "cobrancas_saas",
+                resourceId: String(externalRef),
+                empresaId: cob.empresa_id,
+                metadata: { gateway: "asaas", event }
+              });
+            }
           }
         }
       } else if (event === "PAYMENT_OVERDUE") {
         if (externalRef) {
           const { data: cob } = await clientDb.from("cobrancas_saas").select("empresa_id").eq("id", externalRef).single();
           if (cob?.empresa_id) {
-            await clientDb.from("empresas").update({ status: "bloqueada" }).eq("id", cob.empresa_id);
+            await clientDb.from("empresas").update({ status: "bloqueada", updated_at: new Date().toISOString() }).eq("id", cob.empresa_id);
           }
         }
       }
@@ -192,23 +295,44 @@ export async function POST(req: NextRequest) {
     // ─── 4. Webhook EFI / Gerencianet ───────────────────────────────
     if (body.pix && Array.isArray(body.pix)) {
       const efiSecret = req.headers.get("x-efi-secret") || req.headers.get("x-webhook-secret");
-      const expectedEfiSecret = process.env.EFI_WEBHOOK_SECRET || process.env.ADMIN_WEBHOOK_SECRET;
+      const expectedEfiSecret = process.env.EFI_WEBHOOK_SECRET;
 
       if (!expectedEfiSecret || efiSecret !== expectedEfiSecret) {
         return NextResponse.json({ error: "Segredo de webhook EFI/Gerencianet inválido ou ausente." }, { status: 401 });
       }
 
+      if (!supabaseAdmin) {
+        console.error("[Billing Webhook] SUPABASE_SERVICE_ROLE_KEY ausente.");
+        return NextResponse.json({ error: "Processamento de cobrança temporariamente indisponível." }, { status: 503 });
+      }
+      const clientDb = supabaseAdmin;
+
       for (const pix of body.pix) {
         const txid = pix.txid;
         if (txid) {
-          await clientDb
+          const { data: cob } = await clientDb
             .from("cobrancas_saas")
-            .update({ status: "paga", pago_em: new Date().toISOString() })
-            .eq("id", txid);
+            .select("id, empresa_id, status")
+            .eq("id", txid)
+            .maybeSingle();
 
-          const { data: cob } = await clientDb.from("cobrancas_saas").select("empresa_id").eq("id", txid).single();
-          if (cob?.empresa_id) {
-            await clientDb.from("empresas").update({ status: "ativa" }).eq("id", cob.empresa_id);
+          if (cob && cob.status !== "paga") {
+            await clientDb
+              .from("cobrancas_saas")
+              .update({ status: "paga", pago_em: new Date().toISOString(), metodo_pagamento: "pix_efi" })
+              .eq("id", txid);
+
+            if (cob.empresa_id) {
+              await clientDb.from("empresas").update({ status: "ativa", updated_at: new Date().toISOString() }).eq("id", cob.empresa_id);
+
+              logAuditEvent({
+                action: "BILLING_CONFIRMED_WEBHOOK",
+                resource: "cobrancas_saas",
+                resourceId: String(txid),
+                empresaId: cob.empresa_id,
+                metadata: { gateway: "efi_pix", txid }
+              });
+            }
           }
         }
       }

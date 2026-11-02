@@ -118,6 +118,9 @@ interface Lead {
   cidade?: string;
   uf?: string;
   status?: string;
+  etapa_crm?: string;
+  tentativas?: number;
+  ultima_tabulacao?: string;
 }
 
 interface WhatsAppInteraction {
@@ -166,6 +169,9 @@ export default function DialerWorkspace() {
   const [callStatus, setCallStatus] = useState<"idle" | "calling" | "talking" | "wrapup">("idle");
   const [duration, setDuration] = useState(0);
   const callDurationRef = useRef<number>(0);
+  const handleCallTimerTick = useCallback((secs: number) => {
+    callDurationRef.current = secs;
+  }, []);
   const [scriptsList, setScriptsList] = useState<any[]>([]);
   const [selectedScriptProduct, setSelectedScriptProduct] = useState("");
   const [productFilter, setProductFilter] = useState<"all" | "fgts" | "inss" | "consignado">("all");
@@ -200,15 +206,20 @@ export default function DialerWorkspace() {
   const softphoneRef = useRef<SoftphoneEngine | null>(null);
   const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
 
+  // Trava de concorrência local contra duplo-clique em tabulações
+  const [isSavingDisposition, setIsSavingDisposition] = useState(false);
+  const [totalPendingCount, setTotalPendingCount] = useState<number>(0);
+
   const activeLead = leadsList[currentLeadIndex];
   const cleanActivePhone = activeLead?.telefone?.replace(/\D/g, "") || "";
+  const phoneWithout55 = cleanActivePhone.replace(/^55/, "");
   const cleanActiveCpf = activeLead?.cpf?.replace(/\D/g, "") || "";
   const alternateActivePhone = cleanActivePhone.startsWith("55") ? cleanActivePhone.slice(2) : `55${cleanActivePhone}`;
   const isDndBlocked = Boolean(
-    (cleanActivePhone && (dndBlockedSet.has(cleanActivePhone) || dndBlockedSet.has(alternateActivePhone))) ||
+    (cleanActivePhone && (dndBlockedSet.has(cleanActivePhone) || dndBlockedSet.has(phoneWithout55) || dndBlockedSet.has(alternateActivePhone))) ||
     (cleanActiveCpf && dndBlockedSet.has(cleanActiveCpf))
   );
-  const leadsRestantes = leadsList.length - currentLeadIndex;
+  const leadsRestantes = totalPendingCount > 0 ? totalPendingCount : Math.max(0, leadsList.length - currentLeadIndex);
 
   const getLeadDiagnosis = (lead?: Lead) => {
     if (!lead) return "";
@@ -223,7 +234,15 @@ export default function DialerWorkspace() {
 
   const fetchProductCounts = async () => {
     try {
-      const { data } = await supabase.from("leads").select("produto").eq("status", "pendente");
+      const { data, count } = await supabase
+        .from("leads")
+        .select("produto", { count: "exact" })
+        .eq("status", "pendente");
+      
+      if (typeof count === "number") {
+        setTotalPendingCount(count);
+      }
+
       if (data) {
         let fgts = 0, inss = 0, consignado = 0;
         data.forEach(item => {
@@ -244,7 +263,7 @@ export default function DialerWorkspace() {
     }
   };
 
-  // Algoritmo Fisher-Yates para embaralhar a lista aleatoriamente
+  // Algoritmo Fisher-Yates para embaralhar a lista aleatoriamente (fallback)
   const shuffleArray = <T,>(array: T[]): T[] => {
     const arr = [...array];
     for (let i = arr.length - 1; i > 0; i--) {
@@ -257,18 +276,37 @@ export default function DialerWorkspace() {
   const fetchQueue = async (filter: "all" | "fgts" | "inss" | "consignado" = productFilter) => {
     setIsLoadingQueue(true);
     try {
-      let query = supabase.from("leads").select("*").eq("status", "pendente");
-      if (filter === "fgts") query = query.ilike("produto", "%fgts%");
-      else if (filter === "inss") query = query.or("produto.ilike.%inss%,produto.ilike.%bpc%,produto.ilike.%loas%");
-      else if (filter === "consignado") query = query.ilike("produto", "%consignado%");
-      const { data } = await query.order("id", { ascending: true }).limit(500);
-      if (data) {
-        // Modo Geral: sobe a lista 100% aleatória misturando FGTS, INSS e Consignado
-        // Modo Específico: mantém focado na carteira selecionada
-        const finalQueue = filter === "all" ? shuffleArray(data) : data;
-        setLeadsList(finalQueue);
+      // 1. Tenta atomicamente obter e travar o próximo lead livre (FOR UPDATE SKIP LOCKED)
+      const { data: rpcData, error: rpcError } = await supabase.rpc("obter_proximo_lead_disponivel", {
+        p_produto: filter === "all" ? null : filter
+      });
+
+      if (!rpcError && rpcData) {
+        const queue = Array.isArray(rpcData) ? rpcData : [rpcData];
+        setLeadsList(queue);
         setCurrentLeadIndex(0);
+      } else {
+        if (rpcError) {
+          console.warn("Aviso na RPC de fila atômica; executando fallback resiliente:", rpcError.message);
+        }
+        // Fallback resiliente caso a migration da RPC ainda não tenha sido aplicada
+        let query = supabase.from("leads").select("*").eq("status", "pendente");
+        if (filter === "fgts") query = query.ilike("produto", "%fgts%");
+        else if (filter === "inss") query = query.or("produto.ilike.%inss%,produto.ilike.%bpc%,produto.ilike.%loas%");
+        else if (filter === "consignado") query = query.ilike("produto", "%consignado%");
+        const { data } = await query.order("tentativas", { ascending: true }).order("id", { ascending: true }).limit(20);
+        if (data && data.length > 0) {
+          const finalQueue = filter === "all" ? shuffleArray(data) : data;
+          setLeadsList(finalQueue);
+          setCurrentLeadIndex(0);
+        } else {
+          setLeadsList([]);
+          setCurrentLeadIndex(0);
+        }
       }
+      fetchProductCounts();
+    } catch (err) {
+      console.error("Erro ao sincronizar fila de discagem:", err);
     } finally {
       setIsLoadingQueue(false);
     }
@@ -291,10 +329,11 @@ export default function DialerWorkspace() {
       const blocked = new Set<string>();
       (data || []).forEach((item: any) => {
         if (item.telefone) {
-          const digits = String(item.telefone).replace(/\D/g, "");
-          if (digits) {
-            blocked.add(digits);
-            blocked.add(digits.startsWith("55") ? digits.slice(2) : `55${digits}`);
+          const raw = String(item.telefone).replace(/\D/g, "");
+          if (raw) {
+            blocked.add(raw);
+            blocked.add(raw.replace(/^55/, ""));
+            if (!raw.startsWith("55")) blocked.add("55" + raw);
           }
         }
         if (item.cpf) {
@@ -477,6 +516,7 @@ export default function DialerWorkspace() {
         softphoneRef.current.disconnect();
       }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Recarrega conversas do WhatsApp quando muda o lead
@@ -487,6 +527,7 @@ export default function DialerWorkspace() {
     } else {
       setWhatsappInteractions([]);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeLead?.id]);
 
   useEffect(() => {
@@ -524,6 +565,7 @@ export default function DialerWorkspace() {
       const t = setTimeout(() => setAutoNextCountdown(c => (c !== null ? c - 1 : null)), 1000);
       return () => clearTimeout(t);
     } else { setAutoNextCountdown(null); triggerCall(); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoNextCountdown]);
 
   const formatTime = (secs: number) => {
@@ -538,7 +580,7 @@ export default function DialerWorkspace() {
     return d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
   };
 
-  // Disparo da Chamada: WebRTC nativo ou Ponte Smartphone
+  // Disparo da Chamada: WebRTC nativo ou Ponte Smartphone com bloqueio DND intransponível
   const triggerCall = async (customNumber?: string) => {
     // Não disca enquanto a lista NPO não foi validada com sucesso.
     if (!customNumber && dndStatus !== "ready") {
@@ -548,17 +590,24 @@ export default function DialerWorkspace() {
       return;
     }
 
-    // Bloqueia também o disparo automático para contatos Não Perturbe.
-    if (!customNumber && isDndBlocked) {
-      setCallStatus("idle");
-      setAutoNextCountdown(null);
-      window.alert("Ligação bloqueada: este contato está na lista Não Perturbe (DND).");
-      return;
-    }
-
     const targetNumber = customNumber || activeLead?.telefone;
     const normalizedNumber = normalizeBrazilPhone(targetNumber);
     if (!normalizedNumber) return;
+
+    // Verificação estrita de conformidade Não Perturbe (DND)
+    const cleanTarget = targetNumber.replace(/\D/g, "");
+    const cleanWithout55 = cleanTarget.replace(/^55/, "");
+    if (
+      dndBlockedSet.has(cleanTarget) ||
+      dndBlockedSet.has(cleanWithout55) ||
+      dndBlockedSet.has("55" + cleanWithout55) ||
+      (!customNumber && isDndBlocked)
+    ) {
+      setCallStatus("idle");
+      setAutoNextCountdown(null);
+      alert("🚫 Bloqueio DND Ativo: Este número consta na Lista Não Perturbe e não pode ser discado.");
+      return;
+    }
 
     setCallStatus("calling");
     if (softphoneMode === "webrtc" && softphoneRef.current && sipRegStatus === "registered") {
@@ -572,6 +621,10 @@ export default function DialerWorkspace() {
   };
 
   const handleStartCall = () => {
+    if (isDndBlocked) {
+      alert("🚫 Bloqueio DND: Este contato está cadastrado no Não Perturbe e a discagem é proibida.");
+      return;
+    }
     setAutoNextCountdown(null);
     void triggerCall();
   };
@@ -604,44 +657,86 @@ export default function DialerWorkspace() {
   };
 
   const handleDisposition = async (status: string) => {
-    if (!activeLead?.id) return;
+    if (!activeLead?.id || isSavingDisposition) return;
     if (status === "Retorno") { setShowScheduleModal(true); return; }
     await saveCallRecord(status);
   };
 
   const saveCallRecord = async (status: string, notes?: string) => {
-    if (!activeLead?.id) return;
-    const duracaoFinal = callDurationRef.current || duration;
-    const { error: historyError } = await supabase.from("historico_ligacoes").insert({
-      lead_id: activeLead.id,
-      tabulacao: notes ? `${status} — ${notes}` : status,
-      duracao_segundos: duracaoFinal
-    });
-    if (historyError) {
-      console.error("Falha ao salvar histórico da ligação:", historyError);
-      window.alert("Não foi possível salvar o histórico. O lead foi mantido na fila para evitar perda do atendimento.");
-      return;
+    if (!activeLead?.id || isSavingDisposition) return;
+    setIsSavingDisposition(true);
+    try {
+      const duracaoFinal = callDurationRef.current || duration;
+      const currentAttempts = (activeLead as any).tentativas || 0;
+      const nextAttempts = currentAttempts + 1;
+
+      // 1. Grava no histórico de chamadas com verificação de erro
+      const { error: historyError } = await supabase.from("historico_ligacoes").insert({
+        lead_id: activeLead.id,
+        tabulacao: notes ? `${status} — ${notes}` : status,
+        duracao_segundos: duracaoFinal,
+        observacao: notes || null
+      });
+
+      if (historyError) {
+        console.error("Falha ao salvar histórico da ligação:", historyError);
+        window.alert("Não foi possível salvar o histórico da chamada: " + historyError.message);
+        return;
+      }
+
+      let etapaCrm = "finalizado";
+      let nextStatus = "finalizado";
+
+      // 2. Classificação de etapa e status com reciclagem inteligente de fila
+      if (status === "Contrato") {
+        etapaCrm = "contrato";
+        nextStatus = "qualificado";
+      } else if (status === "Proposta") {
+        etapaCrm = "proposta";
+        nextStatus = "qualificado";
+      } else if (status === "Simulação") {
+        etapaCrm = "simulacao";
+        nextStatus = "qualificado";
+      } else if (status === "Interessado") {
+        etapaCrm = "contato";
+        nextStatus = "qualificado";
+      } else if (status === "Retorno") {
+        etapaCrm = "retorno";
+        nextStatus = "pendente";
+      } else if (status === "Pulado") {
+        etapaCrm = activeLead.etapa_crm || "novo";
+        nextStatus = "pendente";
+      } else if (["Não atendeu", "Ocupado", "Caixa Postal", "Sem Contato"].includes(status)) {
+        etapaCrm = "tentativa_contato";
+        // Permite até 4 tentativas antes de descartar o lead
+        nextStatus = nextAttempts < 4 ? "pendente" : "finalizado";
+      } else {
+        etapaCrm = "perdido";
+        nextStatus = "finalizado";
+      }
+
+      // 3. Atualização no banco com validação explícita de erro
+      const { data: updatedLead, error: leadError } = await supabase.from("leads").update({
+        status: nextStatus,
+        etapa_crm: etapaCrm,
+        ultima_tabulacao: status,
+        tentativas: nextAttempts,
+        updated_at: new Date().toISOString()
+      }).eq("id", activeLead.id).select("id").maybeSingle();
+
+      if (leadError || !updatedLead) {
+        console.error("Falha ao atualizar lead:", leadError);
+        window.alert("O histórico foi salvo, mas não foi possível atualizar o lead. Erro: " + (leadError?.message || "Registro não localizado."));
+        return;
+      }
+
+      handleNextLead();
+    } catch (err: any) {
+      console.error("Erro inesperado ao registrar chamada:", err);
+      alert("Erro ao salvar tabulação: " + (err?.message || "Tente novamente"));
+    } finally {
+      setIsSavingDisposition(false);
     }
-
-    let etapaCrm = "finalizado";
-    if (status === "Contrato") etapaCrm = "contrato";
-    else if (status === "Proposta") etapaCrm = "proposta";
-    else if (status === "Simulação") etapaCrm = "simulacao";
-    else if (status === "Interessado") etapaCrm = "contato";
-
-    const { data: updatedLead, error: leadError } = await supabase
-      .from("leads")
-      .update({ status: "finalizado", etapa_crm: etapaCrm, ultima_tabulacao: status, tentativas: 1 })
-      .eq("id", activeLead.id)
-      .select("id")
-      .maybeSingle();
-
-    if (leadError || !updatedLead) {
-      console.error("Falha ao atualizar lead após a ligação:", leadError);
-      window.alert("O histórico foi salvo, mas não foi possível atualizar o lead. Ele permanecerá nesta tela para conferência.");
-      return;
-    }
-    handleNextLead();
   };
 
   const handleNextLead = () => {
@@ -651,27 +746,60 @@ export default function DialerWorkspace() {
     if (currentLeadIndex + 1 < leadsList.length) {
       setCurrentLeadIndex(curr => curr + 1);
       if (isPowerDialing) setAutoNextCountdown(2);
-    } else fetchQueue();
+    } else {
+      fetchQueue(productFilter);
+      if (isPowerDialing) setAutoNextCountdown(2);
+    }
   };
 
   const handleQualifySdr = async () => {
-    if (!activeLead) return;
-    await supabase.from("leads").update({ etapa_crm: "esteira_docs", status: "qualificado", ultima_tabulacao: "Qualificado SDR" }).eq("id", activeLead.id);
-    await supabase.from("historico_ligacoes").insert({ lead_id: activeLead.id, tabulacao: "Qualificado SDR", duracao_segundos: duration });
-    const cleanNumber = activeLead.telefone.replace(/\D/g, "");
-    const rawMargem = (activeLead.margem_disponivel || "").trim();
-    const isMargemZero = !rawMargem || rawMargem === "R$ 0,00" || rawMargem === "0";
-    const valorMsg = isMargemZero ? "condição especial aprovada" : `margem liberada de ${rawMargem}`;
-    const msg = `Olá, ${activeLead.nome}! Sou o Adriel da A&K Soluções Financeiras. Sua simulação de crédito pelo ${activeLead.banco || "banco parceiro"} com ${valorMsg} foi qualificada com sucesso! Para darmos andamento na liberação direta na sua conta, pode me enviar uma foto do seu documento (RG ou CNH)?`;
-    window.open(`https://wa.me/55${cleanNumber}?text=${encodeURIComponent(msg)}`, "_blank");
-    handleNextLead();
+    if (!activeLead || isSavingDisposition) return;
+    setIsSavingDisposition(true);
+    try {
+      const { error } = await supabase.from("leads").update({
+        etapa_crm: "esteira_docs",
+        status: "qualificado",
+        ultima_tabulacao: "Qualificado SDR",
+        updated_at: new Date().toISOString()
+      }).eq("id", activeLead.id);
+
+      if (error) {
+        alert("Erro ao qualificar lead: " + error.message);
+        return;
+      }
+
+      await supabase.from("historico_ligacoes").insert({
+        lead_id: activeLead.id,
+        tabulacao: "Qualificado SDR",
+        duracao_segundos: duration
+      });
+
+      const cleanNumber = activeLead.telefone.replace(/\D/g, "");
+      const rawMargem = (activeLead.margem_disponivel || "").trim();
+      const isMargemZero = !rawMargem || rawMargem === "R$ 0,00" || rawMargem === "0";
+      const valorMsg = isMargemZero ? "condição especial aprovada" : `margem liberada de ${rawMargem}`;
+      const msg = `Olá, ${activeLead.nome}! Sou o Adriel da A&K Soluções Financeiras. Sua simulação de crédito pelo ${activeLead.banco || "banco parceiro"} com ${valorMsg} foi qualificada com sucesso! Para darmos andamento na liberação direta na sua conta, pode me enviar uma foto do seu documento (RG ou CNH)?`;
+      window.open(`https://wa.me/55${cleanNumber}?text=${encodeURIComponent(msg)}`, "_blank");
+      handleNextLead();
+    } catch (err: any) {
+      alert("Erro ao qualificar: " + (err?.message || "Erro desconhecido"));
+    } finally {
+      setIsSavingDisposition(false);
+    }
   };
 
   const confirmScheduleReturn = async () => {
-    if (!activeLead?.id || !scheduleDate) { alert("Selecione a data do retorno."); return; }
+    if (!activeLead?.id || !scheduleDate || isSavingDisposition) {
+      alert("Selecione a data do retorno.");
+      return;
+    }
     const fullDate = `${scheduleDate}T${scheduleTime || "10:00"}:00`;
-    await supabase.from("retornos").insert({ lead_id: activeLead.id, data_hora: new Date(fullDate).toISOString(), observacao: scheduleNotes || "Retorno agendado pelo operador", concluido: false });
-    await supabase.from("leads").update({ etapa_crm: "retorno" }).eq("id", activeLead.id);
+    await supabase.from("retornos").insert({
+      lead_id: activeLead.id,
+      data_hora: new Date(fullDate).toISOString(),
+      observacao: scheduleNotes || "Retorno agendado pelo operador",
+      concluido: false
+    });
     setShowScheduleModal(false);
     await saveCallRecord("Retorno", scheduleNotes);
     setScheduleNotes("");
@@ -1094,7 +1222,7 @@ export default function DialerWorkspace() {
                       </button>
                     </div>
                     <p className="text-xs font-medium leading-tight text-amber-950">
-                      "{renderScriptText(OBJECTION_LIST.find(o => o.id === activeObjection)?.resposta || "")}"
+                      &quot;{renderScriptText(OBJECTION_LIST.find(o => o.id === activeObjection)?.resposta || "")}&quot;
                     </p>
                   </div>
                 )}
@@ -1123,7 +1251,7 @@ export default function DialerWorkspace() {
                       <p className={`text-[11px] sm:text-xs font-medium leading-snug ${
                         step.color === "blue" ? "text-blue-950" : step.color === "emerald" ? "text-emerald-950" : "text-slate-800"
                       }`}>
-                        "{renderScriptText(step.text)}"
+                        &quot;{renderScriptText(step.text)}&quot;
                       </p>
                     </div>
                   ))}
@@ -1337,20 +1465,24 @@ export default function DialerWorkspace() {
               <>
                 <button
                   onClick={handleQualifySdr}
-                  className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-2 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 shadow-xs transition cursor-pointer"
+                  disabled={isSavingDisposition}
+                  className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white py-2 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 shadow-xs transition cursor-pointer"
                 >
                   <Check size={14} className="stroke-[3]" />
-                  <span>Qualificar SDR ➔ Esteira</span>
+                  <span>{isSavingDisposition ? "Salvando..." : "Qualificar SDR ➔ Esteira"}</span>
                 </button>
 
                 <button
                   onClick={handleStartCall}
-                  className={`w-full py-3.5 rounded-xl text-white flex items-center justify-center gap-2 font-black shadow-sm hover:brightness-105 transition-all cursor-pointer ${
-                    isDndBlocked ? "bg-amber-500 hover:bg-amber-600" : "bg-blue-600 hover:bg-blue-700"
+                  disabled={isDndBlocked}
+                  className={`w-full py-3.5 rounded-xl text-white flex items-center justify-center gap-2 font-black shadow-sm transition-all ${
+                    isDndBlocked
+                      ? "bg-slate-700 opacity-60 cursor-not-allowed"
+                      : "bg-blue-600 hover:bg-blue-700 hover:brightness-105 cursor-pointer shadow-blue-500/20"
                   }`}
                 >
                   <PhoneCall size={18} />
-                  <span className="text-xs uppercase tracking-wider">{isDndBlocked ? "Chamar (DND!)" : "Ligar Agora"}</span>
+                  <span className="text-xs uppercase tracking-wider">{isDndBlocked ? "🚫 Bloqueado (Não Perturbe)" : "Ligar Agora"}</span>
                 </button>
               </>
             )}
@@ -1385,7 +1517,7 @@ export default function DialerWorkspace() {
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
                     <span>Em Conversação</span>
                   </div>
-                  <CallTimerDisplay onTick={useCallback((secs: number) => { callDurationRef.current = secs; }, [])} />
+                  <CallTimerDisplay onTick={handleCallTimerTick} />
 
                   <div className="mt-1 flex items-center justify-center gap-1 text-[9px] text-slate-400 font-semibold">
                     <Radio size={11} className="text-emerald-400" />
@@ -1431,10 +1563,11 @@ export default function DialerWorkspace() {
                 <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1 text-center">Classificar Resultado</span>
                 <button
                   onClick={() => handleDisposition("Contrato")}
-                  className="w-full text-center px-3 py-2 border rounded-xl font-black text-xs transition hover:brightness-95 cursor-pointer bg-emerald-500 text-white shadow-xs flex justify-center items-center gap-1.5"
+                  disabled={isSavingDisposition}
+                  className="w-full text-center px-3 py-2 border rounded-xl font-black text-xs transition hover:brightness-95 disabled:opacity-50 cursor-pointer bg-emerald-500 text-white shadow-xs flex justify-center items-center gap-1.5"
                 >
                   <Check size={14} className="stroke-[3]" />
-                  <span>✅ Contrato Fechado</span>
+                  <span>{isSavingDisposition ? "Registrando..." : "✅ Contrato Fechado"}</span>
                 </button>
                 <div className="grid grid-cols-2 gap-1.5">
                   {[
@@ -1448,14 +1581,16 @@ export default function DialerWorkspace() {
                     <button
                       key={status}
                       onClick={() => handleDisposition(status)}
-                      className={`text-left px-2 py-1.5 border rounded-lg font-medium text-[11px] truncate transition hover:brightness-95 cursor-pointer ${cls}`}
+                      disabled={isSavingDisposition}
+                      className={`text-left px-2 py-1.5 border rounded-lg font-medium text-[11px] truncate transition hover:brightness-95 disabled:opacity-50 cursor-pointer ${cls}`}
                     >
                       {label}
                     </button>
                   ))}
                   <button
                     onClick={() => handleDisposition("Sem perfil")}
-                    className="col-span-2 text-center px-2 py-1.5 border rounded-lg font-medium text-[11px] transition hover:brightness-95 cursor-pointer bg-slate-50 text-slate-500 border-slate-200"
+                    disabled={isSavingDisposition}
+                    className="col-span-2 text-center px-2 py-1.5 border rounded-lg font-medium text-[11px] transition hover:brightness-95 disabled:opacity-50 cursor-pointer bg-slate-50 text-slate-500 border-slate-200"
                   >
                     ⚠️ Sem Perfil / Saldo
                   </button>
@@ -1468,10 +1603,11 @@ export default function DialerWorkspace() {
           {callStatus === "idle" && (
             <button
               onClick={() => saveCallRecord("Pulado")}
-              className="w-full py-1.5 text-slate-400 hover:text-slate-600 text-[11px] font-semibold flex items-center justify-center gap-1.5 transition border-t border-slate-100 pt-2 cursor-pointer shrink-0"
+              disabled={isSavingDisposition}
+              className="w-full py-1.5 text-slate-400 hover:text-slate-600 disabled:opacity-50 text-[11px] font-semibold flex items-center justify-center gap-1.5 transition border-t border-slate-100 pt-2 cursor-pointer shrink-0"
             >
               <FastForward size={12} />
-              <span>Pular Lead</span>
+              <span>{isSavingDisposition ? "Pulando..." : "Pular Lead"}</span>
             </button>
           )}
         </div>

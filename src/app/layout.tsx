@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import AppShell from "@/components/AppShell";
 import AuthGuard from "@/components/AuthGuard";
+import CookieBanner from "@/components/CookieBanner";
 
 export const viewport: Viewport = {
   width: "device-width",
@@ -66,6 +67,7 @@ export default function RootLayout({
             {children}
           </AppShell>
         </AuthGuard>
+        <CookieBanner />
       </body>
     </html>
   );

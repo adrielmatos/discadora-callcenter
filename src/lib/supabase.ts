@@ -7,7 +7,7 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "eyJhbGciOi
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 // Chave administrativa com privilégios de service_role (bypasses RLS para webhooks e tarefas de sistema)
-const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY;
 
 if (!serviceRoleKey && typeof window === "undefined" && process.env.NODE_ENV === "production") {
   console.warn("[Supabase Security Warning] SUPABASE_SERVICE_ROLE_KEY não configurada no ambiente de produção.");
@@ -26,8 +26,10 @@ export function getSupabaseAdmin() {
   });
 }
 
-export const supabaseAdmin = serviceRoleKey 
+// Não degradar silenciosamente para o cliente público: rotas administrativas
+// devem falhar explicitamente se a chave service_role não estiver configurada.
+export const supabaseAdmin = serviceRoleKey
   ? createClient(supabaseUrl, serviceRoleKey, {
       auth: { persistSession: false, autoRefreshToken: false }
     })
-  : supabase;
+  : null;

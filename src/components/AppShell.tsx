@@ -4,7 +4,7 @@ import React from "react";
 import { usePathname } from "next/navigation";
 import Sidebar from "@/components/Sidebar";
 
-const PUBLIC_ROUTES = ["/", "/login", "/download-extensao"];
+const PUBLIC_ROUTES = ["/", "/login", "/download-extensao", "/privacidade", "/termos"];
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();

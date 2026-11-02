@@ -16,6 +16,7 @@ export default function TelefoniaPage() {
   const [protocol, setProtocol] = useState("WSS");
   const [saved, setSaved] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [isAuthorized, setIsAuthorized] = useState<boolean | null>(null);
 
   // Estados de Diagnóstico & Teste
   const [testStatus, setTestStatus] = useState<"idle" | "testing" | "success" | "error">("idle");
@@ -24,6 +25,23 @@ export default function TelefoniaPage() {
   const [micStatus, setMicStatus] = useState<"idle" | "granted" | "denied">("idle");
 
   useEffect(() => {
+    supabase.auth.getUser().then(async ({ data: { user } }) => {
+      if (user?.email) {
+        const { data: op } = await supabase
+          .from("operadores_app")
+          .select("perfil")
+          .eq("email", user.email)
+          .maybeSingle();
+
+        if (op && (op.perfil === "proprietario" || op.perfil === "admin" || op.perfil === "gestor")) {
+          setIsAuthorized(true);
+        } else {
+          setIsAuthorized(false);
+        }
+      } else {
+        setIsAuthorized(false);
+      }
+    });
     fetchConfig();
   }, []);
 
@@ -146,6 +164,30 @@ export default function TelefoniaPage() {
       setMicStatus("denied");
     }
   };
+
+  if (isAuthorized === false) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center p-8 bg-slate-50 text-slate-800 text-center">
+        <div className="max-w-md bg-white p-8 rounded-3xl border border-slate-200 shadow-lg space-y-4">
+          <div className="w-14 h-14 mx-auto rounded-2xl bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-600">
+            <Shield size={28} />
+          </div>
+          <h2 className="text-lg font-bold text-slate-900">Configuração Restrita</h2>
+          <p className="text-xs text-slate-500 leading-relaxed">
+            As credenciais de tronco SIP, senhas e portas de PABX são restritas a Gestores e Administradores.
+            Como operador, suas chamadas são disparadas automaticamente pelo Discador.
+          </p>
+          <a
+            href="/dialer"
+            className="inline-flex items-center justify-center gap-2 w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-xs transition"
+          >
+            <Phone size={14} />
+            <span>Ir para o Discador de Chamadas</span>
+          </a>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex-1 flex flex-col h-full bg-[#f8fafc] text-slate-900">

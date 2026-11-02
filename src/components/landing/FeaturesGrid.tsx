@@ -1,3 +1,4 @@
+import Image from "next/image";
 import { 
   Smartphone, 
   Workflow, 
@@ -109,13 +110,14 @@ export default function FeaturesGrid({ onOpenDemoModal }: FeaturesGridProps) {
               >
                 {/* Visual Preview Header */}
                 <div className="relative aspect-[16/9] w-full bg-navy-950 overflow-hidden border-b border-navy-800">
-                  <img
+                  <Image
                     src={feature.image}
                     alt={feature.title}
-                    className="w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-500"
-                    loading="lazy"
+                    fill
+                    sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                    className="object-cover object-top group-hover:scale-105 transition-transform duration-500"
                   />
-                  <div className="absolute top-3 right-3">
+                  <div className="absolute top-3 right-3 z-10">
                     <span className="text-[11px] font-black uppercase tracking-wider px-2.5 py-1 rounded-md bg-navy-950/90 text-amber-400 border border-amber-500/30 backdrop-blur-sm">
                       {feature.badge}
                     </span>

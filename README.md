@@ -116,3 +116,8 @@ npm start
 - Sistema adequado às resoluções do Banco Central (Bacen nº 3.954/2011) e Código de Defesa do Consumidor.
 - Verificação obrigatória de Não Perturbe antes de qualquer contato ativo.
 - Proibição algorítmica de cobrança de taxas antecipadas nas respostas da IA Sofia.
+
+
+### Webhook URA — isolamento por empresa
+
+Configure `URA_WEBHOOK_SECRET` e `URA_WEBHOOK_EMPRESA_ID` no ambiente do servidor. O UUID da empresa é lido exclusivamente de `URA_WEBHOOK_EMPRESA_ID`; campos `empresa_id` enviados no corpo/query são ignorados. Envie o segredo em `X-URA-Token` ou `Authorization: Bearer ...`, nunca na URL. Para URAs de empresas diferentes, configure endpoints/segredos e deployments separados até existir um mapeamento server-side por token.

@@ -65,9 +65,7 @@ export async function logAuditEvent({
         if (session?.user) {
           if (!finalUserId) finalUserId = session.user.id;
           if (!finalEmpresaId) {
-            finalEmpresaId = (session.user.app_metadata?.empresa_id as string) || 
-              (session.user.user_metadata?.empresa_id as string) || 
-              null;
+            finalEmpresaId = (session.user.app_metadata?.empresa_id as string) || null;
           }
         }
       } catch {}

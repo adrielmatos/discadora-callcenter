@@ -21,6 +21,7 @@ export default function OmnichannelPage() {
   const [activeTab, setActiveTab] = useState<"ia" | "simulator" | "whatsapp" | "extension">("ia");
   const [loading, setLoading] = useState(true);
   const [saved, setSaved] = useState(false);
+  const [isAuthorized, setIsAuthorized] = useState<boolean | null>(null);
 
   // WhatsApp Config
   const [waMode, setWaMode] = useState<"web" | "api">("web");
@@ -30,6 +31,10 @@ export default function OmnichannelPage() {
   const [defaultMessage, setDefaultMessage] = useState(
     "Olá, [NOME]! Sou o Adriel da A&K Soluções Financeiras. Conforme conversamos, segue a sua simulação de crédito com margem de [VALOR] pelo banco [BANCO]. Ficou com alguma dúvida nas condições?"
   );
+
+  // Estado de Tenant
+  const [empresaId, setEmpresaId] = useState<string | null>(null);
+  const [configId, setConfigId] = useState<number | null>(null);
 
   // Teste de Disparo
   const [testPhone, setTestPhone] = useState("");
@@ -68,31 +73,79 @@ export default function OmnichannelPage() {
 
   // Carrega configurações reais do Supabase (Eliminando localStorage)
   useEffect(() => {
+    supabase.auth.getUser().then(async ({ data: { user } }) => {
+      if (user?.email) {
+        const { data: op } = await supabase
+          .from("operadores_app")
+          .select("perfil")
+          .eq("email", user.email)
+          .maybeSingle();
+
+        if (op && (op.perfil === "proprietario" || op.perfil === "admin" || op.perfil === "gestor")) {
+          setIsAuthorized(true);
+        } else {
+          setIsAuthorized(false);
+        }
+      } else {
+        setIsAuthorized(false);
+      }
+    });
     fetchConfig();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const fetchConfig = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from("app_configuracoes")
-        .select(`
-          wa_mode, wa_api_url, wa_api_token, wa_instance_name, wa_default_message,
-          ai_enabled, ai_name, ai_tone, ai_greeting, ai_knowledge, ai_handoff_triggers,
-          gemini_api_key, groq_api_key, empresa_nome
-        `)
-        .eq("id", 1)
-        .single();
+      let targetEmpresaId = empresaId;
+      if (!targetEmpresaId) {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user?.email) {
+          const { data: op } = await supabase
+            .from("operadores_app")
+            .select("empresa_id")
+            .eq("email", user.email)
+            .maybeSingle();
+          if (op?.empresa_id) {
+            targetEmpresaId = op.empresa_id;
+            setEmpresaId(op.empresa_id);
+          }
+        }
+      }
+
+      let query = supabase.from("app_configuracoes").select(`
+        id, empresa_id, wa_mode, wa_api_url, wa_api_token, wa_instance_name, wa_default_message,
+        whatsapp_tipo, evolution_url, evolution_api_key, zapi_instancia, zapi_token,
+        ai_enabled, ai_name, ai_tone, ai_greeting, ai_knowledge, ai_handoff_triggers,
+        gemini_api_key, groq_api_key, empresa_nome
+      `);
+
+      if (targetEmpresaId) {
+        query = query.eq("empresa_id", targetEmpresaId);
+      } else {
+        query = query.order("id", { ascending: true }).limit(1);
+      }
+
+      const { data, error } = await query.maybeSingle();
 
       if (data && !error) {
-        if (data.wa_mode) setWaMode(data.wa_mode as any);
-        if (data.wa_api_url) setApiUrl(data.wa_api_url);
-        if (data.wa_api_token) setApiToken(data.wa_api_token);
-        if (data.wa_instance_name) setInstanceName(data.wa_instance_name);
+        setConfigId(data.id);
+        const resolvedMode = data.wa_mode || data.whatsapp_tipo || "web";
+        setWaMode(resolvedMode as any);
+        setApiUrl(data.wa_api_url || data.evolution_url || "");
+        setApiToken(data.wa_api_token || data.evolution_api_key || data.zapi_token || "");
+        setInstanceName(data.wa_instance_name || data.zapi_instancia || "");
         if (data.wa_default_message) setDefaultMessage(data.wa_default_message);
 
-        if (data.gemini_api_key) setGeminiApiKey(data.gemini_api_key);
-        if (data.groq_api_key) setGroqApiKey(data.groq_api_key);
+        // Mascaramento de segurança para visualização no navegador
+        if (data.gemini_api_key) {
+          const key = data.gemini_api_key;
+          setGeminiApiKey(key.length > 8 ? `${key.slice(0, 4)}••••••••${key.slice(-4)}` : "••••••••");
+        }
+        if (data.groq_api_key) {
+          const key = data.groq_api_key;
+          setGroqApiKey(key.length > 8 ? `${key.slice(0, 4)}••••••••${key.slice(-4)}` : "••••••••");
+        }
         if (data.ai_enabled !== undefined && data.ai_enabled !== null) setAiEnabled(data.ai_enabled);
         if (data.ai_name) setAiName(data.ai_name);
         if (data.ai_tone) setAiTone(data.ai_tone as any);
@@ -108,34 +161,52 @@ export default function OmnichannelPage() {
     }
   };
 
-  // Salva no banco de dados Supabase
+  // Salva no banco de dados Supabase com isolamento de tenant e sincronização de nomes de colunas
   const handleSave = async () => {
     try {
-      const { error } = await supabase
-        .from("app_configuracoes")
-        .update({
-          wa_mode: waMode,
-          wa_api_url: apiUrl.trim(),
-          wa_api_token: apiToken.trim(),
-          wa_instance_name: instanceName.trim(),
-          wa_default_message: defaultMessage,
-          gemini_api_key: geminiApiKey.trim(),
-          groq_api_key: groqApiKey.trim(),
-          ai_enabled: aiEnabled,
-          ai_name: aiName.trim(),
-          ai_tone: aiTone,
-          ai_greeting: aiGreeting,
-          ai_knowledge: aiKnowledge,
-          ai_handoff_triggers: handoffTriggers,
-          updated_at: new Date().toISOString()
-        })
-        .eq("id", 1);
+      const updatePayload: Record<string, any> = {
+        wa_mode: waMode,
+        whatsapp_tipo: waMode,
+        wa_api_url: apiUrl.trim(),
+        evolution_url: apiUrl.trim(),
+        wa_api_token: apiToken.trim(),
+        evolution_api_key: apiToken.trim(),
+        zapi_token: apiToken.trim(),
+        wa_instance_name: instanceName.trim(),
+        zapi_instancia: instanceName.trim(),
+        wa_default_message: defaultMessage,
+        ai_enabled: aiEnabled,
+        ai_name: aiName.trim(),
+        ai_tone: aiTone,
+        ai_greeting: aiGreeting,
+        ai_knowledge: aiKnowledge,
+        ai_handoff_triggers: handoffTriggers,
+        empresa_nome: aiCompany.trim(),
+        updated_at: new Date().toISOString()
+      };
 
-      if (!error) {
+      // Preserva chaves de API já salvas se o usuário não tiver digitado uma nova em texto claro
+      if (geminiApiKey.trim() && !geminiApiKey.includes("••••")) {
+        updatePayload.gemini_api_key = geminiApiKey.trim();
+      }
+      if (groqApiKey.trim() && !groqApiKey.includes("••••")) {
+        updatePayload.groq_api_key = groqApiKey.trim();
+      }
+
+      let res;
+      if (configId) {
+        res = await supabase.from("app_configuracoes").update(updatePayload).eq("id", configId);
+      } else if (empresaId) {
+        res = await supabase.from("app_configuracoes").update(updatePayload).eq("empresa_id", empresaId);
+      } else {
+        res = await supabase.from("app_configuracoes").update(updatePayload).order("id", { ascending: true }).limit(1);
+      }
+
+      if (!res.error) {
         setSaved(true);
         setTimeout(() => setSaved(false), 2500);
       } else {
-        alert("Erro ao salvar parâmetros: " + error.message);
+        alert("Erro ao salvar parâmetros: " + res.error.message);
       }
     } catch (err: any) {
       alert("Erro ao salvar: " + err.message);
@@ -174,17 +245,19 @@ export default function OmnichannelPage() {
 
       const data = await res.json();
 
-      if (data.method === "api") {
-        setTestResult({
-          success: true,
-          message: "Sucesso! Mensagem disparada em segundo plano via WhatsApp API."
-        });
-      } else if (data.waUrl) {
-        setTestResult({
-          success: true,
-          message: "Modo Nativo (Web): O link do WhatsApp foi gerado com sucesso. Clique no botão abaixo para abrir a conversa.",
-          waUrl: data.waUrl
-        });
+      if (data.success) {
+        if (data.method === "web" || data.link || data.mobileLink || data.waUrl) {
+          setTestResult({
+            success: true,
+            message: "Modo Nativo (Web): O link do WhatsApp foi gerado com sucesso. Clique no botão abaixo para abrir a conversa.",
+            waUrl: data.link || data.mobileLink || data.waUrl
+          });
+        } else {
+          setTestResult({
+            success: true,
+            message: `Sucesso! Mensagem disparada em segundo plano via API (${data.method || "Gateway"}).`
+          });
+        }
       } else {
         setTestResult({
           success: false,
@@ -260,6 +333,30 @@ export default function OmnichannelPage() {
       chatBottomRef.current?.scrollIntoView({ behavior: "smooth" });
     }
   };
+
+  if (isAuthorized === false) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center p-8 bg-slate-50 text-slate-800 text-center">
+        <div className="max-w-md bg-white p-8 rounded-3xl border border-slate-200 shadow-lg space-y-4">
+          <div className="w-14 h-14 mx-auto rounded-2xl bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-600">
+            <ShieldCheck size={28} />
+          </div>
+          <h2 className="text-lg font-bold text-slate-900">Configuração Restrita</h2>
+          <p className="text-xs text-slate-500 leading-relaxed">
+            As chaves de API da Sofia AI e as credenciais do WhatsApp são restritas a Gestores e Administradores.
+            Como operador, utilize a tela de Atendimento para conversar com os clientes.
+          </p>
+          <a
+            href="/conversas"
+            className="inline-flex items-center justify-center gap-2 w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs transition"
+          >
+            <MessageSquare size={14} />
+            <span>Ir para Conversas de Atendimento</span>
+          </a>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex-1 flex flex-col h-full bg-[#f8fafc] text-slate-900 font-sans">
@@ -466,13 +563,13 @@ export default function OmnichannelPage() {
                     </a>
                     <button
                       onClick={() => {
-                        navigator.clipboard.writeText("C:\\Users\\vinic\\.gemini\\antigravity\\scratch\\discadora-callcenter\\extensions\\sofia-whatsapp-web");
-                        alert("Caminho da pasta copiado para a área de transferência!");
+                        navigator.clipboard.writeText("sofia-whatsapp-web");
+                        alert("Nome da pasta copiado! Após descompactar o arquivo sofia-whatsapp-web.zip, selecione a pasta extraída no Chrome.");
                       }}
                       className="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-3.5 py-2.5 rounded-xl font-bold text-xs transition flex items-center justify-center gap-1.5 cursor-pointer"
                     >
                       <Copy size={14} />
-                      <span>Copiar Caminho Local</span>
+                      <span>Copiar Nome da Pasta</span>
                     </button>
                   </div>
                 </div>
@@ -502,7 +599,7 @@ export default function OmnichannelPage() {
                     </div>
                     <h4 className="text-xs font-bold text-slate-900">Ative o Modo do Desenvolvedor</h4>
                     <p className="text-[11px] text-slate-600 leading-relaxed">
-                      No canto superior direito da página de extensões, ative a chavinha chamada <strong>"Modo do desenvolvedor"</strong>.
+                      No canto superior direito da página de extensões, ative a chavinha chamada <strong>&quot;Modo do desenvolvedor&quot;</strong>.
                     </p>
                   </div>
 
@@ -512,7 +609,7 @@ export default function OmnichannelPage() {
                     </div>
                     <h4 className="text-xs font-bold text-slate-900">Carregar sem Compactação</h4>
                     <p className="text-[11px] text-slate-600 leading-relaxed">
-                      Clique no botão <strong>"Carregar sem compactação"</strong> e selecione a pasta da extensão descompactada. Pronto! O robô já estará pronto para uso.
+                      Clique no botão <strong>&quot;Carregar sem compactação&quot;</strong> e selecione a pasta da extensão descompactada. Pronto! O robô já estará pronto para uso.
                     </p>
                   </div>
                 </div>
@@ -559,7 +656,7 @@ export default function OmnichannelPage() {
                   <ul className="text-xs text-slate-600 space-y-2">
                     <li className="flex items-start gap-2">
                       <CheckCircle2 size={14} className="text-blue-500 shrink-0 mt-0.5" />
-                      <span><strong>Botão 'Minerar' no WhatsApp:</strong> Abre qualquer conversa antiga e clica em <em>Minerar</em> no topo da tela.</span>
+                      <span><strong>Botão &apos;Minerar&apos; no WhatsApp:</strong> Abre qualquer conversa antiga e clica em <em>Minerar</em> no topo da tela.</span>
                     </li>
                     <li className="flex items-start gap-2">
                       <CheckCircle2 size={14} className="text-blue-500 shrink-0 mt-0.5" />

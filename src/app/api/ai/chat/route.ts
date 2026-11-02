@@ -15,13 +15,24 @@ interface ProviderCandidate {
 // Output Guardrail para Conformidade Bacen nº 3.954/2011 e CDC Art. 39
 function sanitizeBacenReply(text: string): string {
   if (!text) return "";
+
+  // Se o texto já esclarece expressamente que NÃO cobra taxas ou depósitos, é uma resposta educativa legítima
+  const isClarification = /n[aã]o\s+(cobramos|tem|h[aá]|exigimos|pedimos)\s+(nenhuma\s+)?(taxa|dep[oó]sito|valor)/i.test(text);
+  if (isClarification) {
+    return text;
+  }
+
   const forbiddenPatterns = [
+    /(?:precisa|deve|ter[aá]\s+que|exigimos)\s+pagar\s+(?:taxa|dep[oó]sito|valor)\s+(?:antecipad|pr[eé]vi|antes)/i,
+    /(?:cobramos|exigimos)\s+taxa\s+(?:de\s+)?(?:cadastro|abertura|seguro|antecipada)/i,
+    /(?:fa[çc]a|exige-se)\s+dep[oó]sito\s+pr[eé]vio/i,
+    /pagar\s+(?:algo|valor|taxa)\s+antes\s+de\s+liberar/i,
     /taxa\s+(de\s+)?(cadastro|abertura|seguro|antecipada)/i,
-    /dep[oó]sito\s+pr[eé]vio/i,
-    /pagar\s+(algo|valor|taxa)\s+antes/i
+    /dep[oó]sito\s+pr[eé]vio/i
   ];
+
   if (forbiddenPatterns.some(pattern => pattern.test(text))) {
-    return "Nosso atendimento é 100% gratuito e não cobramos nenhuma taxa antecipada, em estrita conformidade com as normas do Banco Central. Deseja realizar sua simulação gratuita agora?";
+    return "Nosso atendimento é 100% gratuito e não cobramos nenhuma taxa antecipada, em estrita conformidade com as normas do Banco Central. O crédito é liberado integralmente na sua conta bancária. Deseja realizar sua simulação gratuita agora?";
   }
   return text;
 }
@@ -80,7 +91,7 @@ async function callGemini(
   history: ChatHistoryItem[],
   message: string
 ): Promise<{ text: string } | { error: string; status: number }> {
-  const modelCandidates = ["gemini-3.5-flash-lite", "gemini-flash-latest", "gemini-2.5-flash-lite", "gemini-1.5-flash-latest", "gemini-1.5-flash"];
+  const modelCandidates = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"];
   
   const contents: any[] = [];
   if (Array.isArray(history)) {
@@ -198,7 +209,9 @@ export async function POST(req: NextRequest) {
     // 1. Autenticação obrigatória (usuário logado ou secret de serviço)
     const authHeader = req.headers.get("authorization");
     const token = authHeader ? authHeader.replace(/^Bearer\s+/i, "") : null;
-    const adminSecret = process.env.ADMIN_WEBHOOK_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY;
+    // A service_role key nunca deve ser aceita como token HTTP. Use um segredo
+    // dedicado, rotacionável e com escopo próprio para integrações de serviço.
+    const adminSecret = process.env.ADMIN_WEBHOOK_SECRET;
     const isServiceRole = Boolean(token && adminSecret && token === adminSecret);
 
     let authUser = null;
@@ -228,7 +241,8 @@ export async function POST(req: NextRequest) {
     }
 
     // 2. Isolamento estrito por tenant
-    let callerEmpresaId = authUser?.app_metadata?.empresa_id || authUser?.user_metadata?.empresa_id;
+    // Não confiar em user_metadata editável pelo próprio usuário para autorização.
+    let callerEmpresaId = authUser?.app_metadata?.empresa_id || null;
     if (!callerEmpresaId && authUser?.email) {
       const { data: op } = await supabase
         .from("operadores_app")
@@ -240,16 +254,25 @@ export async function POST(req: NextRequest) {
 
     const targetEmpresaId = callerEmpresaId || (isServiceRole ? empresaId : null);
 
-    // Busca configurações no banco Supabase (com suporte a isolamento por empresa)
-    let configQuery = supabase
-      .from("app_configuracoes")
-      .select("gemini_api_key, groq_api_key, ai_knowledge, ai_name, empresa_nome, ai_handoff_triggers");
-    
-    if (targetEmpresaId) {
-      configQuery = configQuery.eq("empresa_id", targetEmpresaId);
+    // Falhar fechado: nenhuma consulta de configuração pode ficar sem escopo de empresa.
+    if (!targetEmpresaId) {
+      return NextResponse.json(
+        { error: "Empresa não identificada para este atendimento." },
+        { status: 403 }
+      );
     }
 
-    const { data: config } = await configQuery.limit(1).maybeSingle();
+    const { data: config, error: configError } = await supabase
+      .from("app_configuracoes")
+      .select("gemini_api_key, groq_api_key, ai_knowledge, ai_name, empresa_nome, ai_handoff_triggers")
+      .eq("empresa_id", targetEmpresaId)
+      .limit(1)
+      .maybeSingle();
+
+    if (configError) {
+      console.error("[IA Sofia] Falha ao consultar configuração da empresa:", configError);
+      return NextResponse.json({ error: "Não foi possível carregar a configuração do atendimento." }, { status: 502 });
+    }
 
     const effectiveCompany = company || config?.empresa_nome || "A&K Soluções Financeiras";
     const effectiveName = agentName || config?.ai_name || "Sofia";
@@ -426,7 +449,7 @@ ESTRATÉGIAS COMERCIAIS POR PERFIL:
 
     let syncResult = null;
     if (clientPhone) {
-      syncResult = await syncConversationToCrm(clientPhone, clientName, message, fallbackReply, false);
+      syncResult = await syncConversationToCrm(clientPhone, clientName, message, fallbackReply, false, targetEmpresaId);
     }
 
     return NextResponse.json({

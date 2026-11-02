@@ -1,5 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
-import { supabaseAdmin, supabase } from "@/lib/supabase";
+import { supabaseAdmin } from "@/lib/supabase";
+
+// Rate limiter em memória por IP (5 envios a cada 10 minutos por IP)
+const ipSubmissions = new Map<string, { count: number; resetAt: number }>();
+
+function checkRateLimit(ip: string): boolean {
+  const now = Date.now();
+  const record = ipSubmissions.get(ip);
+  if (!record || now > record.resetAt) {
+    ipSubmissions.set(ip, { count: 1, resetAt: now + 10 * 60 * 1000 });
+    return true;
+  }
+  if (record.count >= 5) {
+    return false;
+  }
+  record.count += 1;
+  return true;
+}
 
 /**
  * Captura pública de leads originados na Landing Page
@@ -7,29 +24,66 @@ import { supabaseAdmin, supabase } from "@/lib/supabase";
  */
 export async function POST(req: NextRequest) {
   try {
-    const { nome, telefone, tamanhoEquipe, mensagem } = await req.json();
+    const clientIp = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "127.0.0.1";
+    if (!checkRateLimit(clientIp)) {
+      return NextResponse.json(
+        { error: "Limite de solicitações atingido. Por favor, aguarde alguns minutos antes de enviar novamente." },
+        { status: 429 }
+      );
+    }
 
-    if (!nome || !telefone) {
+    const body = await req.json();
+    const { nome, telefone, tamanhoEquipe, mensagem, website_url, empresa_fake } = body;
+
+    // Honeypot anti-bot silencioso
+    if (website_url || empresa_fake) {
+      return NextResponse.json({ success: true, message: "Recebido com sucesso." });
+    }
+
+    if (typeof nome !== "string" || typeof telefone !== "string" || !nome.trim() || !telefone.trim()) {
       return NextResponse.json({ error: "Nome e WhatsApp são obrigatórios." }, { status: 400 });
     }
 
-    const cleanPhone = String(telefone).replace(/\D/g, "");
-    if (cleanPhone.length < 8) {
-      return NextResponse.json({ error: "Número de telefone inválido." }, { status: 400 });
+    const cleanPhone = telefone.replace(/\D/g, "");
+    const cleanDigits = cleanPhone.replace(/^55/, "");
+    if (cleanDigits.length < 10 || cleanDigits.length > 11) {
+      return NextResponse.json(
+        { error: "Número de WhatsApp inválido. Digite o DDD + número (10 ou 11 dígitos)." },
+        { status: 400 }
+      );
     }
 
-    const formattedPhone = cleanPhone.startsWith("55") ? cleanPhone : `55${cleanPhone}`;
-    const clientDb = supabaseAdmin || supabase;
+    // Validação de DDD brasileiro válido (11 a 99)
+    const ddd = parseInt(cleanDigits.substring(0, 2), 10);
+    if (isNaN(ddd) || ddd < 11 || ddd > 99) {
+      return NextResponse.json({ error: "DDD brasileiro inválido." }, { status: 400 });
+    }
 
-    // Obtém o ID da empresa interna principal (A&K Soluções)
-    const { data: internalEmp } = await clientDb
+    if (nome.trim().length > 150) {
+      return NextResponse.json({ error: "O nome deve ter no máximo 150 caracteres." }, { status: 400 });
+    }
+
+    const formattedPhone = cleanPhone.startsWith("55") ? cleanPhone : `55${cleanDigits}`;
+
+    // A captura pública precisa de credenciais administrativas explícitas
+    if (!supabaseAdmin) {
+      console.error("[Landing leads] SUPABASE_SERVICE_ROLE_KEY ausente.");
+      return NextResponse.json({ error: "Captura temporariamente indisponível. Tente novamente mais tarde." }, { status: 503 });
+    }
+    const clientDb = supabaseAdmin;
+
+    const { data: internalEmp, error: empresaError } = await clientDb
       .from("empresas")
       .select("id")
       .eq("interna", true)
       .limit(1)
       .maybeSingle();
 
-    const targetEmpresaId = internalEmp?.id || "ebe1ab22-519e-4784-8f96-e7f0d7a8c0a3";
+    if (empresaError || !internalEmp?.id) {
+      console.error("[Landing leads] Empresa comercial interna não encontrada:", empresaError);
+      return NextResponse.json({ error: "Não foi possível registrar a solicitação neste momento." }, { status: 503 });
+    }
+    const targetEmpresaId = internalEmp.id;
 
     // Utiliza a RPC SECURITY DEFINER do Supabase para persistência garantida e agendamento automático
     const { data: rpcResult, error: rpcError } = await clientDb.rpc("sync_mined_lead", {
@@ -46,11 +100,15 @@ export async function POST(req: NextRequest) {
       p_empresa_id: targetEmpresaId
     });
 
-    if (rpcError) {
-      console.warn("Aviso ao salvar lead da landing page via RPC:", rpcError);
+    if (rpcError || !rpcResult?.lead_id) {
+      console.error("[Landing leads] Falha ao persistir lead via RPC:", rpcError || "RPC não retornou lead_id");
+      return NextResponse.json(
+        { error: "Não foi possível registrar sua solicitação. Tente novamente em instantes." },
+        { status: 502 }
+      );
     }
 
-    const leadId = rpcResult?.lead_id || null;
+    const leadId = rpcResult.lead_id;
 
     return NextResponse.json({
       success: true,

@@ -1,6 +1,6 @@
 /**
  * SCRIPT DE PRÉ-AUDITORIA DE SEGURANÇA LOCAL (SHIFT-LEFT PREFLIGHT)
- * Executa antes de commits ou deploys para certificar que o código está 100% blindado.
+ * Executa verificações estáticas locais. Não substitui testes de autorização, integração ou pentest.
  */
 const fs = require('fs');
 const path = require('path');
@@ -104,7 +104,7 @@ if (hasErrors) {
   console.error('❌ PRÉ-AUDITORIA REPROVADA! Corrija os pontos acima antes de subir.');
   process.exit(1);
 } else {
-  console.log('🎉 PRÉ-AUDITORIA 100% APROVADA! Sistema blindado e pronto para deploy.');
+  console.log('✅ Verificações estáticas concluídas. Isso NÃO certifica o sistema nem substitui testes reais de segurança.');
   console.log('======================================================\n');
   process.exit(0);
 }

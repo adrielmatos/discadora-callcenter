@@ -1,4 +1,5 @@
 import { useState } from "react";
+import Image from "next/image";
 import { 
   PhoneCall, 
   Sparkles, 
@@ -195,11 +196,13 @@ export default function Hero({ onOpenDemoModal }: HeroProps) {
 
             {/* Screen Screenshot Container */}
             <div className="relative aspect-[16/9] w-full bg-navy-950 group overflow-hidden flex items-center justify-center">
-              <img
+              <Image
                 src={currentTab.image}
                 alt={currentTab.name}
-                className="w-full h-full object-contain object-top group-hover:scale-[1.01] transition-transform duration-500"
-                loading="eager"
+                fill
+                sizes="(max-width: 1024px) 100vw, 1200px"
+                className="object-contain object-top group-hover:scale-[1.01] transition-transform duration-500"
+                priority
               />
 
               {/* Bottom Info Bar Overlay */}

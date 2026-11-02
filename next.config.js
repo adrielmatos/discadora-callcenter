@@ -3,10 +3,18 @@ const nextConfig = {
   poweredByHeader: false,
   compress: true,
   eslint: {
-    ignoreDuringBuilds: true,
+    ignoreDuringBuilds: false,
   },
   experimental: {
     optimizePackageImports: ['lucide-react']
+  },
+  async redirects() {
+    return [
+      { source: '/esteira', destination: '/leads', permanent: false },
+      { source: '/automacoes', destination: '/campanhas', permanent: false },
+      { source: '/sofia', destination: '/conversas', permanent: false },
+      { source: '/ajuda', destination: '/download-extensao', permanent: false },
+    ];
   },
   async headers() {
     return [

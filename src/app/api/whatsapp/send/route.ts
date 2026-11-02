@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { timingSafeEqual } from "node:crypto";
 import { supabase } from "@/lib/supabase";
 
 /**
@@ -13,10 +14,14 @@ export async function POST(req: NextRequest) {
   try {
     const authHeader = req.headers.get("authorization");
     const token = authHeader ? authHeader.replace(/^Bearer\s+/i, "") : null;
-    const adminSecret = process.env.ADMIN_WEBHOOK_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const adminSecret = process.env.ADMIN_WEBHOOK_SECRET;
 
     let authUser = null;
-    const isInternalAuthorized = Boolean(token && adminSecret && token === adminSecret);
+    const isInternalAuthorized = Boolean(
+      token && adminSecret &&
+      Buffer.from(token).length === Buffer.from(adminSecret).length &&
+      timingSafeEqual(Buffer.from(token), Buffer.from(adminSecret))
+    );
 
     if (token && !isInternalAuthorized) {
       try {
@@ -34,12 +39,15 @@ export async function POST(req: NextRequest) {
 
     const { telefone, mensagem, lead_id, empresa_id } = await req.json();
 
-    if (!telefone || !mensagem) {
+    if (typeof telefone !== "string" || typeof mensagem !== "string" || !telefone.trim() || !mensagem.trim()) {
       return NextResponse.json({ error: "Telefone e mensagem são obrigatórios" }, { status: 400 });
+    }
+    if (mensagem.length > 4000) {
+      return NextResponse.json({ error: "A mensagem excede o limite de 4.000 caracteres." }, { status: 400 });
     }
 
     // Isolamento estrito de tenant (operador não pode enviar por outro tenant)
-    let callerEmpresaId = authUser?.app_metadata?.empresa_id || authUser?.user_metadata?.empresa_id;
+    let callerEmpresaId = authUser?.app_metadata?.empresa_id || null;
     if (!callerEmpresaId && authUser?.email) {
       const { data: op } = await supabase
         .from("operadores_app")
@@ -55,15 +63,37 @@ export async function POST(req: NextRequest) {
     }
 
     const cleanNumber = telefone.replace(/\D/g, "");
-    const formattedPhone = cleanNumber.startsWith("55") ? cleanNumber : `55${cleanNumber}`;
+    if (cleanNumber.length < 10 || cleanNumber.length > 13) {
+      return NextResponse.json({ error: "Número de telefone inválido." }, { status: 400 });
+    }
+    const formattedPhone = cleanNumber.startsWith("55") ? cleanNumber : "55" + cleanNumber;
 
-    // 1. Verificação do Não Perturbe (DND)
-    const { data: dndEntry } = await supabase
+    if (lead_id) {
+      const { data: lead, error: leadError } = await supabase
+        .from("leads")
+        .select("id")
+        .eq("id", lead_id)
+        .eq("empresa_id", targetEmpresaId)
+        .maybeSingle();
+      if (leadError) return NextResponse.json({ error: "Não foi possível validar o lead para o envio." }, { status: 502 });
+      if (!lead) return NextResponse.json({ error: "Lead não encontrado nesta empresa." }, { status: 404 });
+    }
+
+    // Falhar fechado se a lista Não Perturbe não puder ser consultada.
+    // Verifica tanto com DDI (55...) quanto sem DDI para evitar bypass de formato
+    const cleanWithoutDdi = formattedPhone.replace(/^55/, "");
+    const { data: dndEntry, error: dndError } = await supabase
       .from("lista_nao_perturbe")
       .select("id")
-      .eq("telefone", formattedPhone)
+      .or(`telefone.eq.${formattedPhone},telefone.eq.${cleanWithoutDdi}`)
       .eq("ativo", true)
+      .limit(1)
       .maybeSingle();
+
+    if (dndError) {
+      console.error("[WhatsApp] Falha ao consultar lista Não Perturbe:", dndError);
+      return NextResponse.json({ error: "Não foi possível verificar a lista Não Perturbe; envio bloqueado por segurança." }, { status: 503 });
+    }
 
     if (dndEntry) {
       return NextResponse.json({
@@ -74,13 +104,18 @@ export async function POST(req: NextRequest) {
     }
 
     // 2. Busca configurações de WhatsApp da empresa autenticada
+    // Compatibilidade bidirecional: sincroniza com wa_mode, wa_api_url, wa_api_token, wa_instance_name
     const { data: config } = await supabase
       .from("app_configuracoes")
-      .select("whatsapp_tipo, zapi_instancia, zapi_token, evolution_url, evolution_api_key")
+      .select("whatsapp_tipo, zapi_instancia, zapi_token, evolution_url, evolution_api_key, wa_mode, wa_api_url, wa_api_token, wa_instance_name")
       .eq("empresa_id", targetEmpresaId)
       .maybeSingle();
 
-    const tipo = config?.whatsapp_tipo || "web";
+    const tipo = config?.wa_mode || config?.whatsapp_tipo || "web";
+    const evolutionUrl = config?.wa_api_url || config?.evolution_url || "";
+    const evolutionApiKey = config?.wa_api_token || config?.evolution_api_key || "";
+    const zapiInstancia = config?.wa_instance_name || config?.zapi_instancia || "";
+    const zapiToken = config?.wa_api_token || config?.zapi_token || "";
 
     // MODO WEB (WhatsApp Web / Sofia Extension): Gera link wa.me para abertura assistida
     if (tipo === "web") {
@@ -118,8 +153,8 @@ export async function POST(req: NextRequest) {
     }
 
     // MODO API (Z-API)
-    if (tipo === "zapi" && config?.zapi_instancia && config?.zapi_token) {
-      const zapiUrl = `https://api.z-api.io/instances/${config.zapi_instancia}/token/${config.zapi_token}/send-messages`;
+    if (tipo === "zapi" && zapiInstancia && zapiToken) {
+      const zapiUrl = `https://api.z-api.io/instances/${zapiInstancia}/token/${zapiToken}/send-messages`;
       
       const zapiRes = await fetch(zapiUrl, {
         method: "POST",
@@ -163,14 +198,14 @@ export async function POST(req: NextRequest) {
     }
 
     // MODO EVOLUTION API
-    if (tipo === "evolution" && config?.evolution_url && config?.evolution_api_key) {
-      const evoUrl = `${config.evolution_url.replace(/\/$/, "")}/message/sendText`;
+    if (tipo === "evolution" && evolutionUrl && evolutionApiKey) {
+      const evoUrl = `${evolutionUrl.replace(/\/$/, "")}/message/sendText`;
 
       const evoRes = await fetch(evoUrl, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "apikey": config.evolution_api_key
+          "apikey": evolutionApiKey
         },
         body: JSON.stringify({
           number: formattedPhone,
