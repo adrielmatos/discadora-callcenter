@@ -11,14 +11,17 @@ import { logAuditEvent } from "@/lib/audit";
  * 3. Idempotência e registro de auditoria em cada ativação.
  */
 export async function POST(req: NextRequest) {
+  let body: any;
   try {
-    const body = await req.json();
-    if (!supabaseAdmin) {
-      console.error("[Billing Webhook] SUPABASE_SERVICE_ROLE_KEY ausente.");
-      return NextResponse.json({ error: "Processamento de cobrança temporariamente indisponível." }, { status: 503 });
-    }
-    const clientDb = supabaseAdmin;
+    body = await req.json();
+  } catch {
+    return NextResponse.json(
+      { error: "Corpo da requisição inválido ou JSON malformado." },
+      { status: 400 }
+    );
+  }
 
+  try {
     // ─── 1. Confirmação Manual pelo Painel de Controle ─────────────
     if (body.action === "confirm_manual" && body.cobranca_id) {
       const authHeader = req.headers.get("authorization");
@@ -34,10 +37,13 @@ export async function POST(req: NextRequest) {
           isAuthorized = true;
         }
       } else if (authHeader) {
+        if (!supabaseAdmin) {
+          return NextResponse.json({ error: "Processamento de cobrança indisponível." }, { status: 503 });
+        }
         const token = authHeader.replace(/^Bearer\s+/i, "");
         const { data: { user } } = await supabase.auth.getUser(token);
         if (user) {
-          const { data: op } = await clientDb
+          const { data: op } = await supabaseAdmin
             .from("operadores_app")
             .select("perfil")
             .eq("email", user.email)
@@ -55,6 +61,12 @@ export async function POST(req: NextRequest) {
           { status: 403 }
         );
       }
+
+      if (!supabaseAdmin) {
+        console.error("[Billing Webhook] SUPABASE_SERVICE_ROLE_KEY ausente.");
+        return NextResponse.json({ error: "Processamento de cobrança temporariamente indisponível." }, { status: 503 });
+      }
+      const clientDb = supabaseAdmin;
 
       const { data: cobranca, error: findError } = await clientDb
         .from("cobrancas_saas")
@@ -125,6 +137,12 @@ export async function POST(req: NextRequest) {
       if (expectedBuffer.length !== suppliedBuffer.length || !timingSafeEqual(expectedBuffer, suppliedBuffer)) {
         return NextResponse.json({ error: "Assinatura do webhook Mercado Pago inválida." }, { status: 401 });
       }
+
+      if (!supabaseAdmin) {
+        console.error("[Billing Webhook] SUPABASE_SERVICE_ROLE_KEY ausente.");
+        return NextResponse.json({ error: "Processamento de cobrança temporariamente indisponível." }, { status: 503 });
+      }
+      const clientDb = supabaseAdmin;
 
       const paymentId = body.data?.id || body.id;
 
@@ -225,6 +243,12 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "Token de webhook Asaas não autorizado ou ausente" }, { status: 401 });
       }
 
+      if (!supabaseAdmin) {
+        console.error("[Billing Webhook] SUPABASE_SERVICE_ROLE_KEY ausente.");
+        return NextResponse.json({ error: "Processamento de cobrança temporariamente indisponível." }, { status: 503 });
+      }
+      const clientDb = supabaseAdmin;
+
       const event = body.event;
       const payment = body.payment;
       const externalRef = payment.externalReference;
@@ -276,6 +300,12 @@ export async function POST(req: NextRequest) {
       if (!expectedEfiSecret || efiSecret !== expectedEfiSecret) {
         return NextResponse.json({ error: "Segredo de webhook EFI/Gerencianet inválido ou ausente." }, { status: 401 });
       }
+
+      if (!supabaseAdmin) {
+        console.error("[Billing Webhook] SUPABASE_SERVICE_ROLE_KEY ausente.");
+        return NextResponse.json({ error: "Processamento de cobrança temporariamente indisponível." }, { status: 503 });
+      }
+      const clientDb = supabaseAdmin;
 
       for (const pix of body.pix) {
         const txid = pix.txid;
