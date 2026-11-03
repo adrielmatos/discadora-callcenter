@@ -39,18 +39,14 @@ export async function POST(req: NextRequest) {
     }
 
     const rawName = (clientName || "").trim();
-    let digits = String(clientPhone || "").replace(/\D/g, "");
+    const digits = String(clientPhone || "").replace(/\D/g, "");
 
-    // Se o telefone estiver vazio ou com formato incompleto (ex: contato salvo por nome no WhatsApp)
-    if (digits.length < 8) {
-      const seed = rawName || "cliente_whatsapp";
-      let hash = 0;
-      for (let i = 0; i < seed.length; i++) {
-        hash = (hash << 5) - hash + seed.charCodeAt(i);
-        hash |= 0;
-      }
-      const posHash = Math.abs(hash) % 90000000;
-      digits = `55119${String(posHash).padStart(8, "0")}`;
+    // Rejeição estrita de telefones incompletos/inválidos (sem inventar números com DDD 11)
+    if (digits.length < 10) {
+      return NextResponse.json(
+        { error: "Número de telefone inválido ou incompleto. Abra os detalhes do contato no WhatsApp Web para obter o número real antes de minerar." },
+        { status: 422 }
+      );
     }
 
     const cleanPhone = digits;

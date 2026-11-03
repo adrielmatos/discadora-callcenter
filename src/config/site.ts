@@ -16,6 +16,58 @@ export const siteConfig = {
     { label: "Aderência a Metas", value: "3.2x", desc: "Mais propostas com anuência paga" },
   ],
 
+  screenshots: [
+    {
+      id: "dashboard",
+      title: "Painel Executivo",
+      tag: "Tempo Real",
+      desc: "Visão 360º de leads, contatos, taxas de conversão e colaboradores ativos.",
+      src: "/mockups/dashboard.png"
+    },
+    {
+      id: "dialer",
+      title: "Discador Preditivo & Softphone",
+      tag: "Zero VoIP",
+      desc: "Discagem contínua via chip celular ou WebRTC com script dinâmico e quebra de objeções ao vivo.",
+      src: "/mockups/dialer.png"
+    },
+    {
+      id: "leads",
+      title: "CRM & Funil Kanban",
+      tag: "8 Etapas",
+      desc: "Pipeline completo com filtros avançados, Sofia AI e esteira de formalização.",
+      src: "/mockups/leads.png"
+    },
+    {
+      id: "tasks",
+      title: "Tarefas & Produtividade",
+      tag: "Follow-up",
+      desc: "Gestão diária de pendências, lembretes de contato e tarefas dos operadores.",
+      src: "/mockups/tasks.png"
+    },
+    {
+      id: "retornos",
+      title: "Agenda de Retornos",
+      tag: "Sincronizada",
+      desc: "Rechamadas agendadas com disparos automáticos e integração ao WhatsApp.",
+      src: "/mockups/retornos.png"
+    },
+    {
+      id: "scripts",
+      title: "Catálogo de Scripts",
+      tag: "Multicanal",
+      desc: "Roteiros segmentados por produto (FGTS, INSS, SIAPE, Portabilidade) e argumentação rápida.",
+      src: "/mockups/scripts.png"
+    },
+    {
+      id: "resultados",
+      title: "Resultados & Métricas",
+      tag: "Performance",
+      desc: "Auditoria analítica, tempo médio de atendimento e ranking de vendas.",
+      src: "/mockups/resultados.png"
+    }
+  ],
+
   plans: [
     {
       id: "iniciante",

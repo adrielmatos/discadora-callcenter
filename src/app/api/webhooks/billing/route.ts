@@ -4,6 +4,48 @@ import { supabase, supabaseAdmin } from "@/lib/supabase";
 import { logAuditEvent } from "@/lib/audit";
 
 /**
+ * Ativação unificada de faturas e planos SaaS
+ */
+async function activatePaidSubscription(
+  clientDb: any,
+  cobrancaId: string | number,
+  gateway: string,
+  paidAmount?: number,
+  extraMeta?: Record<string, any>
+) {
+  const nowIso = new Date().toISOString();
+  await clientDb
+    .from("cobrancas_saas")
+    .update({
+      status: "paga",
+      pago_em: nowIso,
+      metodo_pagamento: gateway
+    })
+    .eq("id", cobrancaId);
+
+  const { data: cob } = await clientDb
+    .from("cobrancas_saas")
+    .select("empresa_id")
+    .eq("id", cobrancaId)
+    .maybeSingle();
+
+  if (cob?.empresa_id) {
+    await clientDb
+      .from("empresas")
+      .update({ status: "ativa", updated_at: nowIso })
+      .eq("id", cob.empresa_id);
+
+    logAuditEvent({
+      action: gateway === "manual" ? "BILLING_CONFIRMED_MANUAL" : "BILLING_CONFIRMED_WEBHOOK",
+      resource: "cobrancas_saas",
+      resourceId: String(cobrancaId),
+      empresaId: cob.empresa_id,
+      metadata: { gateway, valor: paidAmount, cobranca_id: cobrancaId, ...extraMeta }
+    });
+  }
+}
+
+/**
  * Webhook de Cobrança Multi-Gateway (Mercado Pago, Asaas, EFI/Gerencianet, Manual)
  * Segurança Hardened:
  * 1. Todos os gateways exigem token/segredo de validação estrito.
@@ -83,33 +125,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ success: true, message: "Cobrança já estava confirmada anteriormente." });
       }
 
-      // Atualiza cobrança como paga
-      await clientDb
-        .from("cobrancas_saas")
-        .update({
-          status: "paga",
-          pago_em: new Date().toISOString()
-        })
-        .eq("id", body.cobranca_id);
-
-      // Reativa a empresa cliente
-      if (cobranca.empresa_id) {
-        await clientDb
-          .from("empresas")
-          .update({
-            status: "ativa",
-            updated_at: new Date().toISOString()
-          })
-          .eq("id", cobranca.empresa_id);
-
-        logAuditEvent({
-          action: "BILLING_CONFIRMED_MANUAL",
-          resource: "cobrancas_saas",
-          resourceId: String(body.cobranca_id),
-          empresaId: cobranca.empresa_id,
-          metadata: { cobranca_id: body.cobranca_id }
-        });
-      }
+      await activatePaidSubscription(clientDb, body.cobranca_id, "manual", Number(cobranca.valor || 0));
 
       return NextResponse.json({ success: true, message: "Pagamento confirmado e empresa ativada com sucesso!" });
     }
@@ -199,29 +215,7 @@ export async function POST(req: NextRequest) {
                   return NextResponse.json({ error: "Valor pago inferior ao montante da cobrança." }, { status: 400 });
                 }
 
-                await clientDb
-                  .from("cobrancas_saas")
-                  .update({
-                    status: "paga",
-                    pago_em: new Date().toISOString(),
-                    metodo_pagamento: "mercadopago"
-                  })
-                  .eq("id", externalReference);
-
-                if (cob?.empresa_id) {
-                  await clientDb
-                    .from("empresas")
-                    .update({ status: "ativa", updated_at: new Date().toISOString() })
-                    .eq("id", cob.empresa_id);
-
-                  logAuditEvent({
-                    action: "BILLING_CONFIRMED_WEBHOOK",
-                    resource: "cobrancas_saas",
-                    resourceId: String(externalReference),
-                    empresaId: cob.empresa_id,
-                    metadata: { payment_id: paymentId, gateway: "mercadopago", valor: paidAmount }
-                  });
-                }
+                await activatePaidSubscription(clientDb, externalReference, "mercadopago", paidAmount, { payment_id: paymentId });
               }
             }
           }
@@ -262,22 +256,7 @@ export async function POST(req: NextRequest) {
             .maybeSingle();
 
           if (cob && cob.status !== "paga") {
-            await clientDb
-              .from("cobrancas_saas")
-              .update({ status: "paga", pago_em: new Date().toISOString(), metodo_pagamento: "asaas" })
-              .eq("id", externalRef);
-
-            if (cob.empresa_id) {
-              await clientDb.from("empresas").update({ status: "ativa", updated_at: new Date().toISOString() }).eq("id", cob.empresa_id);
-
-              logAuditEvent({
-                action: "BILLING_CONFIRMED_WEBHOOK",
-                resource: "cobrancas_saas",
-                resourceId: String(externalRef),
-                empresaId: cob.empresa_id,
-                metadata: { gateway: "asaas", event }
-              });
-            }
+            await activatePaidSubscription(clientDb, externalRef, "asaas", Number(payment.value || 0), { event });
           }
         }
       } else if (event === "PAYMENT_OVERDUE") {
@@ -317,22 +296,7 @@ export async function POST(req: NextRequest) {
             .maybeSingle();
 
           if (cob && cob.status !== "paga") {
-            await clientDb
-              .from("cobrancas_saas")
-              .update({ status: "paga", pago_em: new Date().toISOString(), metodo_pagamento: "pix_efi" })
-              .eq("id", txid);
-
-            if (cob.empresa_id) {
-              await clientDb.from("empresas").update({ status: "ativa", updated_at: new Date().toISOString() }).eq("id", cob.empresa_id);
-
-              logAuditEvent({
-                action: "BILLING_CONFIRMED_WEBHOOK",
-                resource: "cobrancas_saas",
-                resourceId: String(txid),
-                empresaId: cob.empresa_id,
-                metadata: { gateway: "efi_pix", txid }
-              });
-            }
+            await activatePaidSubscription(clientDb, txid, "pix_efi", Number(pix.valor || 0), { txid });
           }
         }
       }

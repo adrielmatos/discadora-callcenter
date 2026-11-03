@@ -53,7 +53,11 @@ export default function BroadcastModal({ isOpen, onClose, onSuccess, defaultEtap
   const fetchQueue = useCallback(async () => {
     setLoadingLeads(true);
     try {
-      const res = await fetch(`/api/whatsapp/broadcast?etapa=${targetEtapa}&limit=${limit}`);
+      const { data: { session } } = await supabase.auth.getSession();
+      const headers: Record<string, string> = {};
+      if (session?.access_token) headers["Authorization"] = `Bearer ${session.access_token}`;
+
+      const res = await fetch(`/api/whatsapp/broadcast?etapa=${targetEtapa}&limit=${limit}`, { headers });
       const data = await res.json();
       if (data.success && Array.isArray(data.leads)) {
         setLeads(data.leads);
@@ -115,17 +119,15 @@ export default function BroadcastModal({ isOpen, onClose, onSuccess, defaultEtap
 
       const personalizedText = buildMessage(lead);
 
-      // Abre a conversa no WhatsApp Web ou dispara mensagem
-      const waUrl = `https://web.whatsapp.com/send?phone=${lead.telefoneLimpo}&text=${encodeURIComponent(personalizedText)}`;
-      
-      // Abre a janela do WhatsApp Web oficial
-      const win = window.open(waUrl, "_blank", "width=850,height=650");
-
-      // Registra no CRM em segundo plano
+      // Dispara via API em segundo plano (ou gera link Web se API não configurada)
       try {
-        await fetch("/api/whatsapp/broadcast", {
+        const { data: { session } } = await supabase.auth.getSession();
+        const headers: Record<string, string> = { "Content-Type": "application/json" };
+        if (session?.access_token) headers["Authorization"] = `Bearer ${session.access_token}`;
+
+        const res = await fetch("/api/whatsapp/broadcast", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers,
           body: JSON.stringify({
             leadId: lead.id,
             telefone: lead.telefoneLimpo,
@@ -133,10 +135,17 @@ export default function BroadcastModal({ isOpen, onClose, onSuccess, defaultEtap
           })
         });
 
+        const data = await res.json();
+
+        // Se estiver em modo web (sem API comercial), abre no navegador
+        if (data.waUrl && !data.delivered) {
+          window.open(data.waUrl, "_blank", "width=850,height=650");
+        }
+
         setLogMessages(prev => [
           {
-            text: `[${i + 1}/${leads.length}] Enviado com sucesso para ${lead.nome} (${lead.telefoneLimpo})`,
-            success: true,
+            text: `[${i + 1}/${leads.length}] ${data.delivered ? "Enviado via API (" + (data.provider || "Gateway") + ")" : "Disparado via Web"} para ${lead.nome} (${lead.telefoneLimpo})`,
+            success: Boolean(data.success),
             time: new Date().toLocaleTimeString("pt-BR")
           },
           ...prev.slice(0, 15)

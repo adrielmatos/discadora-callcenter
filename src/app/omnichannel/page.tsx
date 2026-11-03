@@ -167,11 +167,9 @@ export default function OmnichannelPage() {
       const updatePayload: Record<string, any> = {
         wa_mode: waMode,
         whatsapp_tipo: waMode,
+        whatsapp_provider: waMode,
         wa_api_url: apiUrl.trim(),
         evolution_url: apiUrl.trim(),
-        wa_api_token: apiToken.trim(),
-        evolution_api_key: apiToken.trim(),
-        zapi_token: apiToken.trim(),
         wa_instance_name: instanceName.trim(),
         zapi_instancia: instanceName.trim(),
         wa_default_message: defaultMessage,
@@ -185,7 +183,12 @@ export default function OmnichannelPage() {
         updated_at: new Date().toISOString()
       };
 
-      // Preserva chaves de API já salvas se o usuário não tiver digitado uma nova em texto claro
+      // Preserva tokens e chaves se estiverem mascaradas no frontend
+      if (apiToken.trim() && !apiToken.includes("••••")) {
+        updatePayload.wa_api_token = apiToken.trim();
+        updatePayload.evolution_api_key = apiToken.trim();
+        updatePayload.zapi_token = apiToken.trim();
+      }
       if (geminiApiKey.trim() && !geminiApiKey.includes("••••")) {
         updatePayload.gemini_api_key = geminiApiKey.trim();
       }

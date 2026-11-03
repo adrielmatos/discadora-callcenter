@@ -80,19 +80,23 @@ export default function DndPage() {
       return;
     }
 
-    const { data } = await supabase
-      .from("lista_nao_perturbe")
-      .select("id")
-      .or(`telefone.eq.${digits},cpf.eq.${digits}`);
-
-    if (!data || data.length === 0) {
-      showFeedback(`O número/CPF ${digits} não foi encontrado na Blacklist.`, "error");
+    const sanitizedDigits = digits.replace(/\D/g, "");
+    if (!sanitizedDigits) {
+      showFeedback("Digite apenas números para o telefone ou CPF.", "error");
       return;
     }
 
-    for (const item of data) {
-      await supabase.from("lista_nao_perturbe").delete().eq("id", item.id);
+    const { data } = await supabase
+      .from("lista_nao_perturbe")
+      .select("id")
+      .or(`telefone.eq.${sanitizedDigits},cpf.eq.${sanitizedDigits}`);
+
+    if (!data || data.length === 0) {
+      showFeedback(`O número/CPF ${sanitizedDigits} não foi encontrado na Blacklist.`, "error");
+      return;
     }
+
+    await supabase.from("lista_nao_perturbe").delete().in("id", data.map(item => item.id));
 
     showFeedback(`Sucesso! ${data.length} registro(s) desbloqueado(s).`, "success");
     setQuickUnblockPhone("");
@@ -103,9 +107,7 @@ export default function DndPage() {
     if (blocked.length === 0) return;
     if (!confirm(`Atenção: deseja realmente remover TODOS os ${blocked.length} números da Blacklist?`)) return;
     
-    for (const item of blocked) {
-      await supabase.from("lista_nao_perturbe").delete().eq("id", item.id);
-    }
+    await supabase.from("lista_nao_perturbe").delete().in("id", blocked.map(b => b.id));
     showFeedback("Todos os números foram removidos da Blacklist.", "success");
     fetchDnd();
   };

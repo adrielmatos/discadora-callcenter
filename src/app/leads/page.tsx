@@ -26,6 +26,30 @@ function useDebounceValue<T>(value: T, delayMs = 250): T {
   return debouncedValue;
 }
 
+// Regras e normalizações canônicas para CRM
+const PRODUCT_INFERENCE_RULES: Array<[RegExp, string]> = [
+  [/fgts|anivers[aá]rio/, "Saque FGTS"],
+  [/bpc|loas/, "INSS BPC / LOAS"],
+  [/inss|aposentad|benefici[aá]ri/, "Consignado INSS"],
+  [/siape|servidor|federal/, "Consignado SIAPE"],
+  [/porta/, "Portabilidade"],
+  [/refin/, "Refinanciamento"],
+  [/rmc|rcc|cart[aã]o/, "Cartão Benefício"],
+];
+
+function normalizeCrmStage(stageOrStatus?: string | null): string {
+  if (!stageOrStatus) return "fila";
+  const s = stageOrStatus.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+  if (s.includes("interessad") || s.includes("quente") || s.includes("morno")) return "interessado";
+  if (s.includes("simula")) return "simulacao";
+  if (s.includes("propost")) return "proposta";
+  if (s.includes("contrat") || s.includes("fechad") || s.includes("pago") || s.includes("esteira_")) return "contrato";
+  if (s.includes("nao atendeu") || s.includes("ocupado") || s.includes("caixa") || s.includes("tentativa")) return "nao_atendeu";
+  if (s.includes("nao interessad") || s.includes("recusa") || s.includes("sem interesse")) return "nao_interessado";
+  if (s.includes("perfil") || s.includes("invalido") || s.includes("bloqueado") || s.includes("falha")) return "sem_perfil";
+  return "fila";
+}
+
 interface Lead {
   id: number;
   nome: string;
@@ -60,6 +84,7 @@ export default function LeadsCRM() {
   // Filtros de Auditoria Master
   const [empresas, setEmpresas] = useState<any[]>([]);
   const [selectedEmpresa, setSelectedEmpresa] = useState<string>("all");
+  const [operadores, setOperadores] = useState<Array<{ id: number; nome: string; role?: string }>>([]);
   const [selectedOperador, setSelectedOperador] = useState<string>("all");
   const [filterSofiaAI, setFilterSofiaAI] = useState<"all" | "sofia" | "quente">("all");
 
@@ -67,7 +92,15 @@ export default function LeadsCRM() {
     setLoading(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      const userEmpresaId = user?.app_metadata?.empresa_id || user?.user_metadata?.empresa_id;
+      let userEmpresaId = user?.app_metadata?.empresa_id || null;
+      if (!userEmpresaId && user?.email) {
+        const { data: op } = await supabase
+          .from("operadores_app")
+          .select("empresa_id")
+          .eq("email", user.email)
+          .maybeSingle();
+        userEmpresaId = op?.empresa_id || null;
+      }
 
       let query = supabase.from("leads").select("*").order("id", { ascending: false }).limit(200);
 
@@ -91,6 +124,11 @@ export default function LeadsCRM() {
     // Carrega empresas para auditoria do dono
     supabase.from("empresas").select("id, razao_social, nome_fantasia").then(({ data }) => {
       if (data) setEmpresas(data);
+    });
+
+    // Carrega lista dinâmica de operadores da operação
+    supabase.from("operadores_app").select("id, nome, role").order("nome").then(({ data }) => {
+      if (data && data.length > 0) setOperadores(data);
     });
 
     if (typeof window !== "undefined") {
@@ -147,27 +185,8 @@ export default function LeadsCRM() {
 
   const inferProduct = (extractedVal: string, fileName: string): string => {
     const combined = `${extractedVal} ${fileName}`.toLowerCase();
-    if (combined.includes("fgts") || combined.includes("aniversario") || combined.includes("aniversário")) {
-      return "Saque FGTS";
-    }
-    if (combined.includes("bpc") || combined.includes("loas")) {
-      return "INSS BPC / LOAS";
-    }
-    if (combined.includes("inss") || combined.includes("aposentad") || combined.includes("beneficiari") || combined.includes("beneficiário")) {
-      return "Consignado INSS";
-    }
-    if (combined.includes("siape") || combined.includes("servidor") || combined.includes("federal")) {
-      return "Consignado SIAPE";
-    }
-    if (combined.includes("porta") || combined.includes("portabilidade")) {
-      return "Portabilidade";
-    }
-    if (combined.includes("refin") || combined.includes("refinanciamento")) {
-      return "Refinanciamento";
-    }
-    if (combined.includes("rmc") || combined.includes("rcc") || combined.includes("cartao") || combined.includes("cartão")) {
-      return "Cartão Benefício";
-    }
+    const rule = PRODUCT_INFERENCE_RULES.find(([re]) => re.test(combined));
+    if (rule) return rule[1];
     if (extractedVal && extractedVal.trim()) return extractedVal.trim();
     return "Crédito Consignado";
   };
@@ -372,26 +391,24 @@ export default function LeadsCRM() {
     });
   }, [leads, debouncedSearchTerm, selectedEmpresa, selectedOperador, filterSofiaAI]);
 
-  // Mapa O(N) para indexação instantânea das colunas do Kanban sem filtros repetidos
+  // Mapa O(N) para indexação instantânea das colunas do Kanban com normalização canônica
   const leadsByStageMap = useMemo(() => {
     const map: Record<string, Lead[]> = {
-      "fila": [],
-      "interessado": [],
-      "simulação": [],
-      "proposta": [],
-      "contrato": [],
-      "não atendeu": [],
-      "não interessado": [],
-      "sem perfil": []
+      fila: [],
+      interessado: [],
+      simulacao: [],
+      proposta: [],
+      contrato: [],
+      nao_atendeu: [],
+      nao_interessado: [],
+      sem_perfil: []
     };
     for (const l of filteredLeads) {
-      const stage = (l.etapa_crm || (l.status === "pendente" ? "fila" : l.ultima_tabulacao || "fila")).toLowerCase();
-      if (map[stage]) {
-        map[stage].push(l);
-      } else if (stage.includes("perfil") || stage.includes("inválido")) {
-        map["sem perfil"].push(l);
+      const canonical = normalizeCrmStage(l.etapa_crm || (l.status === "pendente" ? "fila" : l.ultima_tabulacao || "fila"));
+      if (map[canonical]) {
+        map[canonical].push(l);
       } else {
-        map["fila"].push(l);
+        map.fila.push(l);
       }
     }
     return map;
@@ -541,9 +558,19 @@ export default function LeadsCRM() {
             >
               <option value="all">👥 Todos os Operadores / Carteiras</option>
               <option value="pool">⚡ Pool Geral (Livre na Fila)</option>
-              <option value="Adriel Matos Santos">👤 Adriel Matos Santos (Dono)</option>
-              <option value="Camila Rocha">👤 Camila Rocha (SDR)</option>
-              <option value="Marcos Vinicius">👤 Marcos Vinicius</option>
+              {operadores.length > 0 ? (
+                operadores.map(op => (
+                  <option key={op.id} value={op.nome}>
+                    👤 {op.nome} {op.role ? `(${op.role})` : ""}
+                  </option>
+                ))
+              ) : (
+                <>
+                  <option value="Adriel Matos Santos">👤 Adriel Matos Santos (Dono)</option>
+                  <option value="Camila Rocha">👤 Camila Rocha (SDR)</option>
+                  <option value="Marcos Vinicius">👤 Marcos Vinicius</option>
+                </>
+              )}
             </select>
           </div>
 
@@ -767,7 +794,7 @@ export default function LeadsCRM() {
           /* Visual Pipeline Kanban com todas as tabulações */
           <div className="flex-1 flex space-x-3.5 overflow-x-auto pb-4 custom-scrollbar">
             {stages.map(st => {
-              const stageKey = st.id.toLowerCase();
+              const stageKey = normalizeCrmStage(st.id);
               const stageLeads = leadsByStageMap[stageKey] || [];
 
               return (

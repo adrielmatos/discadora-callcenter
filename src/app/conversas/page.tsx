@@ -153,26 +153,44 @@ export default function ConversasPage() {
 
     const digits = (selectedLead.telefone || "").replace(/\D/g, "");
     const phone = digits.startsWith("55") ? digits : `55${digits}`;
-    if (phone.length < 12 || phone.length > 13) {
-      window.alert("Telefone inválido. Confira o número cadastrado antes de abrir o WhatsApp.");
+    if (phone.length < 10 || phone.length > 13) {
+      window.alert("Telefone inválido. Confira o número cadastrado antes de enviar.");
       return;
     }
 
     setSending(true);
     try {
-      // Abre a sessão já autenticada do operador no WhatsApp Web.
-      // Não chama API oficial, Z-API ou Evolution e não afirma que a mensagem foi entregue.
-      const waUrl = `https://web.whatsapp.com/send?phone=${phone}&text=${encodeURIComponent(text)}`;
-      const waWindow = window.open(waUrl, "_blank");
-      if (!waWindow) {
-        window.alert("O navegador bloqueou a abertura do WhatsApp. Permita pop-ups para este site e tente novamente.");
-        return;
+      const { data: { session } } = await supabase.auth.getSession();
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (session?.access_token) headers["Authorization"] = `Bearer ${session.access_token}`;
+
+      const res = await fetch("/api/whatsapp/send", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          telefone: phone,
+          mensagem: text,
+          lead_id: selectedLead.id
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok && !data.waUrl && !data.link) {
+        throw new Error(data.error || "Erro no envio.");
+      }
+
+      if (data.method === "web" || data.link || data.waUrl) {
+        const waUrl = data.link || data.waUrl || `https://web.whatsapp.com/send?phone=${phone}&text=${encodeURIComponent(text)}`;
+        const waWindow = window.open(waUrl, "_blank");
+        if (!waWindow) {
+          window.alert("O navegador bloqueou a abertura do WhatsApp. Permita pop-ups para este site.");
+        }
       }
 
       const newMsg: ChatMsg = {
         id: String(Date.now()),
         sender: "operator",
-        text: `[Link aberto no WhatsApp Web — envio não confirmado] ${text}`,
+        text: data.delivered ? text : `[WhatsApp Web] ${text}`,
         time: new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
       };
       setMessages(prev => [...prev, newMsg]);
@@ -180,14 +198,14 @@ export default function ConversasPage() {
       setIsBotActive(false);
 
       logAuditEvent({
-        action: "CHAT_WHATSAPP_LINK_OPENED",
+        action: data.delivered ? "CHAT_WHATSAPP_SENT_API" : "CHAT_WHATSAPP_LINK_OPENED",
         resource: "leads",
         resourceId: String(selectedLead.id),
-        metadata: { destinatario: selectedLead.telefone, tamanho: text.length, delivered: false }
+        metadata: { destinatario: selectedLead.telefone, tamanho: text.length, delivered: Boolean(data.delivered), provider: data.provider }
       });
-    } catch (e) {
-      console.error("Erro ao abrir WhatsApp Web:", e);
-      window.alert("Não foi possível abrir o WhatsApp Web. Verifique o navegador e tente novamente.");
+    } catch (e: any) {
+      console.error("Erro ao enviar mensagem:", e);
+      window.alert(e.message || "Não foi possível enviar a mensagem.");
     } finally {
       setSending(false);
     }

@@ -12,53 +12,21 @@ import {
   TrendingUp,
   Clock
 } from "lucide-react";
+import { siteConfig } from "@/config/site";
 
 interface HeroProps {
   onOpenDemoModal: () => void;
 }
 
-const previewTabs = [
-  {
-    id: "painel",
-    name: "Painel do Dono",
-    badge: "Visão 360º",
-    tagline: "KPIs ao vivo, fila em tempo real e gargalos do dia sem abrir planilha.",
-    image: "/mockups/01-dona-painel.png",
-    highlights: ["Fila em tempo real", "Ranking dos operadores", "Controle de pendências"],
-  },
-  {
-    id: "esteira",
-    name: "Esteira Meu INSS",
-    badge: "Anti-Cancelamento",
-    tagline: "Acompanhe cada proposta e saiba exatamente quantos dias faltam para a anuência expirar.",
-    image: "/mockups/02-crm-esteira.png",
-    highlights: ["Contagem regressiva de anuência", "Kanban por status", "Tarefas e retornos"],
-  },
-  {
-    id: "operador",
-    name: "Tela do Operador",
-    badge: "Alta Produtividade",
-    tagline: "Botão 'Próximo Lead', discagem em 1 clique pelo celular e histórico completo do cliente.",
-    image: "/mockups/11-operador-lead.png",
-    highlights: ["Zero cliques perdidos", "Dados do benefício", "Cronômetro de ligação"],
-  },
-  {
-    id: "simulador",
-    name: "Simulador de Margem",
-    badge: "Zero Recusa",
-    tagline: "Calcula a parcela máxima sobre a margem real do INSS durante a chamada.",
-    image: "/mockups/12b-operador-simulador.png",
-    highlights: ["Cálculo automático", "Bloqueia propostas inválidas", "Gera proposta pronta"],
-  },
-  {
-    id: "relatorios",
-    name: "Metas & Auditoria",
-    badge: "Gestão Ativa",
-    tagline: "Meta do dia com indicador 'Faltam N' e trilha completa de auditoria LGPD.",
-    image: "/mockups/05-relatorios-metas.png",
-    highlights: ["Meta 'Faltam N ligações'", "Aderência ao roteiro", "Horários de maior contato"],
-  },
-];
+const previewTabs = siteConfig.screenshots.map((s) => ({
+  id: s.id,
+  name: s.title,
+  badge: s.tag,
+  tagline: s.desc,
+  image: s.src,
+  route: s.id,
+  highlights: [s.tag, "Interface Nativa", "Sincronização 100% em Tempo Real"]
+}));
 
 export default function Hero({ onOpenDemoModal }: HeroProps) {
   const [activeTab, setActiveTab] = useState(previewTabs[0].id);

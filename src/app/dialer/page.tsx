@@ -107,6 +107,24 @@ const getRegionInfo = (phone?: string) => {
   return { ddd: ddd || "XX", uf: DDD_REGIONS[ddd]?.uf || "BR", regiao: DDD_REGIONS[ddd]?.regiao || "Nacional" };
 };
 
+// Regras declarativas para diagnóstico e scripts
+const DIAGNOSIS_RULES: Array<[RegExp, (bco: string) => string]> = [
+  [/fgts/, (bco) => `Saldo pré-aprovado para antecipação do Saque-Aniversário no ${bco}. Liberação via PIX em até 2 horas.`],
+  [/porta|refin/, (bco) => `Portabilidade com Troco no ${bco}. Redução de taxa + troco em dinheiro sem alterar a parcela.`],
+  [/inss|bpc|loas/, (bco) => `Beneficiário elegível a Crédito Consignado no ${bco} com taxas reduzidas e desconto direto em folha.`],
+  [/siape|servidor/, (bco) => `Servidor público com margem consignável estendida no ${bco}. Menor taxa do mercado.`],
+];
+
+const SCRIPT_MATCH_RULES: Array<[RegExp, string]> = [
+  [/bpc|loas/, "bpc|inss"],
+  [/inss/, "inss"],
+  [/fgts/, "fgts"],
+  [/porta/, "portabilidade"],
+  [/refin/, "refinanciamento"],
+  [/siape|servidor/, "siape|servidor"],
+  [/consignado/, "consignado"],
+];
+
 interface Lead {
   id: number;
   nome: string;
@@ -167,7 +185,6 @@ export default function DialerWorkspace() {
   const [currentLeadIndex, setCurrentLeadIndex] = useState(0);
   const [isPowerDialing, setIsPowerDialing] = useState(false);
   const [callStatus, setCallStatus] = useState<"idle" | "calling" | "talking" | "wrapup">("idle");
-  const [duration, setDuration] = useState(0);
   const callDurationRef = useRef<number>(0);
   const handleCallTimerTick = useCallback((secs: number) => {
     callDurationRef.current = secs;
@@ -225,11 +242,8 @@ export default function DialerWorkspace() {
     if (!lead) return "";
     const prod = (lead.produto || "").toLowerCase();
     const bco = lead.banco && lead.banco !== "Não informado" ? lead.banco : "Banco Parceiro";
-    if (prod.includes("fgts")) return `Saldo pré-aprovado para antecipação do Saque-Aniversário no ${bco}. Liberação via PIX em até 2 horas.`;
-    if (prod.includes("porta") || prod.includes("refin")) return `Portabilidade com Troco no ${bco}. Redução de taxa + troco em dinheiro sem alterar a parcela.`;
-    if (prod.includes("inss") || prod.includes("bpc") || prod.includes("loas")) return `Beneficiário elegível a Crédito Consignado no ${bco} com taxas reduzidas e desconto direto em folha.`;
-    if (prod.includes("siape") || prod.includes("servidor")) return `Servidor público com margem consignável estendida no ${bco}. Menor taxa do mercado.`;
-    return `Lead qualificado com oportunidade de crédito consignado facilitado no ${bco}. Sem consulta ao SPC/Serasa.`;
+    const rule = DIAGNOSIS_RULES.find(([re]) => re.test(prod));
+    return rule ? rule[1](bco) : `Lead qualificado com oportunidade de crédito consignado facilitado no ${bco}. Sem consulta ao SPC/Serasa.`;
   };
 
   const fetchProductCounts = async () => {
@@ -424,44 +438,51 @@ export default function DialerWorkspace() {
     }
   };
 
-  // Disparo de mensagem pelo operador direto na tela da discadora
+  // Disparo de mensagem pelo operador direto na tela da discadora (API oficial/Evolution/Z-API ou Web)
   const handleSendOperatorMessage = async (customText?: string) => {
     const msg = (customText || operatorInput).trim();
     if (!msg || !activeLead?.id || !activeLead?.telefone) return;
 
     const formattedPhone = normalizeBrazilPhone(activeLead.telefone);
     if (!formattedPhone) {
-      window.alert("Telefone inválido para abrir o WhatsApp.");
+      window.alert("Telefone inválido para envio de WhatsApp.");
       return;
     }
 
     setSendingMessage(true);
     try {
-      // O operador usa a própria sessão do WhatsApp Web; não depende de API/BSP.
-      const waWindow = window.open(
-        `https://web.whatsapp.com/send?phone=${formattedPhone}&text=${encodeURIComponent(msg)}`,
-        "_blank",
-        "noopener,noreferrer"
-      );
-      if (!waWindow) {
-        window.alert("O navegador bloqueou a abertura do WhatsApp. Permita pop-ups para este site e tente novamente.");
-        return;
+      const { data: { session } } = await supabase.auth.getSession();
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (session?.access_token) headers["Authorization"] = `Bearer ${session.access_token}`;
+
+      const res = await fetch("/api/whatsapp/send", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          telefone: formattedPhone,
+          mensagem: msg,
+          lead_id: activeLead.id
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok && !data.waUrl && !data.link) {
+        throw new Error(data.error || "Erro no envio pelo servidor.");
       }
 
-      const { error } = await supabase.from("historico_ligacoes").insert({
-        lead_id: activeLead.id,
-        tabulacao: `[WhatsApp Web - link aberto; envio não confirmado] Operador: "${msg.slice(0, 500)}"`,
-        duracao_segundos: 0
-      });
-      if (error) {
-        console.error("WhatsApp aberto, mas o histórico não foi salvo:", error);
-        window.alert("O WhatsApp foi aberto, mas não foi possível registrar o histórico no CRM.");
+      if (data.method === "web" || data.link || data.waUrl) {
+        const waLink = data.link || data.waUrl || `https://web.whatsapp.com/send?phone=${formattedPhone}&text=${encodeURIComponent(msg)}`;
+        const waWindow = window.open(waLink, "_blank", "noopener,noreferrer");
+        if (!waWindow) {
+          window.alert("O navegador bloqueou a abertura do WhatsApp. Permita pop-ups para este site.");
+        }
       }
+
       setOperatorInput("");
       await loadWhatsappHistory(activeLead.id);
-    } catch (err) {
-      console.error("Erro ao abrir WhatsApp Web:", err);
-      window.alert("Não foi possível abrir o WhatsApp Web. Verifique o navegador e tente novamente.");
+    } catch (err: any) {
+      console.error("Erro ao enviar WhatsApp:", err);
+      window.alert(err.message || "Não foi possível enviar a mensagem.");
     } finally {
       setSendingMessage(false);
     }
@@ -534,29 +555,24 @@ export default function DialerWorkspace() {
     if (!activeLead || scriptsList.length === 0) return;
     const leadProduct = (activeLead.produto || "").toLowerCase().trim();
     const leadBank = (activeLead.banco || "").toLowerCase().trim();
-    let match = null;
-    if (leadProduct.includes("bpc") || leadProduct.includes("loas")) {
-      match = scriptsList.find(s => s.produto.toLowerCase().includes("bpc") || s.produto.toLowerCase().includes("loas")) || scriptsList.find(s => s.produto.toLowerCase().includes("inss"));
-    } else if (leadProduct.includes("inss")) match = scriptsList.find(s => s.produto.toLowerCase().includes("inss"));
-    else if (leadProduct.includes("fgts")) match = scriptsList.find(s => s.produto.toLowerCase().includes("fgts"));
-    else if (leadProduct.includes("porta") || leadProduct.includes("portabilidade")) match = scriptsList.find(s => s.produto.toLowerCase().includes("portabilidade"));
-    else if (leadProduct.includes("refin")) match = scriptsList.find(s => s.produto.toLowerCase().includes("refinanciamento"));
-    else if (leadProduct.includes("siape") || leadProduct.includes("servidor")) match = scriptsList.find(s => s.produto.toLowerCase().includes("siape") || s.produto.toLowerCase().includes("servidor"));
-    else if (leadProduct.includes("consignado")) match = scriptsList.find(s => s.produto.toLowerCase().includes("consignado geral") || s.produto.toLowerCase().includes("consignado"));
+    
+    const matchedRule = SCRIPT_MATCH_RULES.find(([re]) => re.test(leadProduct));
+    let match = matchedRule ? scriptsList.find(s => new RegExp(matchedRule[1], "i").test(s.produto)) : null;
     if (!match && leadProduct) match = scriptsList.find(s => s.produto.toLowerCase().includes(leadProduct) || leadProduct.includes(s.produto.toLowerCase()));
     if (!match && leadBank && leadBank !== "não informado") match = scriptsList.find(s => s.produto.toLowerCase().includes(leadBank));
+    
     if (match) setSelectedScriptProduct(match.produto);
     else {
-      const padrao = scriptsList.find(s => s.produto.toLowerCase().includes("padrão") || s.produto.toLowerCase().includes("geral") || s.produto.toLowerCase().includes("mestre"));
+      const padrao = scriptsList.find(s => /padrão|geral|mestre/i.test(s.produto));
       setSelectedScriptProduct(padrao ? padrao.produto : (scriptsList[0]?.produto || ""));
     }
   }, [activeLead, scriptsList]);
 
+  // Duração gerenciada sem re-renderizar o dialer a cada segundo
   useEffect(() => {
-    let interval: any;
-    if (callStatus === "talking") interval = setInterval(() => setDuration(d => d + 1), 1000);
-    else setDuration(0);
-    return () => clearInterval(interval);
+    if (callStatus !== "talking") {
+      callDurationRef.current = 0;
+    }
   }, [callStatus]);
 
   useEffect(() => {
@@ -666,7 +682,7 @@ export default function DialerWorkspace() {
     if (!activeLead?.id || isSavingDisposition) return;
     setIsSavingDisposition(true);
     try {
-      const duracaoFinal = callDurationRef.current || duration;
+      const duracaoFinal = callDurationRef.current;
       const currentAttempts = (activeLead as any).tentativas || 0;
       const nextAttempts = currentAttempts + 1;
 
@@ -771,7 +787,7 @@ export default function DialerWorkspace() {
       await supabase.from("historico_ligacoes").insert({
         lead_id: activeLead.id,
         tabulacao: "Qualificado SDR",
-        duracao_segundos: duration
+        duracao_segundos: callDurationRef.current
       });
 
       const cleanNumber = activeLead.telefone.replace(/\D/g, "");

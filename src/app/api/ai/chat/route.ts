@@ -84,6 +84,29 @@ async function syncConversationToCrm(
   }
 }
 
+function parseKeys(...candidates: (string | undefined | null)[]): string[] {
+  return candidates
+    .filter(Boolean)
+    .join(",")
+    .split(/[\n,;]+/)
+    .map(k => k.trim())
+    .filter(k => k.length > 5 && !k.includes("••••"));
+}
+
+const FALLBACK_RULES: Array<[RegExp, (name: string, company: string) => string]> = [
+  [/di[aá]ria/, () => `Não trabalhamos com empréstimo na diária, apenas crédito formal autorizado pelo Banco Central. Você trabalha de carteira assinada (CLT) com saldo no FGTS ou é servidor/aposentado?`],
+  [/luz|energia|enel|cpfl|cemig/, () => `Fazemos empréstimo debitado na conta de luz sem consulta ao SPC! A conta está no seu nome e paga em dia? Se tiver saldo no FGTS, podemos fazer os dois juntos!`],
+  [/clt|carteira assinada|empresa privada/, () => `Para CLT temos a liberação dupla: antecipação do FGTS no PIX (sem mexer no seu salário e aprova negativado) + empréstimo em folha ou conta de luz para dobrar o dinheiro! Gostaria de consultar?`],
+  [/siape|federal/, () => `Atendemos servidores federais (SIAPE) com as menores taxas do mercado no consignado em folha. Gostaria de consultar sua margem disponível hoje?`],
+  [/prefeitura|municip|estado|estadual/, () => `Atendemos servidores públicos estaduais e municipais com margem consignável. Deseja que o nosso especialista verifique as condições oficiais para você?`],
+  [/documento|doc|o que precisa|quais papeis|papelada/, () => `É tudo 100% digital pelo celular, sem papelada! No geral só precisa de RG/CNH e comprovante. Para qual opção você quer consultar (FGTS, INSS, CLT ou Conta de Luz)?`],
+  [/golpe|seguro|confi[aá]vel|taxa antecipada|dep[oó]sito/, () => `Não cobramos nenhuma taxa antecipada. A contratação é 100% digital e o crédito cai direto na sua conta bancária. Posso fazer uma simulação gratuita para você?`],
+  [/taxa|juros|quanto fica|valor da parcela|quanto pago/, () => `As taxas dependem da consulta oficial da sua margem no banco. Gostaria que nosso consultor fizesse uma simulação gratuita e exata para você agora?`],
+  [/fgts|anivers[aá]rio/, () => `Antecipamos seu Saque-Aniversário do FGTS com liberação rápida no PIX e sem consulta ao SPC. Quer verificar quanto libera para você?`],
+  [/portabilidade|troco|reduzir/, () => `Com a portabilidade, reduzimos a taxa do seu contrato atual e liberamos troco em dinheiro na sua conta, mantendo sua parcela. Deseja consultar?`],
+  [/inss|bpc|loas|aposentado/, () => `Temos condições especiais de consignado para aposentados, pensionistas e BPC/LOAS. Gostaria de consultar sua margem hoje?`],
+];
+
 // Chamada à API Oficial do Google Gemini (gemini-flash-latest / 15 RPM Grátis)
 async function callGemini(
   apiKey: string,
@@ -303,40 +326,15 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // Extrai chaves Google Gemini (permite múltiplas chaves separadas por vírgula ou quebra de linha)
-    const rawGemini = [config?.gemini_api_key, process.env.GEMINI_API_KEY]
-      .filter(Boolean)
-      .join(",");
-    const geminiKeys = rawGemini
-      .split(/[\n,;]+/)
-      .map((k: string) => k.trim())
-      .filter((k: string) => k.length > 5);
-
-    // Extrai chaves Groq Cloud (permite múltiplas chaves separadas por vírgula ou quebra de linha)
-    const rawGroq = [config?.groq_api_key, process.env.GROQ_API_KEY]
-      .filter(Boolean)
-      .join(",");
-    const groqKeys = rawGroq
-      .split(/[\n,;]+/)
-      .map((k: string) => k.trim())
-      .filter((k: string) => k.length > 5);
+    // Extrai chaves Google Gemini e Groq Cloud usando helper seguro
+    const geminiKeys = parseKeys(config?.gemini_api_key, process.env.GEMINI_API_KEY);
+    const groqKeys = parseKeys(config?.groq_api_key, process.env.GROQ_API_KEY);
 
     // Monta o Pool de Provedores com Balanceamento
-    const pool: ProviderCandidate[] = [];
-    geminiKeys.forEach((key: string, idx: number) => {
-      pool.push({
-        type: "gemini",
-        key,
-        label: `Google Gemini 1.5 Flash (Chave #${idx + 1})`
-      });
-    });
-    groqKeys.forEach((key: string, idx: number) => {
-      pool.push({
-        type: "groq",
-        key,
-        label: `Groq Cloud Llama 3.1 (Chave #${idx + 1})`
-      });
-    });
+    const pool: ProviderCandidate[] = [
+      ...geminiKeys.map((key, idx) => ({ type: "gemini" as const, key, label: `Google Gemini 1.5 Flash (Chave #${idx + 1})` })),
+      ...groqKeys.map((key, idx) => ({ type: "groq" as const, key, label: `Groq Cloud Llama 3.1 (Chave #${idx + 1})` }))
+    ];
 
     const systemInstruction = `Você é ${effectiveName}, corretora de crédito sênior e consultora financeira no WhatsApp da ${effectiveCompany}.
 Sua missão é atender com simpatia, agilidade, inteligência comercial e 100% de conformidade com a legislação brasileira no WhatsApp.
@@ -381,71 +379,32 @@ ESTRATÉGIAS COMERCIAIS POR PERFIL:
       const candidates = [...pool.slice(offset), ...pool.slice(0, offset)];
 
       for (const candidate of candidates) {
-        if (candidate.type === "gemini") {
-          const result = await callGemini(candidate.key, systemInstruction, history, message);
-          if ("text" in result && result.text) {
-            const cleanText = sanitizeBacenReply(result.text);
-            let syncResult = null;
-            if (clientPhone) {
-              syncResult = await syncConversationToCrm(clientPhone, clientName, message, cleanText, false, targetEmpresaId);
-            }
-            return NextResponse.json({
-              reply: cleanText,
-              isHandoff: false,
-              source: "gemini_ai",
-              provider: candidate.label,
-              crmSync: syncResult
-            });
-          }
-          console.warn(`[Failover IA] ${candidate.label} falhou. Tentando próximo...`);
-        } else if (candidate.type === "groq") {
-          const result = await callGroq(candidate.key, systemInstruction, history, message);
-          if ("text" in result && result.text) {
-            const cleanText = sanitizeBacenReply(result.text);
-            let syncResult = null;
-            if (clientPhone) {
-              syncResult = await syncConversationToCrm(clientPhone, clientName, message, cleanText, false, targetEmpresaId);
-            }
-            return NextResponse.json({
-              reply: cleanText,
-              isHandoff: false,
-              source: "groq_ai",
-              provider: candidate.label,
-              crmSync: syncResult
-            });
-          }
-          console.warn(`[Failover IA] ${candidate.label} falhou. Tentando próximo...`);
+        const result = candidate.type === "gemini"
+          ? await callGemini(candidate.key, systemInstruction, history, message)
+          : await callGroq(candidate.key, systemInstruction, history, message);
+
+        if ("text" in result && result.text) {
+          const cleanText = sanitizeBacenReply(result.text);
+          const syncResult = clientPhone
+            ? await syncConversationToCrm(clientPhone, clientName, message, cleanText, false, targetEmpresaId)
+            : null;
+          return NextResponse.json({
+            reply: cleanText,
+            isHandoff: false,
+            source: `${candidate.type}_ai`,
+            provider: candidate.label,
+            crmSync: syncResult
+          });
         }
+        console.warn(`[Failover IA] ${candidate.label} falhou. Tentando próximo...`);
       }
     }
 
     // Fallback inteligente contextual caso nenhuma chave esteja configurada
-    let fallbackReply = "";
-    if (lowerMessage.includes("diaria") || lowerMessage.includes("diária")) {
-      fallbackReply = `Não trabalhamos com empréstimo na diária, apenas crédito formal autorizado pelo Banco Central. Você trabalha de carteira assinada (CLT) com saldo no FGTS ou é servidor/aposentado?`;
-    } else if (lowerMessage.includes("luz") || lowerMessage.includes("energia") || lowerMessage.includes("enel") || lowerMessage.includes("cpfl") || lowerMessage.includes("cemig")) {
-      fallbackReply = `Fazemos empréstimo debitado na conta de luz sem consulta ao SPC! A conta está no seu nome e paga em dia? Se tiver saldo no FGTS, podemos fazer os dois juntos!`;
-    } else if (lowerMessage.includes("clt") || lowerMessage.includes("carteira assinada") || lowerMessage.includes("empresa privada")) {
-      fallbackReply = `Para CLT temos a liberação dupla: antecipação do FGTS no PIX (sem mexer no seu salário e aprova negativado) + empréstimo em folha ou conta de luz para dobrar o dinheiro! Gostaria de consultar?`;
-    } else if (lowerMessage.includes("siape") || lowerMessage.includes("federal")) {
-      fallbackReply = `Atendemos servidores federais (SIAPE) com as menores taxas do mercado no consignado em folha. Gostaria de consultar sua margem disponível hoje?`;
-    } else if (lowerMessage.includes("prefeitura") || lowerMessage.includes("municip") || lowerMessage.includes("estado") || lowerMessage.includes("estadual")) {
-      fallbackReply = `Atendemos servidores públicos estaduais e municipais com margem consignável. Deseja que o nosso especialista verifique as condições oficiais para você?`;
-    } else if (lowerMessage.includes("documento") || lowerMessage.includes("documentos") || lowerMessage.includes("doc") || lowerMessage.includes("o que precisa") || lowerMessage.includes("quais papeis") || lowerMessage.includes("papelada")) {
-      fallbackReply = `É tudo 100% digital pelo celular, sem papelada! No geral só precisa de RG/CNH e comprovante. Para qual opção você quer consultar (FGTS, INSS, CLT ou Conta de Luz)?`;
-    } else if (lowerMessage.includes("golpe") || lowerMessage.includes("seguro") || lowerMessage.includes("confiavel") || lowerMessage.includes("confiável") || lowerMessage.includes("taxa antecipada") || lowerMessage.includes("depósito")) {
-      fallbackReply = `Não cobramos nenhuma taxa antecipada. A contratação é 100% digital e o crédito cai direto na sua conta bancária. Posso fazer uma simulação gratuita para você?`;
-    } else if (lowerMessage.includes("taxa") || lowerMessage.includes("juros") || lowerMessage.includes("quanto fica") || lowerMessage.includes("valor da parcela") || lowerMessage.includes("quanto pago")) {
-      fallbackReply = `As taxas dependem da consulta oficial da sua margem no banco. Gostaria que nosso consultor fizesse uma simulação gratuita e exata para você agora?`;
-    } else if (lowerMessage.includes("fgts") || lowerMessage.includes("aniversario") || lowerMessage.includes("aniversário")) {
-      fallbackReply = `Antecipamos seu Saque-Aniversário do FGTS com liberação rápida no PIX e sem consulta ao SPC. Quer verificar quanto libera para você?`;
-    } else if (lowerMessage.includes("portabilidade") || lowerMessage.includes("troco") || lowerMessage.includes("reduzir")) {
-      fallbackReply = `Com a portabilidade, reduzimos a taxa do seu contrato atual e liberamos troco em dinheiro na sua conta, mantendo sua parcela. Deseja consultar?`;
-    } else if (lowerMessage.includes("inss") || lowerMessage.includes("bpc") || lowerMessage.includes("loas") || lowerMessage.includes("aposentado")) {
-      fallbackReply = `Temos condições especiais de consignado para aposentados, pensionistas e BPC/LOAS. Gostaria de consultar sua margem hoje?`;
-    } else {
-      fallbackReply = `Olá! Sou a ${effectiveName} da ${effectiveCompany}. Você tem interesse em consultar opções de FGTS ou Consignado hoje?`;
-    }
+    const matchedRule = FALLBACK_RULES.find(([re]) => re.test(lowerMessage));
+    const fallbackReply = matchedRule
+      ? matchedRule[1](effectiveName, effectiveCompany)
+      : `Olá! Sou a ${effectiveName} da ${effectiveCompany}. Você tem interesse em consultar opções de FGTS ou Consignado hoje?`;
 
     let syncResult = null;
     if (clientPhone) {
