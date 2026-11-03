@@ -1,25 +1,25 @@
 import { siteConfig } from "@/config/site";
-import { LogIn, ShieldCheck } from "lucide-react";
+import { LogIn, ShieldCheck, PhoneCall } from "lucide-react";
 
 export default function Footer() {
   return (
-    <footer className="bg-navy-950 border-t border-navy-800 text-slate-400 text-xs py-12 md:py-16">
+    <footer className="bg-[#02050c] border-t border-slate-800/80 text-slate-400 text-xs py-12 md:py-16 relative z-10">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-12">
           {/* Col 1: Brand & Tagline */}
           <div className="md:col-span-2 space-y-4">
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white font-black text-sm">
-                AK
+              <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-blue-700 via-blue-600 to-amber-500 flex items-center justify-center text-white font-black text-sm shadow-md shadow-blue-500/20">
+                <PhoneCall className="w-4 h-4 text-amber-200" />
               </div>
-              <span className="font-extrabold text-lg text-white tracking-tight">
-                AK <span className="text-amber-400">Soluções Financeiras</span>
+              <span className="font-extrabold text-lg sm:text-xl text-white tracking-tight">
+                A&K <span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-400 to-orange-400">Soluções Financeiras</span>
               </span>
             </div>
             <p className="text-slate-400 text-xs sm:text-sm leading-relaxed max-w-md">
-              A plataforma definitiva de CRM e discagem pelo celular para correspondentes bancários, promotoras de crédito e call centers de consignado (INSS, BPC, FGTS e SIAPE).
+              A plataforma definitiva de CRM e discagem celular via PC para correspondentes bancários, promotoras de crédito e call centers de crédito consignado (INSS, BPC, FGTS e SIAPE).
             </p>
-            <div className="flex items-center gap-2 text-slate-400">
+            <div className="flex items-center gap-2 text-slate-400 font-medium">
               <ShieldCheck className="w-4 h-4 text-emerald-400" />
               <span>Conformidade com Anatel e LGPD (Lei 13.709/2018).</span>
             </div>
@@ -30,7 +30,7 @@ export default function Footer() {
             <h4 className="font-bold text-white uppercase tracking-wider text-xs mb-4">
               Navegação
             </h4>
-            <ul className="space-y-2.5">
+            <ul className="space-y-2.5 font-medium">
               <li>
                 <a href="#funcionalidades" className="hover:text-amber-400 transition-colors">
                   Funcionalidades
@@ -69,12 +69,12 @@ export default function Footer() {
             <h4 className="font-bold text-white uppercase tracking-wider text-xs mb-4">
               Acesso ao Sistema
             </h4>
-            <p className="text-xs text-slate-400 mb-3">
+            <p className="text-xs text-slate-400 mb-3.5 leading-relaxed">
               Já é cliente ou operador cadastrado? Acesse seu painel de discagem:
             </p>
             <a
               href={siteConfig.systemLoginUrl}
-              className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg bg-navy-850 hover:bg-navy-800 text-white border border-navy-700 hover:border-brand-blue text-xs font-semibold transition-all"
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white border border-slate-700 hover:border-slate-600 text-xs font-bold transition-all shadow-sm"
             >
               <LogIn className="w-4 h-4 text-cyan-400" />
               <span>Acessar Painel Oficial</span>
@@ -83,9 +83,9 @@ export default function Footer() {
         </div>
 
         {/* Bottom Bar */}
-        <div className="pt-8 border-t border-navy-900 flex flex-col sm:flex-row items-center justify-between gap-4 text-slate-400 text-[11px]">
+        <div className="pt-8 border-t border-slate-900 flex flex-col sm:flex-row items-center justify-between gap-4 text-slate-500 text-[11px]">
           <div>
-            © {new Date().getFullYear()} AK Soluções Financeiras. Todos os direitos reservados.
+            © {new Date().getFullYear()} A&K Soluções Financeiras. Todos os direitos reservados.
           </div>
           <div className="flex items-center gap-4">
             <a href="/termos" className="hover:text-amber-400 transition-colors">Termos de Uso</a>

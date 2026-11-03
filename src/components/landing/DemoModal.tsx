@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { siteConfig } from "@/config/site";
-import { X, MessageCircle, Send, Zap, ShieldCheck } from "lucide-react";
+import { X, MessageCircle, Send, Zap, ShieldCheck, AlertCircle } from "lucide-react";
 
 interface DemoModalProps {
   isOpen: boolean;
@@ -20,12 +20,13 @@ export default function DemoModal({
   const [operadores, setOperadores] = useState("1 a 5 operadores");
   const [honeypot, setHoneypot] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submitFeedback, setSubmitFeedback] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   if (!isOpen) return null;
 
   // Máscara dinâmica de telefone brasileiro (XX) XXXXX-XXXX
   const handlePhoneChange = (val: string) => {
+    setErrorMessage(null);
     const raw = val.replace(/\D/g, "").slice(0, 11);
     if (raw.length <= 2) {
       setWhatsapp(raw ? `(${raw}` : "");
@@ -41,18 +42,25 @@ export default function DemoModal({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
-    setSubmitFeedback(null);
+    setErrorMessage(null);
 
-    // Validação de telefone mínimo
+    // Validação estrita de telefone brasileiro (DDD + 8 ou 9 dígitos)
     const cleanDigits = whatsapp.replace(/\D/g, "");
-    if (cleanDigits.length < 10) {
-      setSubmitFeedback("Por favor, digite o DDD e o número completo do seu WhatsApp.");
+    if (cleanDigits.length < 10 || cleanDigits.length > 11) {
+      setErrorMessage("Por favor, digite o DDD e o número completo do seu WhatsApp (10 ou 11 dígitos).");
+      setIsSubmitting(false);
+      return;
+    }
+
+    const ddd = parseInt(cleanDigits.substring(0, 2), 10);
+    if (isNaN(ddd) || ddd < 11 || ddd > 99) {
+      setErrorMessage("DDD brasileiro inválido. Informe um DDD válido entre 11 e 99.");
       setIsSubmitting(false);
       return;
     }
 
     try {
-      // 1. Salva automaticamente no banco de dados / CRM via API blindada com honeypot e rate-limit
+      // 1. Salva automaticamente no banco de dados / CRM via API blindada com honeypot
       const res = await fetch("/api/leads/landing", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -65,20 +73,24 @@ export default function DemoModal({
         })
       });
 
+      const data = await res.json().catch(() => ({}));
+
       if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        if (data.error) {
-          console.warn("[DemoModal] Aviso ao registrar lead comercial:", data.error);
-        }
+        setErrorMessage(data.error || `Não foi possível registrar seus dados (Erro ${res.status}). Tente novamente.`);
+        setIsSubmitting(false);
+        return;
       }
-    } catch {
-      // Continua para abrir o WhatsApp mesmo em caso de falha de rede
+    } catch (err: any) {
+      console.warn("[DemoModal] Erro de rede ao conectar com a API:", err);
+      setErrorMessage("Erro de rede ao conectar com o servidor. Verifique sua conexão ou fale direto pelo WhatsApp.");
+      setIsSubmitting(false);
+      return;
     }
 
-    // 2. Abre a conversa no WhatsApp do Dono (5579981052664)
+    // 2. Abre a conversa no WhatsApp oficial da A&K Soluções (5579981052664)
     const customText = defaultMessage
       ? defaultMessage
-      : `Olá! Me chamo ${nome || "um Correspondente"}. Meu WhatsApp é ${whatsapp || "não informado"}. Tenho uma equipe com ${operadores}. Gostaria de conhecer e agendar uma demonstração da AK Soluções Financeiras!`;
+      : `Olá! Me chamo ${nome.trim()}. Meu WhatsApp é ${whatsapp}. Tenho uma equipe com ${operadores}. Gostaria de conhecer e agendar uma demonstração da A&K Soluções Financeiras!`;
 
     const cleanNumber = siteConfig.whatsappNumber.replace(/\D/g, "");
     const encodedText = encodeURIComponent(customText);
@@ -153,7 +165,10 @@ export default function DemoModal({
               required
               placeholder="Ex: Carlos Silva - Promotora Cred"
               value={nome}
-              onChange={(e) => setNome(e.target.value)}
+              onChange={(e) => {
+                setNome(e.target.value);
+                setErrorMessage(null);
+              }}
               className="w-full bg-slate-950/80 border border-slate-700 focus:border-emerald-400 rounded-xl px-4 py-3 text-sm text-white placeholder-slate-500 focus:outline-none transition-colors"
             />
           </div>
@@ -188,8 +203,11 @@ export default function DemoModal({
             </select>
           </div>
 
-          {submitFeedback && (
-            <p className="text-xs text-rose-400 font-semibold animate-pulse">{submitFeedback}</p>
+          {errorMessage && (
+            <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
+              <span>{errorMessage}</span>
+            </div>
           )}
 
           {/* Submit CTA */}
@@ -199,7 +217,7 @@ export default function DemoModal({
             className="w-full py-3.5 rounded-xl text-sm font-extrabold flex items-center justify-center gap-2 mt-4 transition-all bg-gradient-to-r from-emerald-500 to-teal-600 text-white hover:brightness-110 cursor-pointer shadow-lg shadow-emerald-500/20 disabled:opacity-60"
           >
             <Send className="w-4 h-4 fill-white" />
-            <span>{isSubmitting ? "CONECTANDO..." : "RECEBER DEMONSTRAÇÃO NO WHATSAPP"}</span>
+            <span>{isSubmitting ? "REGISTRANDO E CONECTANDO..." : "RECEBER DEMONSTRAÇÃO NO WHATSAPP"}</span>
           </button>
 
           <div className="flex items-center justify-center gap-1.5 text-[11px] text-slate-400 text-center pt-1">

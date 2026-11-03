@@ -96,10 +96,20 @@ export default function SuperAdminPage() {
         .from("leads")
         .select("*", { count: "exact", head: true });
 
-      // 3. Busca contagem de operadores
-      const { count: opCount } = await supabase
+      // 3. Busca contagem de operadores (prioriza operadores_app com fallback para operadores)
+      let finalOpCount = 0;
+      const { count: opCount, error: opError } = await supabase
         .from("operadores_app")
         .select("*", { count: "exact", head: true });
+
+      if (!opError && opCount !== null) {
+        finalOpCount = opCount;
+      } else {
+        const { count: fallbackOpCount } = await supabase
+          .from("operadores")
+          .select("*", { count: "exact", head: true });
+        finalOpCount = fallbackOpCount || 0;
+      }
 
       // 4. Busca logs de auditoria
       const { data: logsData, count: logsCount } = await supabase
@@ -113,7 +123,7 @@ export default function SuperAdminPage() {
       setStats({
         totalTenants: empData?.length || 0,
         totalLeads: leadsCount || 0,
-        totalOperators: opCount || 0,
+        totalOperators: finalOpCount,
         totalAuditLogs: logsCount || 0
       });
     } catch (err) {

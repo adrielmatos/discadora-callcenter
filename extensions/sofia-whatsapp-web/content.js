@@ -81,18 +81,6 @@
     }, 4500);
   }
 
-  // Gera telefone virtual consistente caso o contato esteja salvo apenas por nome
-  function generateDeterministicPhone(name) {
-    let hash = 0;
-    const str = String(name || "cliente_whatsapp").trim().toLowerCase();
-    for (let i = 0; i < str.length; i++) {
-      hash = (hash << 5) - hash + str.charCodeAt(i);
-      hash |= 0;
-    }
-    const posHash = Math.abs(hash) % 90000000;
-    return `55119${String(posHash).padStart(8, "0")}`;
-  }
-
   // Dispara cliques com ponteiro simulando interação humana exata (compatível com React 18)
   function simulateRealPointerClick(element) {
     if (!element) return;
@@ -165,8 +153,8 @@
     if (!name && !lastSnippet) return null;
 
     const digits = (name || "").replace(/\D/g, "");
-    const finalPhone = digits.length >= 8 ? digits : generateDeterministicPhone(name || "Contato");
-    const finalName = name || `Cliente WhatsApp (${finalPhone.slice(-4)})`;
+    const finalPhone = digits.length >= 10 ? digits : null;
+    const finalName = name || (finalPhone ? `Cliente WhatsApp (${finalPhone.slice(-4)})` : "Cliente WhatsApp");
 
     return {
       name: finalName,
@@ -244,8 +232,8 @@
 
     // Se encontramos nome ou telefone, finaliza com dados válidos
     if (name || phone) {
-      const finalPhone = phone || (digitsInName.length >= 8 ? digitsInName : generateDeterministicPhone(name));
-      const finalName = name || `Cliente (${finalPhone.slice(-4)})`;
+      const finalPhone = phone || (digitsInName.length >= 10 ? digitsInName : null);
+      const finalName = name || (finalPhone ? `Cliente (${finalPhone.slice(-4)})` : "Cliente");
       return { name: finalName, phone: finalPhone };
     }
 
@@ -505,7 +493,7 @@
         // 1. Extrai imediatamente dados prévios do card lateral (garante que nada seja perdido)
         const cardData = extractSidebarCardData(item);
         const contactName = cardData?.name || `Contato ${i + 1}`;
-        const contactPhone = cardData?.phone || generateDeterministicPhone(contactName);
+        const contactPhone = cardData?.phone || null;
         const initialSnippet = cardData?.snippet || "";
 
         showInAppNotification(`⏳ [${i + 1}/${totalToMine}] Analisando ${contactName}...`);

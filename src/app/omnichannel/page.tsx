@@ -202,7 +202,12 @@ export default function OmnichannelPage() {
       } else if (empresaId) {
         res = await supabase.from("app_configuracoes").update(updatePayload).eq("empresa_id", empresaId);
       } else {
-        res = await supabase.from("app_configuracoes").update(updatePayload).order("id", { ascending: true }).limit(1);
+        const { data: firstCfg } = await supabase.from("app_configuracoes").select("id").limit(1).maybeSingle();
+        if (firstCfg?.id) {
+          res = await supabase.from("app_configuracoes").update(updatePayload).eq("id", firstCfg.id);
+        } else {
+          res = await supabase.from("app_configuracoes").insert([updatePayload]);
+        }
       }
 
       if (!res.error) {

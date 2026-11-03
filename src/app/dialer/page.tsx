@@ -598,8 +598,8 @@ export default function DialerWorkspace() {
 
   // Disparo da Chamada: WebRTC nativo ou Ponte Smartphone com bloqueio DND intransponível
   const triggerCall = async (customNumber?: string) => {
-    // Não disca enquanto a lista NPO não foi validada com sucesso.
-    if (!customNumber && dndStatus !== "ready") {
+    // Não disca enquanto a lista NPO não foi validada com sucesso (bloqueio total para qualquer número)
+    if (dndStatus !== "ready") {
       setCallStatus("idle");
       setAutoNextCountdown(null);
       window.alert("Discagem bloqueada: não foi possível confirmar a lista Não Perturbe. Atualize a tela e tente novamente.");
@@ -611,7 +611,7 @@ export default function DialerWorkspace() {
     if (!normalizedNumber) return;
 
     // Verificação estrita de conformidade Não Perturbe (DND)
-    const cleanTarget = targetNumber.replace(/\D/g, "");
+    const cleanTarget = (targetNumber || "").replace(/\D/g, "");
     const cleanWithout55 = cleanTarget.replace(/^55/, "");
     if (
       dndBlockedSet.has(cleanTarget) ||
@@ -724,8 +724,8 @@ export default function DialerWorkspace() {
         nextStatus = "pendente";
       } else if (["Não atendeu", "Ocupado", "Caixa Postal", "Sem Contato"].includes(status)) {
         etapaCrm = "tentativa_contato";
-        // Permite até 4 tentativas antes de descartar o lead
-        nextStatus = nextAttempts < 4 ? "pendente" : "finalizado";
+        // Permite até 3 tentativas antes de descartar o lead
+        nextStatus = nextAttempts < 3 ? "pendente" : "finalizado";
       } else {
         etapaCrm = "perdido";
         nextStatus = "finalizado";
@@ -805,20 +805,29 @@ export default function DialerWorkspace() {
   };
 
   const confirmScheduleReturn = async () => {
-    if (!activeLead?.id || !scheduleDate || isSavingDisposition) {
+    if (isSavingDisposition) return;
+    if (!activeLead?.id) return;
+    if (!scheduleDate) {
       alert("Selecione a data do retorno.");
       return;
     }
-    const fullDate = `${scheduleDate}T${scheduleTime || "10:00"}:00`;
-    await supabase.from("retornos").insert({
-      lead_id: activeLead.id,
-      data_hora: new Date(fullDate).toISOString(),
-      observacao: scheduleNotes || "Retorno agendado pelo operador",
-      concluido: false
-    });
-    setShowScheduleModal(false);
-    await saveCallRecord("Retorno", scheduleNotes);
-    setScheduleNotes("");
+    setIsSavingDisposition(true);
+    try {
+      const fullDate = `${scheduleDate}T${scheduleTime || "10:00"}:00`;
+      await supabase.from("retornos").insert({
+        lead_id: activeLead.id,
+        data_hora: new Date(fullDate).toISOString(),
+        observacao: scheduleNotes || "Retorno agendado pelo operador",
+        concluido: false
+      });
+      setShowScheduleModal(false);
+      await saveCallRecord("Retorno", scheduleNotes);
+      setScheduleNotes("");
+    } catch (err: any) {
+      alert("Erro ao agendar retorno: " + (err?.message || "Tente novamente"));
+    } finally {
+      setIsSavingDisposition(false);
+    }
   };
 
   const handleWhatsApp = () => {
