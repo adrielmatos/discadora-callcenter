@@ -126,7 +126,28 @@ export default function OmnichannelPage() {
         query = query.order("id", { ascending: true }).limit(1);
       }
 
-      const { data, error } = await query.maybeSingle();
+      let data: any = null;
+      let error: any = null;
+      const initialRes = await query.maybeSingle();
+      data = initialRes.data;
+      error = initialRes.error;
+
+      // Fallback gracioso se as colunas unificadas da migration 20261102 ainda não existirem no Supabase
+      if (error && (error.code === "42703" || error.code === "PGRST204" || error.message?.includes("column"))) {
+        let legacyQuery = supabase.from("app_configuracoes").select(`
+          id, empresa_id, whatsapp_tipo, evolution_url, evolution_api_key, zapi_instancia, zapi_token,
+          ai_enabled, ai_name, ai_tone, ai_greeting, ai_knowledge, ai_handoff_triggers,
+          gemini_api_key, groq_api_key, empresa_nome
+        `);
+        if (targetEmpresaId) {
+          legacyQuery = legacyQuery.eq("empresa_id", targetEmpresaId);
+        } else {
+          legacyQuery = legacyQuery.order("id", { ascending: true }).limit(1);
+        }
+        const legacyRes = await legacyQuery.maybeSingle();
+        data = legacyRes.data;
+        error = legacyRes.error;
+      }
 
       if (data && !error) {
         setConfigId(data.id);
@@ -207,6 +228,46 @@ export default function OmnichannelPage() {
           res = await supabase.from("app_configuracoes").update(updatePayload).eq("id", firstCfg.id);
         } else {
           res = await supabase.from("app_configuracoes").insert([updatePayload]);
+        }
+      }
+
+      // Se falhar porque colunas unificadas da migration 20261102 ainda não existem no banco Supabase:
+      if (res?.error && (res.error.code === "42703" || res.error.code === "PGRST204" || res.error.message?.includes("column"))) {
+        const legacyPayload: Record<string, any> = {
+          whatsapp_tipo: waMode,
+          evolution_url: apiUrl.trim(),
+          zapi_instancia: instanceName.trim(),
+          ai_enabled: aiEnabled,
+          ai_name: aiName.trim(),
+          ai_tone: aiTone,
+          ai_greeting: aiGreeting,
+          ai_knowledge: aiKnowledge,
+          ai_handoff_triggers: handoffTriggers,
+          empresa_nome: aiCompany.trim(),
+          updated_at: new Date().toISOString()
+        };
+        if (apiToken.trim() && !apiToken.includes("••••")) {
+          legacyPayload.evolution_api_key = apiToken.trim();
+          legacyPayload.zapi_token = apiToken.trim();
+        }
+        if (geminiApiKey.trim() && !geminiApiKey.includes("••••")) {
+          legacyPayload.gemini_api_key = geminiApiKey.trim();
+        }
+        if (groqApiKey.trim() && !groqApiKey.includes("••••")) {
+          legacyPayload.groq_api_key = groqApiKey.trim();
+        }
+
+        if (configId) {
+          res = await supabase.from("app_configuracoes").update(legacyPayload).eq("id", configId);
+        } else if (empresaId) {
+          res = await supabase.from("app_configuracoes").update(legacyPayload).eq("empresa_id", empresaId);
+        } else {
+          const { data: firstCfg } = await supabase.from("app_configuracoes").select("id").limit(1).maybeSingle();
+          if (firstCfg?.id) {
+            res = await supabase.from("app_configuracoes").update(legacyPayload).eq("id", firstCfg.id);
+          } else {
+            res = await supabase.from("app_configuracoes").insert([legacyPayload]);
+          }
         }
       }
 

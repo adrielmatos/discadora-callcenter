@@ -15,7 +15,10 @@
   "host_permissions": [
     "https://web.whatsapp.com/*",
     "https://*.vercel.app/*",
-    "http://localhost:3000/*"
+    "https://*.supabase.co/*",
+    "http://localhost:3000/*",
+    "http://127.0.0.1:3000/*",
+    "<all_urls>"
   ],
   "action": {
     "default_popup": "popup.html",

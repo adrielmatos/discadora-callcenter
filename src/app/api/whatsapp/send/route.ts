@@ -131,8 +131,9 @@ export async function POST(req: NextRequest) {
       }, { status: 403 });
     }
 
-    // Busca configurações de WhatsApp da empresa autenticada
-    const { data: config } = await supabase
+    // Busca configurações de WhatsApp da empresa autenticada com fallback gracioso para colunas legadas
+    let config: any = null;
+    const { data: initialConfig, error: configError } = await supabase
       .from("app_configuracoes")
       .select(`
         whatsapp_tipo, zapi_instancia, zapi_token, evolution_url, evolution_api_key,
@@ -141,6 +142,17 @@ export async function POST(req: NextRequest) {
       `)
       .eq("empresa_id", targetEmpresaId)
       .maybeSingle();
+
+    config = initialConfig;
+
+    if (configError && (configError.code === "42703" || configError.code === "PGRST204" || configError.message?.includes("column"))) {
+      const legacyRes = await supabase
+        .from("app_configuracoes")
+        .select(`whatsapp_tipo, zapi_instancia, zapi_token, evolution_url, evolution_api_key`)
+        .eq("empresa_id", targetEmpresaId)
+        .maybeSingle();
+      config = legacyRes.data;
+    }
 
     const tipo = (config?.whatsapp_provider || config?.wa_mode || config?.whatsapp_tipo || "web").toLowerCase();
     const apiUrl = config?.wa_api_url || config?.evolution_url || "";

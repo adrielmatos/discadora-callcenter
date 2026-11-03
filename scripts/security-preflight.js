@@ -116,6 +116,14 @@ if (fs.existsSync(apiDir)) {
           console.error(`❌ [ERRO IDOR]: Uso de user_metadata para tenant em ${full}! Utilize app_metadata ou tabela de membros.`);
           hasErrors = true;
         }
+
+        // Blindagem contra backdoor do header x-k6-test fora de localhost na Vercel
+        if (code.includes('x-k6-test')) {
+          if (!code.includes('VERCEL') || !code.includes('localhost')) {
+            console.error(`❌ [ERRO K6 BYPASS]: Bypass x-k6-test desprotegido em ${full}! Deve exigir verificação de localhost e process.env.VERCEL !== '1'.`);
+            hasErrors = true;
+          }
+        }
       }
     }
   }

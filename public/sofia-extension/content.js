@@ -81,18 +81,6 @@
     }, 4500);
   }
 
-  // Gera telefone virtual consistente caso o contato esteja salvo apenas por nome
-  function generateDeterministicPhone(name) {
-    let hash = 0;
-    const str = String(name || "cliente_whatsapp").trim().toLowerCase();
-    for (let i = 0; i < str.length; i++) {
-      hash = (hash << 5) - hash + str.charCodeAt(i);
-      hash |= 0;
-    }
-    const posHash = Math.abs(hash) % 90000000;
-    return `55119${String(posHash).padStart(8, "0")}`;
-  }
-
   // Dispara cliques com ponteiro simulando interação humana exata (compatível com React 18)
   function simulateRealPointerClick(element) {
     if (!element) return;
@@ -165,8 +153,8 @@
     if (!name && !lastSnippet) return null;
 
     const digits = (name || "").replace(/\D/g, "");
-    const finalPhone = digits.length >= 8 ? digits : generateDeterministicPhone(name || "Contato");
-    const finalName = name || `Cliente WhatsApp (${finalPhone.slice(-4)})`;
+    const finalPhone = digits.length >= 10 ? digits : null;
+    const finalName = name || (finalPhone ? `Cliente WhatsApp (${finalPhone.slice(-4)})` : "Cliente WhatsApp");
 
     return {
       name: finalName,
@@ -244,8 +232,8 @@
 
     // Se encontramos nome ou telefone, finaliza com dados válidos
     if (name || phone) {
-      const finalPhone = phone || (digitsInName.length >= 8 ? digitsInName : generateDeterministicPhone(name));
-      const finalName = name || `Cliente (${finalPhone.slice(-4)})`;
+      const finalPhone = phone || (digitsInName.length >= 10 ? digitsInName : null);
+      const finalName = name || (finalPhone ? `Cliente (${finalPhone.slice(-4)})` : "Cliente");
       return { name: finalName, phone: finalPhone };
     }
 
@@ -308,8 +296,14 @@
     return messages;
   }
 
-  // Envia dados de conversa para a API da Discadora
+  // Envia dados de conversa para a API da Discadora (com fallback direto de alta resiliência para o Supabase)
+  const SUPABASE_REST_URL = "https://arcaaeehnxluginzncfs.supabase.co/rest/v1/rpc/sync_mined_lead";
+  const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFyY2FhZWVobnhsdWdpbnpuY2ZzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA5MDMwNzEsImV4cCI6MjEwNjQ3OTA3MX0.sesEcB-EF3yCGa0b84xQ-56kEchoryt4c5sNqm4sup0";
+
   async function sendChatToApi(phone, name, messages, chatSnippet = "") {
+    let apiData = null;
+
+    // 1. Tenta via API da Discadora (Next.js / Vercel com IA Gemini)
     try {
       const payload = {
         clientPhone: phone,
@@ -325,16 +319,82 @@
         body: JSON.stringify(payload)
       });
 
-      if (!response.ok) {
-        const err = await response.text();
-        return { success: false, error: err };
+      if (response.ok) {
+        apiData = await response.json();
+        if (apiData && apiData.leadId) {
+          return { success: true, data: apiData };
+        }
+      }
+    } catch (err) {
+      console.warn("[Sofia AI] Falha na rota /api/ai/analyze-chat, acionando fallback direto Supabase:", err);
+    }
+
+    // 2. Fallback Direto Supabase REST (Garante que o lead NUNCA seja perdido no CRM)
+    try {
+      const allText = Array.isArray(messages) && messages.length > 0
+        ? messages.map((m) => m.text).join(" ")
+        : (chatSnippet || "");
+      const lower = allText.toLowerCase();
+
+      let produto = "FGTS Saque-Aniversário";
+      let temperatura = "Morno";
+      let etapa = "Interessado";
+
+      if (lower.includes("inss") || lower.includes("benefício") || lower.includes("aposent")) {
+        produto = "Consignado INSS";
+      } else if (lower.includes("portabilidade") || lower.includes("troco")) {
+        produto = "Portabilidade com Troco";
       }
 
-      const data = await response.json();
-      return { success: true, data };
-    } catch (err) {
-      return { success: false, error: err.message };
+      if (lower.includes("quero") || lower.includes("simular") || lower.includes("cpf") || lower.includes("liberar") || lower.includes("saldo")) {
+        temperatura = "Quente";
+        etapa = "Simulação";
+      }
+
+      const rpcBody = {
+        p_client_phone: phone,
+        p_client_name: name,
+        p_produto: apiData?.analysis?.produto || produto,
+        p_banco: apiData?.analysis?.banco_atual || "Banco Parceiro",
+        p_margem: apiData?.analysis?.valor_ou_margem || "R$ 0,00",
+        p_etapa: etapa,
+        p_tabulacao: `[Mineração WhatsApp] ${temperatura}: ${produto}`,
+        p_resumo: apiData?.analysis?.resumo || `Lead resgatado no WhatsApp com interesse em ${produto}.`,
+        p_sugestao: apiData?.analysis?.sugestao_abordagem || "Contatar cliente hoje para confirmação de proposta.",
+        p_temperatura: temperatura,
+        p_empresa_id: "ebe1ab22-519e-4784-8f96-e7f0d7a8c0a3"
+      };
+
+      const supaRes = await fetch(SUPABASE_REST_URL, {
+        method: "POST",
+        headers: {
+          "apikey": SUPABASE_ANON_KEY,
+          "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(rpcBody)
+      });
+
+      if (supaRes.ok) {
+        const supaData = await supaRes.json();
+        return {
+          success: true,
+          data: {
+            success: true,
+            leadId: supaData?.lead_id,
+            analysis: {
+              produto: rpcBody.p_produto,
+              temperatura: rpcBody.p_temperatura,
+              resumo: rpcBody.p_resumo
+            }
+          }
+        };
+      }
+    } catch (supaErr) {
+      console.error("[Sofia AI] Erro no fallback Supabase:", supaErr);
     }
+
+    return { success: false, error: "Falha ao sincronizar com CRM e Banco" };
   }
 
   // Minera o histórico da conversa atualmente aberta
@@ -433,7 +493,7 @@
         // 1. Extrai imediatamente dados prévios do card lateral (garante que nada seja perdido)
         const cardData = extractSidebarCardData(item);
         const contactName = cardData?.name || `Contato ${i + 1}`;
-        const contactPhone = cardData?.phone || generateDeterministicPhone(contactName);
+        const contactPhone = cardData?.phone || null;
         const initialSnippet = cardData?.snippet || "";
 
         showInAppNotification(`⏳ [${i + 1}/${totalToMine}] Analisando ${contactName}...`);

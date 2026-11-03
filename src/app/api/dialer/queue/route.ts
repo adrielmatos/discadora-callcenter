@@ -1,6 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, supabase } from "@/lib/supabase";
 
+function isLocalK6Test(req: NextRequest): boolean {
+  // Blindagem estrita: NUNCA permitir bypass em ambiente de produção da Vercel
+  if (process.env.VERCEL === "1") return false;
+  const host = req.headers.get("host")?.split(":")[0]?.toLowerCase() || "";
+  const hostname = req.nextUrl?.hostname?.toLowerCase() || "";
+  const isLocalHost = host === "localhost" || host === "127.0.0.1" || hostname === "localhost" || hostname === "127.0.0.1";
+  return isLocalHost && req.headers.get("x-k6-test") === "true";
+}
+
 /**
  * Endpoint Atômico de Fila do Discador (FOR UPDATE SKIP LOCKED)
  * Garante que múltiplos operadores ou VUs simultâneas nunca recebam o mesmo lead.
@@ -8,7 +17,7 @@ import { supabaseAdmin, supabase } from "@/lib/supabase";
 export async function POST(req: NextRequest) {
   try {
     const authHeader = req.headers.get("authorization");
-    const isTestHeader = req.headers.get("x-k6-test") === "true";
+    const isTestHeader = isLocalK6Test(req);
     const adminSecret = process.env.ADMIN_WEBHOOK_SECRET || "adriel_strix_k6_audit_secret_2026";
 
     // Autoriza se for admin secret, k6 test ou sessão de operador
@@ -20,6 +29,9 @@ export async function POST(req: NextRequest) {
       if (token) {
         const { data: { user } } = await supabase.auth.getUser(token);
         if (user) operadorId = user.id;
+      }
+      if (!operadorId) {
+        return NextResponse.json({ error: "Acesso não autorizado." }, { status: 401 });
       }
     }
 

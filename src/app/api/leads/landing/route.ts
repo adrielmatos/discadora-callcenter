@@ -4,6 +4,15 @@ import { supabaseAdmin, supabase } from "@/lib/supabase";
 // Rate limiter em memória por IP (5 envios a cada 10 minutos por IP)
 const ipSubmissions = new Map<string, { count: number; resetAt: number }>();
 
+function isLocalK6Test(req: NextRequest): boolean {
+  // Blindagem estrita: NUNCA permitir bypass em ambiente de produção da Vercel
+  if (process.env.VERCEL === "1") return false;
+  const host = req.headers.get("host")?.split(":")[0]?.toLowerCase() || "";
+  const hostname = req.nextUrl?.hostname?.toLowerCase() || "";
+  const isLocalHost = host === "localhost" || host === "127.0.0.1" || hostname === "localhost" || hostname === "127.0.0.1";
+  return isLocalHost && req.headers.get("x-k6-test") === "true";
+}
+
 function checkRateLimit(ip: string, isTestBypass: boolean): boolean {
   if (isTestBypass) return true;
   const now = Date.now();
@@ -25,7 +34,7 @@ function checkRateLimit(ip: string, isTestBypass: boolean): boolean {
  */
 export async function POST(req: NextRequest) {
   try {
-    const isTestBypass = req.headers.get("x-k6-test") === "true";
+    const isTestBypass = isLocalK6Test(req);
     const clientIp = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "127.0.0.1";
     
     if (!checkRateLimit(clientIp, isTestBypass)) {
