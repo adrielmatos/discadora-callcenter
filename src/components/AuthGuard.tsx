@@ -54,11 +54,11 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
               return;
             }
 
-            // Verificar se o teste expirou
-            if (empresa.status === "teste") {
-              const fimTeste = empresa.data_fim_teste 
-                ? new Date(empresa.data_fim_teste).getTime()
-                : (new Date(empresa.created_at).getTime() + 7 * 24 * 60 * 60 * 1000);
+            // Verificar se o teste expirou (mesmos campos/status gravados no cadastro SaaS)
+            if (empresa.status === "trial" || empresa.status === "teste") {
+              const fimTeste = empresa.trial_expira_em
+                ? new Date(empresa.trial_expira_em).getTime()
+                : (new Date(empresa.created_at).getTime() + (Number(empresa.dias_teste) || 7) * 24 * 60 * 60 * 1000);
 
               if (Date.now() > fimTeste) {
                 setIsBlocked(true);
