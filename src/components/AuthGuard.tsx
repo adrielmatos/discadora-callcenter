@@ -30,12 +30,12 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
 
       if (session) {
         // Obter empresa do usuário
-        const empresaId = session.user.app_metadata?.empresa_id || session.user.user_metadata?.empresa_id;
+        const empresaId = session.user.app_metadata?.empresa_id;
 
         if (empresaId) {
           const { data: empresa, error } = await supabase
             .from("empresas")
-            .select("status, data_fim_teste, created_at, interna")
+            .select("status, trial_expira_em, dias_teste, created_at, interna")
             .eq("id", empresaId)
             .maybeSingle();
 
@@ -43,7 +43,7 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
             console.error("Erro ao validar empresa no AuthGuard:", error);
           } else if (empresa && !empresa.interna) {
             // Verificar suspensão
-            if (empresa.status === "suspensa") {
+            if (empresa.status === "suspensa" || empresa.status === "bloqueada" || empresa.status === "cancelada") {
               setIsBlocked(true);
               setBlockMessage("Esta conta foi suspensa temporariamente pela administração do sistema. Entre em contato com o suporte para reativar.");
               setIsAuthenticated(false);
