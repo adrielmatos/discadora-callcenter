@@ -152,7 +152,7 @@ export default function SettingsPage() {
   const [novoFantasia, setNovoFantasia] = useState("");
   const [novoCnpj, setNovoCnpj] = useState("");
   const [novoEmailGestor, setNovoEmailGestor] = useState("");
-  const [novaSenhaGestor, setNovaSenhaGestor] = useState("Ak@123456");
+  const [novaSenhaGestor, setNovaSenhaGestor] = useState("");
   const [novoPlanoId, setNovoPlanoId] = useState("");
   const [novoLimiteOperadores, setNovoLimiteOperadores] = useState("5");
   const [novoStatusEmpresa, setNovoStatusEmpresa] = useState("ativa");
@@ -171,7 +171,7 @@ export default function SettingsPage() {
   const [operadores, setOperadores] = useState<Operador[]>([]);
   const [novoNome, setNovoNome] = useState("");
   const [novoEmail, setNovoEmail] = useState("");
-  const [novaSenha, setNovaSenha] = useState("Ak@123456");
+  const [novaSenha, setNovaSenha] = useState("");
   const [novoEmpresaId, setNovoEmpresaId] = useState("");
   const [novoCargo, setNovoCargo] = useState("operador");
   const [showModalAdd, setShowModalAdd] = useState(false);
@@ -323,91 +323,98 @@ export default function SettingsPage() {
     }
   };
 
-  // Cadastro de Nova Empresa Assinante (SaaS)
+  // Cadastro de empresa: só confirma sucesso depois de criar e verificar o login.
   const handleAddEmpresa = async () => {
-    if (!novaRazao.trim()) {
-      alert("Informe a Razão Social da empresa contratante.");
-      return;
-    }
-    if (!novoEmailGestor.trim()) {
-      alert("Informe o e-mail do gestor/dono da empresa cliente.");
-      return;
-    }
+    const emailGestor = novoEmailGestor.trim().toLowerCase();
+    const senhaGestor = novaSenhaGestor;
+    if (!novaRazao.trim()) return alert("Informe a Razão Social da empresa contratante.");
+    if (!emailGestor || !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(emailGestor)) return alert("Informe um e-mail válido para o gestor.");
+    if (senhaGestor.length < 8) return alert("Defina uma senha inicial com pelo menos 8 caracteres.");
+    if (novoStatusEmpresa !== "trial" && novoStatusEmpresa !== "ativa") return alert("Status inicial inválido.");
 
+    let empresaCriadaId: string | null = null;
     try {
       const trialExpira = new Date();
-      trialExpira.setDate(trialExpira.getDate() + (novoStatusEmpresa === "trial" ? novoDiasTeste : 7));
-
-      const payload: any = {
+      trialExpira.setDate(trialExpira.getDate() + novoDiasTeste);
+      const payload: Record<string, any> = {
         razao_social: novaRazao.trim(),
         nome_fantasia: novoFantasia.trim() || novaRazao.trim(),
         cnpj: novoCnpj.trim() || null,
-        email_gestor: novoEmailGestor.trim().toLowerCase(),
+        email_gestor: emailGestor,
         status: novoStatusEmpresa,
         plano_id: novoPlanoId || null,
-        limite_operadores: parseInt(novoLimiteOperadores) || 5,
-        limite_ramais: parseInt(novoLimiteOperadores) || 5,
+        limite_operadores: Math.max(1, parseInt(novoLimiteOperadores, 10) || 5),
+        limite_ramais: Math.max(1, parseInt(novoLimiteOperadores, 10) || 5),
         interna: false,
         modulos_liberados: modulosSelecionados,
-        dias_teste: novoStatusEmpresa === "trial" ? novoDiasTeste : 7,
+        dias_teste: novoStatusEmpresa === "trial" ? novoDiasTeste : null,
         trial_expira_em: novoStatusEmpresa === "trial" ? trialExpira.toISOString() : null
       };
 
-      let { data, error } = await supabase.from("empresas").insert(payload).select().single();
-
-      if (error && error.message?.includes("modulos_liberados")) {
-        // Fallback gracioso se a coluna ainda não foi aplicada no schema
-        delete payload.modulos_liberados;
-        delete payload.dias_teste;
-        const retry = await supabase.from("empresas").insert(payload).select().single();
-        data = retry.data;
-        error = retry.error;
+      let inserted = await supabase.from("empresas").insert(payload).select("id").single();
+      if (inserted.error && /modulos_liberados|dias_teste|trial_expira_em/i.test(inserted.error.message)) {
+        // Compatibilidade temporária de schema: não remove dados, apenas omite colunas ainda ausentes.
+        const fallbackPayload = { ...payload };
+        delete fallbackPayload.modulos_liberados;
+        delete fallbackPayload.dias_teste;
+        delete fallbackPayload.trial_expira_em;
+        inserted = await supabase.from("empresas").insert(fallbackPayload).select("id").single();
       }
-
-      if (error) {
-        alert(`Erro ao cadastrar empresa contratante: ${error.message}`);
-        return;
+      if (inserted.error || !inserted.data?.id) {
+        throw new Error(inserted.error?.message || "O banco não confirmou a criação da empresa.");
       }
+      empresaCriadaId = inserted.data.id;
 
-      // Cria automaticamente o usuário gestor com a senha escolhida
-      if (data?.id && novoEmailGestor.trim() && novaSenhaGestor.trim()) {
-        try {
-          await supabase.rpc("admin_criar_usuario_completo", {
-            p_nome: novoFantasia.trim() || novaRazao.trim(),
-            p_email: novoEmailGestor.trim().toLowerCase(),
-            p_password: novaSenhaGestor.trim(),
-            p_empresa_id: data.id,
-            p_perfil: "proprietario",
-            p_can_crm: true,
-            p_can_export: false,
-            p_can_reports: true,
-            p_can_scripts: true,
-            p_can_campanhas: true,
-            p_can_dnd: true
-          });
-        } catch (uErr: any) {
-          console.warn("Aviso ao criar login do gestor:", uErr);
-        }
+      const { error: authError } = await supabase.rpc("admin_criar_usuario_completo", {
+        p_nome: novoFantasia.trim() || novaRazao.trim(),
+        p_email: emailGestor,
+        p_password: senhaGestor,
+        p_empresa_id: empresaCriadaId,
+        p_perfil: "proprietario",
+        p_can_crm: true,
+        p_can_export: false,
+        p_can_reports: true,
+        p_can_scripts: true,
+        p_can_campanhas: true,
+        p_can_dnd: true
+      });
+      if (authError) throw new Error("A empresa foi gravada, mas a criação do login falhou: " + authError.message);
+
+      const { data: profile, error: profileError } = await supabase
+        .from("operadores_app")
+        .select("id,email,empresa_id")
+        .eq("email", emailGestor)
+        .eq("empresa_id", empresaCriadaId)
+        .maybeSingle();
+      if (profileError || !profile) {
+        throw new Error("A função não confirmou o vínculo do usuário com a empresa. Cadastro não será considerado concluído.");
       }
 
       alert(
-        `🎉 Empresa "${novaRazao}" cadastrada com sucesso!\n\n` +
-        `👤 Gestor / Responsável: ${novoFantasia.trim() || novaRazao.trim()}\n` +
-        `📧 E-mail de Login: ${novoEmailGestor.trim().toLowerCase()}\n` +
-        `🔑 Senha de Acesso: ${novaSenhaGestor.trim()}\n` +
-        `⏱️ Situação: ${novoStatusEmpresa === "trial" ? `Período de Testes (${novoDiasTeste} dias)` : "Ativa no Plano"}\n\n` +
-        `Você já pode enviar estes dados para o seu cliente acessar o discador!`
+        `Empresa "${novaRazao.trim()}" e usuário gestor cadastrados e verificados.\n\n` +
+        `Responsável: ${novoFantasia.trim() || novaRazao.trim()}\n` +
+        `Login: ${emailGestor}\n` +
+        `Acesso: ${novoStatusEmpresa === "trial" ? `Teste de ${novoDiasTeste} dias` : "Plano ativo"}\n\n` +
+        "A senha não será exibida nesta tela. Compartilhe-a por um canal privado."
       );
 
       setNovaRazao("");
       setNovoFantasia("");
       setNovoCnpj("");
       setNovoEmailGestor("");
-      setNovaSenhaGestor("Ak@123456");
+      setNovaSenhaGestor("");
       setShowModalAddEmpresa(false);
-      fetchEmpresas();
+      await fetchEmpresas();
     } catch (e: any) {
-      alert(`Falha ao registrar empresa: ${e.message}`);
+      if (empresaCriadaId) {
+        const { error: rollbackError } = await supabase.from("empresas").delete().eq("id", empresaCriadaId);
+        if (rollbackError) {
+          alert(`Falha ao concluir o cadastro. A empresa foi criada parcialmente (ID: ${empresaCriadaId}) e não foi possível desfazer automaticamente. Erro: ${e?.message || "Erro desconhecido"}. Requer revisão administrativa.`);
+          await fetchEmpresas();
+          return;
+        }
+      }
+      alert(`Cadastro não concluído: ${e?.message || "Erro inesperado"}. Nenhum acesso foi anunciado como criado.`);
     }
   };
 
@@ -552,28 +559,20 @@ export default function SettingsPage() {
   };
 
   const handleAddOperador = async () => {
-    if (!novoNome.trim()) {
-      alert("Informe o nome do funcionário.");
-      return;
-    }
-    if (!novoEmail.trim()) {
-      alert("Informe o e-mail de acesso (login) do usuário.");
-      return;
-    }
-    if (!novaSenha.trim() || novaSenha.trim().length < 6) {
-      alert("A senha de acesso deve ter pelo menos 6 caracteres.");
-      return;
-    }
+    const email = novoEmail.trim().toLowerCase();
+    if (!novoNome.trim()) return alert("Informe o nome do funcionário.");
+    if (!email || !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email)) return alert("Informe um e-mail válido.");
+    if (novaSenha.length < 8) return alert("A senha deve ter pelo menos 8 caracteres.");
 
     setLoadingUserAction(true);
     try {
-      const targetEmpresaId = novoEmpresaId || empresas.find(e => e.interna)?.id || "ebe1ab22-519e-4784-8f96-e7f0d7a8c0a3";
+      const targetEmpresaId = novoEmpresaId || empresas.find(e => e.interna)?.id;
+      if (!targetEmpresaId) throw new Error("Não foi possível identificar a empresa vinculada. Nenhum usuário foi criado.");
 
-      // Criação com senha criptografada e login ativo sem confirmação pendente
-      const { data, error } = await supabase.rpc("admin_criar_usuario_completo", {
+      const { error } = await supabase.rpc("admin_criar_usuario_completo", {
         p_nome: novoNome.trim(),
-        p_email: novoEmail.trim().toLowerCase(),
-        p_password: novaSenha.trim(),
+        p_email: email,
+        p_password: novaSenha,
         p_empresa_id: targetEmpresaId,
         p_perfil: novoCargo,
         p_can_crm: permCrm,
@@ -583,44 +582,26 @@ export default function SettingsPage() {
         p_can_campanhas: permCampanhas,
         p_can_dnd: permDnd
       });
+      if (error) throw new Error(error.message);
 
-      if (error) {
-        console.warn("Aviso na RPC de criação:", error.message);
-        const fb = await supabase.from("operadores_app").insert({
-          nome: novoNome.trim(),
-          email: novoEmail.trim().toLowerCase(),
-          perfil: novoCargo,
-          ativo: true,
-          empresa_id: targetEmpresaId,
-          can_crm: permCrm,
-          can_export: permExport,
-          can_reports: permReports,
-          can_scripts: permScripts,
-          can_campanhas: permCampanhas,
-          can_dnd: permDnd
-        });
-
-        if (fb.error) {
-          alert(`Erro ao cadastrar usuário: ${fb.error.message}`);
-          return;
-        }
-      }
+      const { data: profile, error: profileError } = await supabase
+        .from("operadores_app")
+        .select("id,email,empresa_id")
+        .eq("email", email)
+        .eq("empresa_id", targetEmpresaId)
+        .maybeSingle();
+      if (profileError || !profile) throw new Error("A criação não foi confirmada no cadastro de operadores. Não considere o login liberado.");
 
       alert(
-        `✅ Usuário criado com sucesso!\n\n` +
-        `👤 Nome: ${novoNome.trim()}\n` +
-        `📧 E-mail: ${novoEmail.trim().toLowerCase()}\n` +
-        `🔑 Senha de Acesso: ${novaSenha.trim()}\n\n` +
-        `O colaborador já pode fazer login normalmente em discadora-callcenter.vercel.app/login.`
+        `Usuário criado e vínculo verificado.\n\nNome: ${novoNome.trim()}\nLogin: ${email}\n\nA senha não será exibida nesta tela. Compartilhe-a por um canal privado.`
       );
-
       setNovoNome("");
       setNovoEmail("");
-      setNovaSenha("Ak@123456");
+      setNovaSenha("");
       setShowModalAdd(false);
-      fetchOperadores();
+      await fetchOperadores();
     } catch (err: any) {
-      alert(`Falha ao registrar colaborador: ${err.message}`);
+      alert(`Cadastro não concluído: ${err?.message || "Erro inesperado"}`);
     } finally {
       setLoadingUserAction(false);
     }
@@ -649,8 +630,7 @@ export default function SettingsPage() {
         alert(
           `🔑 Senha de "${operadorParaSenha.nome}" alterada com sucesso!\n\n` +
           `📧 E-mail: ${operadorParaSenha.email}\n` +
-          `🔐 Nova Senha: ${novaSenhaInput.trim()}\n\n` +
-          `Repasse esta nova senha ao colaborador.`
+          `A senha foi atualizada. Compartilhe-a por um canal privado.`
         );
         setShowModalSenha(false);
         setNovaSenhaInput("");
