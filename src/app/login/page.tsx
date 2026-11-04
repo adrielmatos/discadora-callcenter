@@ -32,13 +32,13 @@ export default function LoginPage() {
 
     try {
       const { data, error } = await supabase.auth.signInWithPassword({
-        email: email.trim(),
+        email: email.trim().toLowerCase(),
         password: password
       });
 
       if (error) {
         if (error.message.includes("Invalid login credentials")) {
-          setErrorMsg("E-mail ou senha incorretos. Verifique os dados digitados.");
+          setErrorMsg("E-mail ou senha não conferem. Verifique os dados e confirme com o administrador se o acesso foi criado.");
         } else {
           setErrorMsg(error.message || "Erro ao realizar login.");
         }
