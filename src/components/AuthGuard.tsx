@@ -39,9 +39,13 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
             .eq("id", empresaId)
             .maybeSingle();
 
-          if (error) {
-            console.error("Erro ao validar empresa no AuthGuard:", error);
-          } else if (empresa && !empresa.interna) {
+          if (error || !empresa) {
+            console.error("Falha ao validar o vínculo da empresa no AuthGuard:", error?.message || "Empresa não encontrada");
+            setIsBlocked(true);
+            setBlockMessage("Não foi possível validar a empresa vinculada a este usuário. O acesso foi interrompido por segurança; procure o administrador.");
+            setIsAuthenticated(false);
+            return;
+          } else if (!empresa.interna) {
             // Verificar suspensão
             if (empresa.status === "suspensa" || empresa.status === "bloqueada" || empresa.status === "cancelada") {
               setIsBlocked(true);
