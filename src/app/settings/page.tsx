@@ -328,7 +328,7 @@ export default function SettingsPage() {
     const emailGestor = novoEmailGestor.trim().toLowerCase();
     const senhaGestor = novaSenhaGestor;
     if (!novaRazao.trim()) return alert("Informe a Razão Social da empresa contratante.");
-    if (!emailGestor || !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(emailGestor)) return alert("Informe um e-mail válido para o gestor.");
+    if (!emailGestor || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailGestor)) return alert("Informe um e-mail válido para o gestor.");
     if (senhaGestor.length < 8) return alert("Defina uma senha inicial com pelo menos 8 caracteres.");
     if (novoStatusEmpresa !== "trial" && novoStatusEmpresa !== "ativa") return alert("Status inicial inválido.");
 
@@ -561,7 +561,7 @@ export default function SettingsPage() {
   const handleAddOperador = async () => {
     const email = novoEmail.trim().toLowerCase();
     if (!novoNome.trim()) return alert("Informe o nome do funcionário.");
-    if (!email || !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email)) return alert("Informe um e-mail válido.");
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return alert("Informe um e-mail válido.");
     if (novaSenha.length < 8) return alert("A senha deve ter pelo menos 8 caracteres.");
 
     setLoadingUserAction(true);
