@@ -129,15 +129,38 @@ export default function DemoModal({
         </button>
 
         {/* Modal Header */}
-        <div className="mb-6 relative z-10">
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-bold uppercase tracking-wider mb-2.5">
+        <div className="mb-4 relative z-10">
+          {/* Compact Video Teaser Header */}
+          <div className="relative aspect-[21/9] w-full rounded-2xl overflow-hidden mb-4 border border-slate-700/60 bg-black shadow-lg">
+            <video
+              src="/videos/discadora-launch.mp4"
+              poster="/videos/discadora-poster.jpg"
+              autoPlay
+              muted
+              loop
+              playsInline
+              className="w-full h-full object-cover"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-transparent to-black/40 pointer-events-none" />
+            <div className="absolute top-2.5 left-2.5 z-10">
+              <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-amber-400 text-navy-950 shadow-md">
+                Apresentação Oficial (18s)
+              </span>
+            </div>
+            <div className="absolute bottom-2 left-3 right-3 z-10 flex items-center justify-between text-[11px] text-slate-200">
+              <span className="font-semibold text-white drop-shadow">Discadora Consignado Pro em Ação</span>
+              <span className="text-amber-300 font-bold drop-shadow">Zero Custo VoIP</span>
+            </div>
+          </div>
+
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-bold uppercase tracking-wider mb-2">
             <Zap className="w-3.5 h-3.5 text-emerald-400" />
             <span>Demonstração VIP • Acesso Imediato</span>
           </div>
           <h3 className="text-xl sm:text-2xl font-black text-white tracking-tight">
             Fale com um Especialista em Consignado
           </h3>
-          <p className="text-xs sm:text-sm text-slate-300 mt-1.5 leading-relaxed">
+          <p className="text-xs sm:text-sm text-slate-300 mt-1 leading-relaxed">
             Preencha seus dados para conectar direto com nosso WhatsApp comercial oficial: <strong className="text-white">(79) 98105-2664</strong>.
           </p>
         </div>

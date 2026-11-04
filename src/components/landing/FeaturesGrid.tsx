@@ -12,7 +12,10 @@ import {
   CheckCircle2, 
   ArrowRight,
   Sparkles,
-  BarChart3
+  BarChart3,
+  Film,
+  Play,
+  X
 } from "lucide-react";
 
 interface FeaturesGridProps {
@@ -189,6 +192,8 @@ function SpotlightCard({
 }
 
 export default function FeaturesGrid({ onOpenDemoModal }: FeaturesGridProps) {
+  const [videoModalOpen, setVideoModalOpen] = useState(false);
+
   return (
     <section id="funcionalidades" className="py-20 md:py-28 bg-navy-950 relative scroll-mt-20">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -214,6 +219,8 @@ export default function FeaturesGrid({ onOpenDemoModal }: FeaturesGridProps) {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
           {features.map((feature) => {
             const Icon = feature.icon;
+            const isFeaturedVideo = feature.id === "phone-link";
+
             return (
               <SpotlightCard
                 key={feature.id}
@@ -229,7 +236,19 @@ export default function FeaturesGrid({ onOpenDemoModal }: FeaturesGridProps) {
                     sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
                     className="object-cover object-top group-hover:scale-105 transition-transform duration-500"
                   />
-                  <div className="absolute top-3 right-3 z-30">
+                  <div className="absolute top-3 right-3 z-30 flex items-center gap-2">
+                    {isFeaturedVideo && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setVideoModalOpen(true);
+                        }}
+                        className="text-[11px] font-black uppercase tracking-wider px-2.5 py-1 rounded-md bg-amber-500 text-navy-950 hover:bg-amber-400 transition-colors shadow-lg flex items-center gap-1.5"
+                      >
+                        <Play className="w-3 h-3 fill-navy-950" />
+                        <span>Ver no Vídeo (18s)</span>
+                      </button>
+                    )}
                     <span className="text-[11px] font-black uppercase tracking-wider px-2.5 py-1 rounded-md bg-navy-950/90 text-amber-400 border border-amber-500/30 backdrop-blur-sm shadow-md">
                       {feature.badge}
                     </span>
@@ -263,16 +282,31 @@ export default function FeaturesGrid({ onOpenDemoModal }: FeaturesGridProps) {
                       ))}
                     </ul>
 
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onOpenDemoModal();
-                      }}
-                      className="text-xs font-bold text-amber-400 hover:text-amber-300 flex items-center gap-1.5 transition-colors group-hover:translate-x-1 duration-200"
-                    >
-                      <span>Ver demonstração deste recurso</span>
-                      <ArrowRight className="w-3.5 h-3.5" />
-                    </button>
+                    <div className="flex items-center justify-between">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onOpenDemoModal();
+                        }}
+                        className="text-xs font-bold text-amber-400 hover:text-amber-300 flex items-center gap-1.5 transition-colors group-hover:translate-x-1 duration-200"
+                      >
+                        <span>Ver demonstração deste recurso</span>
+                        <ArrowRight className="w-3.5 h-3.5" />
+                      </button>
+
+                      {isFeaturedVideo && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setVideoModalOpen(true);
+                          }}
+                          className="text-xs text-slate-400 hover:text-white flex items-center gap-1 transition-colors"
+                        >
+                          <Film className="w-3 h-3 text-amber-400" />
+                          <span>Assistir Teaser</span>
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
               </SpotlightCard>
@@ -280,6 +314,62 @@ export default function FeaturesGrid({ onOpenDemoModal }: FeaturesGridProps) {
           })}
         </div>
       </div>
+
+      {/* Video Modal Triggered from Bento Grid */}
+      {videoModalOpen && (
+        <div 
+          className="fixed inset-0 z-50 bg-navy-950/98 backdrop-blur-xl flex flex-col items-center justify-center p-4 sm:p-8 animate-in fade-in duration-200"
+          onClick={() => setVideoModalOpen(false)}
+        >
+          <div 
+            className="relative w-full max-w-5xl max-h-[90vh] bg-navy-900 border border-amber-500/40 rounded-2xl shadow-2xl overflow-hidden flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-6 py-4 bg-navy-950 border-b border-navy-800 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <span className="text-xs font-black uppercase tracking-wider px-2 py-0.5 rounded bg-amber-400 text-navy-950">
+                  Apresentação Oficial
+                </span>
+                <h3 className="text-base font-bold text-white">Discadora Consignado Pro (18s)</h3>
+              </div>
+              <button
+                onClick={() => setVideoModalOpen(false)}
+                className="w-8 h-8 rounded-lg bg-navy-800 hover:bg-navy-700 text-slate-300 hover:text-white flex items-center justify-center transition-colors"
+                title="Fechar"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="relative aspect-[16/9] w-full bg-black flex items-center justify-center">
+              <video
+                src="/videos/discadora-launch.mp4"
+                poster="/videos/discadora-poster.jpg"
+                autoPlay
+                controls
+                playsInline
+                className="w-full h-full object-contain"
+              />
+            </div>
+
+            <div className="px-6 py-3 bg-navy-950 border-t border-navy-800 flex items-center justify-between">
+              <span className="text-xs text-slate-400">
+                Pressione <kbd className="px-1.5 py-0.5 rounded bg-navy-800 text-slate-200 font-mono text-[10px]">ESC</kbd> para fechar
+              </span>
+              <button
+                onClick={() => {
+                  setVideoModalOpen(false);
+                  onOpenDemoModal();
+                }}
+                className="btn-cta-vibrant px-5 py-2 rounded-lg text-xs font-black flex items-center gap-2"
+              >
+                <span>TESTAR NA MINHA OPERAÇÃO</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }

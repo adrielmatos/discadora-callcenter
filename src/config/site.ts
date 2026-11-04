@@ -16,6 +16,50 @@ export const siteConfig = {
     { label: "Aderência a Metas", value: "3.2x", desc: "Mais propostas com anuência paga" },
   ],
 
+  launchVideo: {
+    src: "/videos/discadora-launch.mp4",
+    poster: "/videos/discadora-poster.jpg",
+    durationSeconds: 18,
+    scenes: [
+      {
+        id: "desafio",
+        label: "O Desafio",
+        timeRange: "00s – 04s",
+        start: 0,
+        end: 4,
+        title: "Fim das contas abusivas de VoIP e discagem manual lenta",
+        desc: "Correspondentes gastando fortunas em tarifas por minuto e operadores perdendo tempo.",
+      },
+      {
+        id: "revelacao",
+        label: "A Revelação",
+        timeRange: "04s – 08s",
+        start: 4,
+        end: 8,
+        title: "Chegada da Discadora Consignado Pro",
+        desc: "A revolução Phone Link que transforma o chip do celular em discador sem custo VoIP.",
+      },
+      {
+        id: "poder",
+        label: "Poder Operacional",
+        timeRange: "08s – 14s",
+        start: 8,
+        end: 14,
+        title: "Discagem GSM 1-Clique + IA Sofia + Esteira Meu INSS",
+        desc: "Abertura instantânea de chamadas pelo chip do celular e qualificação com Sofia AI.",
+      },
+      {
+        id: "escala",
+        label: "Escala Máxima",
+        timeRange: "14s – 18s",
+        start: 14,
+        end: 18,
+        title: "A&K Soluções Financeiras em Ação",
+        desc: "Operações dobrando produção com zero investimento em infraestrutura cara.",
+      },
+    ],
+  },
+
   screenshots: [
     {
       id: "dashboard",

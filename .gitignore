@@ -12,3 +12,4 @@ yarn-error.log*
 .agents/
 brag-output/
 skills-lock.json
+tsconfig.tsbuildinfo
