@@ -33,6 +33,7 @@ interface CallHistory {
   tabulacao: string;
   duracao_segundos: number;
   created_at: string;
+  observacao?: string | null;
 }
 
 interface LeadDrawerProps {
@@ -59,7 +60,7 @@ export default function LeadDrawer({ isOpen, onClose, lead, onUpdateLead }: Lead
     setLoadingHistory(true);
     const { data } = await supabase
       .from("historico_ligacoes")
-      .select("id, tabulacao, duracao_segundos, created_at")
+      .select("id, tabulacao, duracao_segundos, created_at, observacao")
       .eq("lead_id", leadId)
       .order("created_at", { ascending: false });
 
@@ -73,8 +74,9 @@ export default function LeadDrawer({ isOpen, onClose, lead, onUpdateLead }: Lead
 
     const { error } = await supabase.from("historico_ligacoes").insert({
       lead_id: lead.id,
-      tabulacao: `Nota: ${newNote.trim()}`,
-      duracao_segundos: 0
+      tabulacao: "Nota do Operador",
+      duracao_segundos: 0,
+      observacao: newNote.trim()
     });
 
     if (!error) {
@@ -476,6 +478,11 @@ export default function LeadDrawer({ isOpen, onClose, lead, onUpdateLead }: Lead
                             })}
                           </span>
                         </div>
+                        {item.observacao && (
+                          <p className="text-[11px] text-slate-600 bg-white p-2 rounded-lg border border-slate-100 whitespace-pre-wrap">
+                            {item.observacao}
+                          </p>
+                        )}
                         {item.duracao_segundos > 0 && (
                           <div className="flex items-center gap-1 text-[11px] text-slate-500">
                             <Clock size={11} />

@@ -551,45 +551,46 @@ export default function SettingsPage() {
     try {
       const targetEmpresaId = novoEmpresaId || empresas.find(e => e.interna)?.id || "ebe1ab22-519e-4784-8f96-e7f0d7a8c0a3";
 
-      // Criação com senha criptografada e login ativo sem confirmação pendente
-      const { data, error } = await supabase.rpc("admin_criar_usuario_completo", {
-        p_nome: novoNome.trim(),
-        p_email: novoEmail.trim().toLowerCase(),
-        p_password: novaSenha.trim(),
-        p_empresa_id: targetEmpresaId,
-        p_perfil: novoCargo,
-        p_can_crm: permCrm,
-        p_can_export: permExport,
-        p_can_reports: permReports,
-        p_can_scripts: permScripts,
-        p_can_campanhas: permCampanhas,
-        p_can_dnd: permDnd
-      });
+      // Obtém o token JWT autenticado do operador atual
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
 
-      if (error) {
-        console.warn("Aviso na RPC de criação:", error.message);
-        const fb = await supabase.from("operadores_app").insert({
+      if (!token) {
+        alert("Sua sessão expirou. Por favor, recarregue a página e faça login novamente.");
+        return;
+      }
+
+      // Criação segura server-side com service_role via API protegida
+      const res = await fetch("/api/admin/operadores", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify({
           nome: novoNome.trim(),
           email: novoEmail.trim().toLowerCase(),
-          perfil: novoCargo,
-          ativo: true,
+          password: novaSenha.trim(),
           empresa_id: targetEmpresaId,
+          perfil: novoCargo,
           can_crm: permCrm,
           can_export: permExport,
           can_reports: permReports,
           can_scripts: permScripts,
           can_campanhas: permCampanhas,
           can_dnd: permDnd
-        });
+        })
+      });
 
-        if (fb.error) {
-          alert(`Erro ao cadastrar usuário: ${fb.error.message}`);
-          return;
-        }
+      const resJson = await res.json().catch(() => ({}));
+
+      if (!res.ok || !resJson.success) {
+        alert(`Erro ao cadastrar operador: ${resJson.error || "Falha na comunicação com o servidor."}`);
+        return;
       }
 
       alert(
-        `✅ Usuário criado com sucesso!\n\n` +
+        `✅ Operador criado com sucesso!\n\n` +
         `👤 Nome: ${novoNome.trim()}\n` +
         `📧 E-mail: ${novoEmail.trim().toLowerCase()}\n` +
         `🔑 Senha de Acesso: ${novaSenha.trim()}\n\n` +
@@ -620,13 +621,32 @@ export default function SettingsPage() {
 
     setLoadingUserAction(true);
     try {
-      const { error } = await supabase.rpc("admin_redefinir_senha_usuario", {
-        p_email: operadorParaSenha.email.toLowerCase().trim(),
-        p_nova_senha: novaSenhaInput.trim()
+      // Obtém o token JWT autenticado do operador atual
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+
+      if (!token) {
+        alert("Sua sessão expirou. Por favor, faça login novamente.");
+        return;
+      }
+
+      // Redefinição segura server-side com validação de tenant
+      const res = await fetch("/api/admin/operadores/reset-password", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          email: operadorParaSenha.email.toLowerCase().trim(),
+          new_password: novaSenhaInput.trim()
+        })
       });
 
-      if (error) {
-        alert("Erro ao alterar senha: " + error.message);
+      const resJson = await res.json().catch(() => ({}));
+
+      if (!res.ok || !resJson.success) {
+        alert("Erro ao alterar senha: " + (resJson.error || "Falha na comunicação com o servidor."));
       } else {
         alert(
           `🔑 Senha de "${operadorParaSenha.nome}" alterada com sucesso!\n\n` +

@@ -178,7 +178,7 @@ export default function ResultadosPage() {
                       <td className="px-6 py-3.5 font-mono text-slate-600">{c.leads?.telefone || "-"}</td>
                       <td className="px-6 py-3.5">{c.leads?.banco || "-"}</td>
                       <td className="px-6 py-3.5">
-                        <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold ${
+                        <span className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-extrabold ${
                           c.tabulacao === "Contrato" ? "bg-emerald-50 text-emerald-800 border border-emerald-200" :
                           c.tabulacao === "Proposta" ? "bg-teal-50 text-teal-800 border border-teal-200" :
                           c.tabulacao === "Retorno" ? "bg-amber-50 text-amber-800 border border-amber-200" :
@@ -186,6 +186,11 @@ export default function ResultadosPage() {
                         }`}>
                           {c.tabulacao}
                         </span>
+                        {c.observacao && (
+                          <p className="mt-1 text-[11px] text-slate-500 italic max-w-xs truncate" title={c.observacao}>
+                            {c.observacao}
+                          </p>
+                        )}
                       </td>
                       <td className="px-6 py-3.5 text-slate-400 font-mono text-[11px]">
                         {new Date(c.created_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}

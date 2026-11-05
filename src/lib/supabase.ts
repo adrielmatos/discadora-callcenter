@@ -27,6 +27,9 @@ if (!serviceRoleKey && typeof window === "undefined" && process.env.NODE_ENV ===
  * Lança exceção caso chamada em operações que exigem privilégios elevados sem a chave configurada.
  */
 export function getSupabaseAdmin() {
+  if (typeof window !== "undefined") {
+    throw new Error("[Supabase Security Fatal] getSupabaseAdmin() só pode ser executado no lado do servidor.");
+  }
   if (!serviceRoleKey) {
     throw new Error("[Supabase Security Error] Operação administrativa rejeitada: SUPABASE_SERVICE_ROLE_KEY ausente no servidor.");
   }

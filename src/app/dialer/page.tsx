@@ -678,9 +678,15 @@ export default function DialerWorkspace() {
     await saveCallRecord(status);
   };
 
-  const saveCallRecord = async (status: string, notes?: string) => {
-    if (!activeLead?.id || isSavingDisposition) return;
-    setIsSavingDisposition(true);
+  const saveCallRecord = async (
+    status: string,
+    notes?: string,
+    options?: { skipNextLead?: boolean; scheduleInfo?: { data_hora: string; observacao: string } }
+  ): Promise<boolean> => {
+    if (!activeLead?.id) return false;
+    const shouldManageLock = !isSavingDisposition;
+    if (shouldManageLock) setIsSavingDisposition(true);
+
     try {
       const duracaoFinal = callDurationRef.current;
       const currentAttempts = (activeLead as any).tentativas || 0;
@@ -697,13 +703,28 @@ export default function DialerWorkspace() {
       if (historyError) {
         console.error("Falha ao salvar histórico da ligação:", historyError);
         window.alert("Não foi possível salvar o histórico da chamada: " + historyError.message);
-        return;
+        return false;
+      }
+
+      // 2. Se for agendamento de retorno, grava em 'retornos' APÓS o histórico ter sido salvo com sucesso
+      if (options?.scheduleInfo) {
+        const { error: retornoError } = await supabase.from("retornos").insert({
+          lead_id: activeLead.id,
+          data_hora: options.scheduleInfo.data_hora,
+          observacao: options.scheduleInfo.observacao || "Retorno agendado pelo operador",
+          concluido: false
+        });
+
+        if (retornoError) {
+          console.error("Falha ao agendar retorno:", retornoError);
+          window.alert("Histórico registrado, mas houve erro ao salvar o lembrete de retorno: " + retornoError.message);
+        }
       }
 
       let etapaCrm = "finalizado";
       let nextStatus = "finalizado";
 
-      // 2. Classificação de etapa e status com reciclagem inteligente de fila
+      // 3. Classificação de etapa e status com reciclagem inteligente de fila
       if (status === "Contrato") {
         etapaCrm = "contrato";
         nextStatus = "qualificado";
@@ -731,7 +752,7 @@ export default function DialerWorkspace() {
         nextStatus = "finalizado";
       }
 
-      // 3. Atualização no banco com validação explícita de erro
+      // 4. Atualização no banco com validação explícita de erro
       const { data: updatedLead, error: leadError } = await supabase.from("leads").update({
         status: nextStatus,
         etapa_crm: etapaCrm,
@@ -743,15 +764,19 @@ export default function DialerWorkspace() {
       if (leadError || !updatedLead) {
         console.error("Falha ao atualizar lead:", leadError);
         window.alert("O histórico foi salvo, mas não foi possível atualizar o lead. Erro: " + (leadError?.message || "Registro não localizado."));
-        return;
+        return false;
       }
 
-      handleNextLead();
+      if (!options?.skipNextLead) {
+        handleNextLead();
+      }
+      return true;
     } catch (err: any) {
       console.error("Erro inesperado ao registrar chamada:", err);
       alert("Erro ao salvar tabulação: " + (err?.message || "Tente novamente"));
+      return false;
     } finally {
-      setIsSavingDisposition(false);
+      if (shouldManageLock) setIsSavingDisposition(false);
     }
   };
 
@@ -772,23 +797,30 @@ export default function DialerWorkspace() {
     if (!activeLead || isSavingDisposition) return;
     setIsSavingDisposition(true);
     try {
-      const { error } = await supabase.from("leads").update({
+      const { error: historyError } = await supabase.from("historico_ligacoes").insert({
+        lead_id: activeLead.id,
+        tabulacao: "Qualificado SDR",
+        duracao_segundos: callDurationRef.current,
+        observacao: "Qualificado SDR para esteira de documentos"
+      });
+
+      if (historyError) {
+        console.error("Falha ao registrar histórico SDR:", historyError);
+        alert("Não foi possível salvar o histórico da chamada: " + historyError.message);
+        return;
+      }
+
+      const { error: leadError } = await supabase.from("leads").update({
         etapa_crm: "esteira_docs",
         status: "qualificado",
         ultima_tabulacao: "Qualificado SDR",
         updated_at: new Date().toISOString()
       }).eq("id", activeLead.id);
 
-      if (error) {
-        alert("Erro ao qualificar lead: " + error.message);
+      if (leadError) {
+        alert("Erro ao qualificar lead: " + leadError.message);
         return;
       }
-
-      await supabase.from("historico_ligacoes").insert({
-        lead_id: activeLead.id,
-        tabulacao: "Qualificado SDR",
-        duracao_segundos: callDurationRef.current
-      });
 
       const cleanNumber = activeLead.telefone.replace(/\D/g, "");
       const rawMargem = (activeLead.margem_disponivel || "").trim();
@@ -814,15 +846,16 @@ export default function DialerWorkspace() {
     setIsSavingDisposition(true);
     try {
       const fullDate = `${scheduleDate}T${scheduleTime || "10:00"}:00`;
-      await supabase.from("retornos").insert({
-        lead_id: activeLead.id,
-        data_hora: new Date(fullDate).toISOString(),
-        observacao: scheduleNotes || "Retorno agendado pelo operador",
-        concluido: false
+      const ok = await saveCallRecord("Retorno", scheduleNotes, {
+        scheduleInfo: {
+          data_hora: new Date(fullDate).toISOString(),
+          observacao: scheduleNotes || "Retorno agendado pelo operador"
+        }
       });
-      setShowScheduleModal(false);
-      await saveCallRecord("Retorno", scheduleNotes);
-      setScheduleNotes("");
+      if (ok) {
+        setShowScheduleModal(false);
+        setScheduleNotes("");
+      }
     } catch (err: any) {
       alert("Erro ao agendar retorno: " + (err?.message || "Tente novamente"));
     } finally {

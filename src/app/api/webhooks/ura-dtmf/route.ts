@@ -134,7 +134,7 @@ async function processUraEvent(payload: any, req: NextRequest) {
   // 4. Verificar se o Lead já existe na base desta empresa
   const { data: existingLead, error: existingLeadError } = await clientDb
     .from("leads")
-    .select("id, nome, status, etapa_crm, observacoes, empresa_id")
+    .select("id, nome, status, etapa_crm, empresa_id")
     .eq("telefone", formattedPhone)
     .eq("empresa_id", empresaId)
     .maybeSingle();
@@ -150,16 +150,13 @@ async function processUraEvent(payload: any, req: NextRequest) {
 
   if (existingLead) {
     leadId = existingLead.id;
-    const updatedObs = existingLead.observacoes 
-      ? `${existingLead.observacoes}\n${obsInteresse}` 
-      : obsInteresse;
 
     await clientDb
       .from("leads")
       .update({
         status: "pendente",
         etapa_crm: "novo",
-        observacoes: updatedObs,
+        ultima_tabulacao: `URA DTMF ${digit}`,
         updated_at: nowIso
       })
       .eq("id", existingLead.id);
@@ -173,8 +170,7 @@ async function processUraEvent(payload: any, req: NextRequest) {
         status: "pendente",
         etapa_crm: "novo",
         produto: "FGTS / Consignado",
-        origem: "ura_reversa",
-        observacoes: obsInteresse,
+        ultima_tabulacao: `URA DTMF ${digit}`,
         empresa_id: empresaId,
         created_at: nowIso
       })
@@ -186,6 +182,16 @@ async function processUraEvent(payload: any, req: NextRequest) {
     } else {
       leadId = insertedLead?.id || null;
     }
+  }
+
+  // Registra no histórico de ligações
+  if (leadId) {
+    await clientDb.from("historico_ligacoes").insert({
+      lead_id: leadId,
+      tabulacao: `URA Reversa • DTMF ${digit}`,
+      duracao_segundos: 0,
+      observacao: obsInteresse
+    });
   }
 
   // 5. Acionamento do WhatsApp com texto transparente e em conformidade

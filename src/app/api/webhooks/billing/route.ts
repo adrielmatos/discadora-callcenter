@@ -19,7 +19,8 @@ async function activatePaidSubscription(
     .update({
       status: "paga",
       pago_em: nowIso,
-      metodo_pagamento: gateway
+      metodo: gateway,
+      gateway: gateway
     })
     .eq("id", cobrancaId);
 
