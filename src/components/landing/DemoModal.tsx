@@ -19,6 +19,7 @@ export default function DemoModal({
   const [whatsapp, setWhatsapp] = useState("");
   const [operadores, setOperadores] = useState("1 a 5 operadores");
   const [honeypot, setHoneypot] = useState("");
+  const [lgpdConsent, setLgpdConsent] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -59,8 +60,14 @@ export default function DemoModal({
       return;
     }
 
+    if (!lgpdConsent) {
+      setErrorMessage("Você deve aceitar o consentimento de contato (LGPD) para prosseguir.");
+      setIsSubmitting(false);
+      return;
+    }
+
     try {
-      // 1. Salva automaticamente no banco de dados / CRM via API blindada com honeypot
+      // 1. Salva automaticamente no banco de dados / CRM via API blindada com honeypot e auditoria LGPD
       const res = await fetch("/api/leads/landing", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -69,7 +76,9 @@ export default function DemoModal({
           telefone: whatsapp,
           tamanhoEquipe: operadores,
           mensagem: defaultMessage || "Demonstração solicitada via Landing Page",
-          website_url: honeypot
+          website_url: honeypot,
+          lgpdConsent: true,
+          lgpdConsentTimestamp: new Date().toISOString()
         })
       });
 
@@ -232,6 +241,28 @@ export default function DemoModal({
               <span>{errorMessage}</span>
             </div>
           )}
+
+          {/* Checkbox de consentimento LGPD */}
+          <div className="pt-1">
+            <label className="flex items-start gap-2.5 text-xs text-slate-300 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                required
+                checked={lgpdConsent}
+                onChange={(e) => {
+                  setLgpdConsent(e.target.checked);
+                  setErrorMessage(null);
+                }}
+                className="mt-0.5 rounded border-slate-700 bg-slate-950 text-emerald-500 focus:ring-emerald-400 focus:ring-offset-0 cursor-pointer"
+              />
+              <span className="leading-snug text-slate-400">
+                Concordo em receber contato e demonstração da A&K Soluções conforme os termos da{" "}
+                <a href="/termos" target="_blank" className="text-emerald-400 underline hover:text-emerald-300">
+                  LGPD (Lei 13.709/2018)
+                </a>.
+              </span>
+            </label>
+          </div>
 
           {/* Submit CTA */}
           <button

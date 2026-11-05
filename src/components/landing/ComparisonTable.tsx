@@ -16,7 +16,7 @@ const comparisonRows = [
     detail: "Em 100h de ligação/mês, o VoIP tradicional gera milhares de reais em minutos excedentes.",
   },
   {
-    criterion: "Bloqueio e Restrição Anatel 0303",
+    criterion: "Bloqueio de Chamadas e SPAM",
     us: "Livre (Ligação móvel natural celular-celular)",
     usPositive: true,
     them: "Alto risco de bloqueio e descarte de chamadas",
@@ -48,7 +48,7 @@ const comparisonRows = [
     detail: "Audita a aderência do operador e dá respostas prontas durante a negociação ao vivo.",
   },
   {
-    criterion: "Cadência & Renitência por Disposição",
+    criterion: "Cadência & Rediscagem por Disposição",
     us: "8 disposições com intervalo e hora preferencial",
     usPositive: true,
     them: "Cadência fixa simples ou inexistente",
@@ -104,7 +104,7 @@ export default function ComparisonTable({ onOpenDemoModal }: ComparisonTableProp
                   </th>
                   <th className="py-5 px-6 text-xs sm:text-sm font-bold text-slate-400 w-3/10 text-center">
                     <span className="block text-slate-300 text-sm sm:text-base">Discadoras VoIP Tradicionais</span>
-                    <span className="text-[11px] font-normal text-slate-500">(3C Plus, JoyTec, PABX Nuvem)</span>
+                    <span className="text-[11px] font-normal text-slate-500">(Softphones e discadoras em nuvem)</span>
                   </th>
                 </tr>
               </thead>

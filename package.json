@@ -10,7 +10,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test": "node scripts/security-preflight.js",
+    "test": "node scripts/security-preflight.js && node --test tests/security/tenant-isolation.test.js",
     "preflight": "node scripts/security-preflight.js"
   },
   "dependencies": {

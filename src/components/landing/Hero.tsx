@@ -231,7 +231,7 @@ export default function Hero({ onOpenDemoModal }: HeroProps) {
               className="btn-cta-vibrant w-full sm:w-auto px-8 py-4 rounded-xl text-sm sm:text-base flex items-center justify-center gap-3 shadow-2xl group"
             >
               <Zap className="w-5 h-5 text-navy-950 fill-navy-950 group-hover:scale-110 transition-transform" />
-              <span>TESTAR GRÁTIS NA MINHA OPERAÇÃO</span>
+              <span>TESTAR 7 DIAS GRÁTIS NA MINHA OPERAÇÃO</span>
               <ArrowRight className="w-4 h-4 text-navy-950 group-hover:translate-x-1 transition-transform" />
             </button>
 
@@ -415,6 +415,7 @@ export default function Hero({ onOpenDemoModal }: HeroProps) {
                     ref={videoRef}
                     src="/videos/discadora-launch.mp4"
                     poster="/videos/discadora-poster.jpg"
+                    preload="none"
                     autoPlay
                     muted={isMuted}
                     loop
@@ -611,6 +612,7 @@ export default function Hero({ onOpenDemoModal }: HeroProps) {
                 src={currentTab.image}
                 alt={currentTab.name}
                 fill
+                sizes="(max-width: 1200px) 100vw, 1200px"
                 className="object-contain"
                 priority
               />
@@ -665,6 +667,7 @@ export default function Hero({ onOpenDemoModal }: HeroProps) {
               <video
                 src="/videos/discadora-launch.mp4"
                 poster="/videos/discadora-poster.jpg"
+                preload="none"
                 autoPlay
                 controls
                 playsInline
@@ -683,7 +686,7 @@ export default function Hero({ onOpenDemoModal }: HeroProps) {
                 }}
                 className="btn-cta-vibrant px-5 py-2 rounded-lg text-xs font-black flex items-center gap-2"
               >
-                <span>TESTAR GRÁTIS NA MINHA OPERAÇÃO</span>
+                <span>TESTAR 7 DIAS GRÁTIS NA MINHA OPERAÇÃO</span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </button>
             </div>

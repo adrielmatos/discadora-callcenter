@@ -21,7 +21,7 @@ export default function Footer() {
             </p>
             <div className="flex items-center gap-2 text-slate-400 font-medium">
               <ShieldCheck className="w-4 h-4 text-emerald-400" />
-              <span>Conformidade com Anatel e LGPD (Lei 13.709/2018).</span>
+              <span>Conformidade com a LGPD (Lei 13.709/2018).</span>
             </div>
           </div>
 

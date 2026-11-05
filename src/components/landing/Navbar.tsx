@@ -64,7 +64,7 @@ export default function Navbar({ onOpenDemoModal }: NavbarProps) {
             >
               <span>Economia VoIP</span>
               <span className="text-[10px] font-extrabold bg-amber-500/20 text-amber-400 px-2 py-0.5 rounded-full border border-amber-500/30">
-                85% OFF
+                Simulador
               </span>
             </a>
             <a
@@ -154,7 +154,7 @@ export default function Navbar({ onOpenDemoModal }: NavbarProps) {
             >
               <span>Calculadora de Economia</span>
               <span className="text-[10px] bg-amber-500/20 text-amber-400 px-2 py-0.5 rounded-full font-bold">
-                85% OFF
+                Simulador
               </span>
             </a>
             <a

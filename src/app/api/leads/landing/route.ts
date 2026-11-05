@@ -45,7 +45,7 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { nome, telefone, tamanhoEquipe, mensagem, website_url, empresa_fake } = body;
+    const { nome, telefone, tamanhoEquipe, mensagem, website_url, empresa_fake, lgpdConsent, lgpdConsentTimestamp } = body;
 
     // Honeypot anti-bot silencioso
     if (website_url || empresa_fake) {
@@ -55,6 +55,9 @@ export async function POST(req: NextRequest) {
     if (typeof nome !== "string" || typeof telefone !== "string" || !nome.trim() || !telefone.trim()) {
       return NextResponse.json({ error: "Nome e WhatsApp são obrigatórios." }, { status: 400 });
     }
+
+    // Registro de auditoria LGPD
+    const lgpdAuditText = `[Consentimento LGPD]: Registrado em ${lgpdConsentTimestamp || new Date().toISOString()} via IP ${clientIp}.`;
 
     const cleanPhone = telefone.replace(/\D/g, "");
     const cleanDigits = cleanPhone.replace(/^55/, "");
@@ -109,7 +112,7 @@ export async function POST(req: NextRequest) {
         p_margem: tamanhoEquipe ? `Equipe: ${tamanhoEquipe}` : "Lead Comercial",
         p_etapa: "Interessado",
         p_tabulacao: `[Landing Page] Demonstração Solicitada (Equipe: ${tamanhoEquipe || "Não informada"})`,
-        p_resumo: `Lead capturado no formulário da Landing Page. Equipe: ${tamanhoEquipe || "Não informada"}. ${mensagem || ""}`.trim(),
+        p_resumo: `Lead capturado no formulário da Landing Page. Equipe: ${tamanhoEquipe || "Não informada"}. ${mensagem || ""} | ${lgpdAuditText}`.trim(),
         p_sugestao: "Entrar em contato via WhatsApp para demonstração e ativação de plano.",
         p_temperatura: "Quente",
         p_empresa_id: targetEmpresaId || null

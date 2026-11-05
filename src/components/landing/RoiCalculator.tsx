@@ -16,6 +16,52 @@ interface RoiCalculatorProps {
   onOpenDemoModal: (extraMessage?: string) => void;
 }
 
+// Função única de precificação oficial por faixas (R$ 49,90, R$ 179,90, R$ 349,90 e >30 consultor)
+export function getPlatformPrice(operators: number): {
+  cost: number;
+  formatted: string;
+  isConsultant: boolean;
+  tierName: string;
+} {
+  const formatter = new Intl.NumberFormat("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+
+  if (operators <= 1) {
+    return {
+      cost: 49.90,
+      formatted: formatter.format(49.90),
+      isConsultant: false,
+      tierName: "Iniciante / Individual (1 operador)",
+    };
+  }
+  if (operators <= 5) {
+    return {
+      cost: 179.90,
+      formatted: formatter.format(179.90),
+      isConsultant: false,
+      tierName: "Equipe Pro (2 a 5 operadores)",
+    };
+  }
+  if (operators <= 30) {
+    return {
+      cost: 349.90,
+      formatted: formatter.format(349.90),
+      isConsultant: false,
+      tierName: "Operação Escala (6 a 30 operadores)",
+    };
+  }
+  return {
+    cost: 349.90,
+    formatted: "Sob consulta com consultor",
+    isConsultant: true,
+    tierName: "Enterprise (>30 operadores)",
+  };
+}
+
 // Hook de animação numérica suave (requestAnimationFrame) estilo Nubank/Apple
 function useAnimatedNumber(targetValue: number, durationMs: number = 250): number {
   const [displayValue, setDisplayValue] = useState(targetValue);
@@ -63,12 +109,12 @@ export default function RoiCalculator({ onOpenDemoModal }: RoiCalculatorProps) {
     return monthlyVoipTotal * 12;
   }, [monthlyVoipTotal]);
 
-  // Custo da plataforma AK Soluções Financeiras (software fixo, 0 minutos de VoIP)
-  const monthlyOurCost = useMemo(() => {
-    if (operators <= 1) return 97;
-    if (operators <= 5) return 247;
-    return 247 + (operators - 5) * 45;
+  // Custo da plataforma AK Soluções Financeiras por faixas oficiais
+  const platformPriceInfo = useMemo(() => {
+    return getPlatformPrice(operators);
   }, [operators]);
+
+  const monthlyOurCost = platformPriceInfo.cost;
 
   const annualOurCost = useMemo(() => {
     return monthlyOurCost * 12;
@@ -282,7 +328,7 @@ export default function RoiCalculator({ onOpenDemoModal }: RoiCalculatorProps) {
             <div className="pt-4 border-t border-slate-800 text-xs text-slate-400 flex items-center gap-2">
               <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
               <span>
-                Considerando custo de minutos VoIP, licença de discador e tarifas Anatel.
+                Considerando custo de minutos VoIP, licença de discador e tarifas de operadora.
               </span>
             </div>
           </div>
@@ -333,7 +379,7 @@ export default function RoiCalculator({ onOpenDemoModal }: RoiCalculatorProps) {
                   {formatCurrency(animatedAnnualSavings)}
                 </div>
                 <span className="text-[11px] text-emerald-400 font-semibold mt-1 inline-block">
-                  💰 Dinheiro limpo que fica no caixa da sua empresa
+                  💰 Dinheiro que fica no caixa da sua empresa
                 </span>
               </div>
             </div>

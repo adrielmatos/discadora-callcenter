@@ -26,7 +26,7 @@ const features = [
   {
     id: "phone-link",
     icon: Smartphone,
-    title: "Discador Preditivo & Softphone WebRTC",
+    title: "Discador pelo celular & Softphone WebRTC",
     badge: "Zero Custo VoIP",
     tagline: "Disque pelo chip do celular via PC ou WebRTC nativo",
     description:

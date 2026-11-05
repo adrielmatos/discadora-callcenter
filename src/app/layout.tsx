@@ -7,7 +7,6 @@ import CookieBanner from "@/components/CookieBanner";
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
   themeColor: "#0f172a",
 };
 
@@ -20,7 +19,7 @@ export const metadata: Metadata = {
   description: "A única discadora desenvolvida para correspondentes de crédito consignado. Zero custo de telefonia VoIP (disque direto pelo chip do celular via PC), esteira Meu INSS, simulador de margem e IA Sofia.",
   keywords: [
     "discadora consignado pro",
-    "discador preditivo", 
+    "discador pelo celular", 
     "call center consignado", 
     "crm correspondente bancario", 
     "saque aniversario fgts", 

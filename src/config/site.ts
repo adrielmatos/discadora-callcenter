@@ -11,9 +11,9 @@ export const siteConfig = {
   
   metrics: [
     { label: "Custo por Minuto Falado", value: "R$ 0,00", desc: "Usa o plano ilimitado do seu chip" },
-    { label: "Ligações Realizadas", value: "+500k", desc: "Em operações de crédito ativo" },
-    { label: "Economia Média em VoIP", value: "85%", desc: "Comparado a discadores em nuvem" },
-    { label: "Aderência a Metas", value: "3.2x", desc: "Mais propostas com anuência paga" },
+    { label: "Operação Direta no Celular", value: "100% Chip", desc: "Conexão direta com planos de operadoras móveis" },
+    { label: "Economia em Telefonia", value: "Zero VoIP", desc: "Elimina tarifas por minuto e servidores caros" },
+    { label: "Conversão no WhatsApp", value: "Imediata", desc: "Transbordo 1-clique para formalização" },
   ],
 
   launchVideo: {
@@ -70,7 +70,7 @@ export const siteConfig = {
     },
     {
       id: "dialer",
-      title: "Discador Preditivo & Softphone",
+      title: "Discador pelo celular & Softphone",
       tag: "Zero VoIP",
       desc: "Discagem contínua via chip celular ou WebRTC com script dinâmico e quebra de objeções ao vivo.",
       src: "/mockups/dialer.png"
@@ -148,7 +148,7 @@ export const siteConfig = {
         "Esteira de Anuência Meu INSS com alerta de prazo",
         "Simulador de Margem & Bloqueador de Recusa",
         "Roteiro interativo com quebra de objeções ao vivo",
-        "Cadência e Renitência inteligente (rechamada por horário)",
+        "Cadência e Rediscagem inteligente (rechamada por horário)",
         "Suporte prioritário via WhatsApp",
       ],
       ctaText: "Assinar Equipe Pro",
@@ -186,7 +186,7 @@ export const siteConfig = {
     {
       feature: "Bloqueio de SPAM / Operadora",
       ourSystem: "Risco Mínimo (Número móvel real identificado)",
-      traditional: "Alto (Números VoIP 0303 e rotas bloqueadas)",
+      traditional: "Alto (Rotas VoIP tradicionais bloqueadas)",
       winner: "our",
     },
     {
@@ -208,7 +208,7 @@ export const siteConfig = {
       winner: "our",
     },
     {
-      feature: "Renitência por Tipo de Tabulação",
+      feature: "Rediscagem por Tipo de Tabulação",
       ourSystem: "Intervalo e horário inteligente por tabulação",
       traditional: "Rechamada cega e sem inteligência de horário",
       winner: "our",
@@ -250,7 +250,7 @@ export const siteConfig = {
     {
       question: "Como começo a usar na minha operação?",
       answer:
-        "Basta clicar em qualquer botão de 'Falar no WhatsApp' ou 'Testar Grátis'. Nosso time comercial configura seu acesso e você começa a rodar sua equipe em menos de 15 minutos.",
+        "Basta clicar em qualquer botão de 'Falar no WhatsApp' ou 'Testar 7 Dias Grátis'. Nosso time comercial configura seu acesso e você começa a rodar sua equipe em menos de 15 minutos.",
     },
   ],
 };
