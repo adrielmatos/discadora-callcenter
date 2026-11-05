@@ -110,6 +110,15 @@ const CARGOS_INFO = [
   }
 ];
 
+function generateRandomTempPassword(): string {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%";
+  let pass = "";
+  for (let i = 0; i < 10; i++) {
+    pass += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return pass;
+}
+
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState<"empresas" | "equipe" | "parametros" | "financeiro">("empresas");
   const [isClientCompany, setIsClientCompany] = useState(false);
@@ -152,7 +161,7 @@ export default function SettingsPage() {
   const [novoFantasia, setNovoFantasia] = useState("");
   const [novoCnpj, setNovoCnpj] = useState("");
   const [novoEmailGestor, setNovoEmailGestor] = useState("");
-  const [novaSenhaGestor, setNovaSenhaGestor] = useState("Ak@123456");
+  const [novaSenhaGestor, setNovaSenhaGestor] = useState(() => generateRandomTempPassword());
   const [novoPlanoId, setNovoPlanoId] = useState("");
   const [novoLimiteOperadores, setNovoLimiteOperadores] = useState("5");
   const [novoStatusEmpresa, setNovoStatusEmpresa] = useState("ativa");
@@ -171,7 +180,7 @@ export default function SettingsPage() {
   const [operadores, setOperadores] = useState<Operador[]>([]);
   const [novoNome, setNovoNome] = useState("");
   const [novoEmail, setNovoEmail] = useState("");
-  const [novaSenha, setNovaSenha] = useState("Ak@123456");
+  const [novaSenha, setNovaSenha] = useState(() => generateRandomTempPassword());
   const [novoEmpresaId, setNovoEmpresaId] = useState("");
   const [novoCargo, setNovoCargo] = useState("operador");
   const [showModalAdd, setShowModalAdd] = useState(false);
@@ -376,7 +385,7 @@ export default function SettingsPage() {
       setNovoFantasia("");
       setNovoCnpj("");
       setNovoEmailGestor("");
-      setNovaSenhaGestor("Ak@123456");
+      setNovaSenhaGestor(generateRandomTempPassword());
       setShowModalAddEmpresa(false);
       fetchEmpresas();
     } catch (e: any) {
@@ -589,7 +598,7 @@ export default function SettingsPage() {
 
       setNovoNome("");
       setNovoEmail("");
-      setNovaSenha("Ak@123456");
+      setNovaSenha(generateRandomTempPassword());
       setShowModalAdd(false);
       fetchOperadores();
     } catch (err: any) {
@@ -1599,7 +1608,7 @@ export default function SettingsPage() {
                   </label>
                   <button
                     type="button"
-                    onClick={() => setNovaSenhaGestor("Ak@" + Math.floor(100000 + Math.random() * 900000))}
+                    onClick={() => setNovaSenhaGestor(generateRandomTempPassword())}
                     className="text-[10px] text-blue-600 hover:underline font-bold cursor-pointer"
                   >
                     Gerar Senha Automática
@@ -1607,7 +1616,7 @@ export default function SettingsPage() {
                 </div>
                 <input 
                   type="text" 
-                  placeholder="Ex: Ak@123456 ou 123456"
+                  placeholder="Senha provisória (mín. 6 caracteres)"
                   value={novaSenhaGestor}
                   onChange={e => setNovaSenhaGestor(e.target.value)}
                   className="w-full text-xs border border-blue-200 rounded-lg p-2 outline-none focus:border-blue-500 font-mono font-bold text-blue-700 bg-white"
@@ -1814,7 +1823,7 @@ export default function SettingsPage() {
                   <label className="text-[11px] font-bold text-slate-600">Senha Inicial de Acesso *:</label>
                   <button
                     type="button"
-                    onClick={() => setNovaSenha("Ak@" + Math.floor(100000 + Math.random() * 900000))}
+                    onClick={() => setNovaSenha(generateRandomTempPassword())}
                     className="text-[10px] text-blue-600 hover:underline font-bold"
                   >
                     Gerar Senha Automática
@@ -1822,7 +1831,7 @@ export default function SettingsPage() {
                 </div>
                 <input 
                   type="text" 
-                  placeholder="Ex: Ak@123456 ou 123456"
+                  placeholder="Senha provisória (mín. 6 caracteres)"
                   value={novaSenha}
                   onChange={e => setNovaSenha(e.target.value)}
                   className="w-full text-xs border border-slate-200 rounded-lg p-2 outline-none focus:border-blue-500 font-mono font-bold text-blue-700 bg-blue-50/30"
@@ -1969,7 +1978,7 @@ export default function SettingsPage() {
                   />
                   <button
                     type="button"
-                    onClick={() => setNovaSenhaInput("Ak@" + Math.floor(100000 + Math.random() * 900000))}
+                    onClick={() => setNovaSenhaInput(generateRandomTempPassword())}
                     className="shrink-0 bg-slate-100 hover:bg-slate-200 text-slate-700 px-2.5 py-1 rounded-lg text-[10px] font-bold border border-slate-200 transition"
                     title="Gerar senha aleatória"
                   >

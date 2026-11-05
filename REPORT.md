@@ -13,28 +13,28 @@
 
 ### 1.1. Contexto do Incidente com a Cliente de Hoje (04/11/2026)
 Às `18:38:04 UTC` de 04/11/2026, foi realizado o cadastro da nova empresa cliente através do painel administrativo:
-- **Razão Social:** `Maria Célia castelo da Silva`
-- **Nome Fantasia:** `Castelo consig`
-- **ID da Empresa (`empresa_id`):** `ae2525e2-ab4d-4417-a550-39d593c78b45`
-- **CNPJ:** `96380359315`
-- **E-mail do Gestor:** `mcpromotora86@gmail.com`
-- **Senha Provisória Gerada:** `Ak@123456`
+- **Razão Social:** `[CLIENTE_REDACTED]`
+- **Nome Fantasia:** `[EMPRESA_FANTASIA_REDACTED]`
+- **ID da Empresa (`empresa_id`):** `[EMPRESA_ID_REDACTED]`
+- **CNPJ:** `[CNPJ_REDACTED]`
+- **E-mail do Gestor:** `cliente-gestor@empresa.com`
+- **Senha Provisória Gerada:** `[SENHA_PROVISORIA_REDACTED]`
 
 Ao tentar autenticar em `/login`, o sistema retornava persistentemente erro de credenciais inválidas.
 
 ### 1.2. Investigação Linha por Linha no Banco de Dados
 A auditoria no Supabase (`arcaaeehnxluginzncfs`) revelou um estado inconsistente e corrompido:
 1. `public.empresas`: O registro da empresa foi criado com sucesso (`status = 'ativa'`, `created_at = 2026-11-04 18:38:04.972913+00`).
-2. `auth.users`: **Nenhum registro** para o e-mail `mcpromotora86@gmail.com`.
+2. `auth.users`: **Nenhum registro** para o e-mail `cliente-gestor@empresa.com`.
 3. `auth.identities`: **Nenhum registro** para o usuário.
-4. `public.operadores`: **Nenhum registro** para a empresa `ae2525e2-ab4d-4417-a550-39d593c78b45`.
+4. `public.operadores`: **Nenhum registro** para a empresa `[EMPRESA_ID_REDACTED]`.
 5. `public.operadores_app`: **Nenhum registro** para a empresa.
 
 ### 1.3. Evidência Forense nos Logs do PostgreSQL (`postgres_logs`)
 Às `2026-11-04 18:38:05.553000 UTC`, os logs internos do Postgres capturaram o erro fatal:
 ```text
 new row for relation "operadores" violates check constraint "operadores_perfil_check"
-DETAIL: Failing row contains (..., Maria Célia castelo da Silva, mcpromotora86@gmail.com, proprietario, ...).
+DETAIL: Failing row contains (..., [CLIENTE_REDACTED], cliente-gestor@empresa.com, proprietario, ...).
 ```
 
 ### 1.4. A Mecânica da Quebra (Passo a Passo)
@@ -146,16 +146,16 @@ As variáveis foram cadastradas no ambiente `Preview`. Antes de promover o códi
 
 ---
 
-### 4.2. Aprovação do Script SQL para Reparar a Cliente de Hoje (`mcpromotora86@gmail.com`)
-A empresa `Maria Célia castelo da Silva` (ID `ae2525e2-ab4d-4417-a550-39d593c78b45`) já existe na tabela `public.empresas`, mas está órfã (sem usuário de login em `auth.users`, sem `operadores` e sem `operadores_app`).
+### 4.2. Aprovação do Script SQL para Reparar a Cliente de Hoje (`cliente-gestor@empresa.com`)
+A empresa `[CLIENTE_REDACTED]` (ID `[EMPRESA_ID_REDACTED]`) já existe na tabela `public.empresas`, mas está órfã (sem usuário de login em `auth.users`, sem `operadores` e sem `operadores_app`).
 
-Para criar o login da cliente mantendo a senha temporária `Ak@123456` e atualizar a função RPC no banco para que novos cadastros nunca mais falhem, revise o script SQL abaixo.
+Para criar o login da cliente mantendo a senha temporária `[SENHA_PROVISORIA_REDACTED]` e atualizar a função RPC no banco para que novos cadastros nunca mais falhem, revise o script SQL abaixo.
 
 ```sql
 -- ==============================================================================
--- SCRIPT DE REPARO: CLIENTE HOJE (Maria Célia castelo da Silva / Castelo consig)
--- Empresa ID: ae2525e2-ab4d-4417-a550-39d593c78b45
--- E-mail: mcpromotora86@gmail.com
+-- SCRIPT DE REPARO: CLIENTE HOJE ([CLIENTE_REDACTED] / [EMPRESA_FANTASIA_REDACTED])
+-- Empresa ID: [EMPRESA_ID_REDACTED]
+-- E-mail: cliente-gestor@empresa.com
 -- ==============================================================================
 
 -- 1. Atualizar a RPC admin_criar_usuario_completo para normalizar 'proprietario' -> 'admin'
@@ -302,10 +302,10 @@ $function$;
 
 -- 2. Executar a criação atômica da usuária da cliente Castelo Consig
 SELECT public.admin_criar_usuario_completo(
-  p_nome => 'Maria Célia castelo da Silva',
-  p_email => 'mcpromotora86@gmail.com',
-  p_password => 'Ak@123456',
-  p_empresa_id => 'ae2525e2-ab4d-4417-a550-39d593c78b45'::uuid,
+  p_nome => '[CLIENTE_REDACTED]',
+  p_email => 'cliente-gestor@empresa.com',
+  p_password => '[SENHA_PROVISORIA_REDACTED]',
+  p_empresa_id => '[EMPRESA_ID_REDACTED]'::uuid,
   p_perfil => 'admin',
   p_can_crm => true,
   p_can_export => true,
@@ -320,7 +320,7 @@ SELECT public.admin_criar_usuario_completo(
 > - **Usuário Auth ID:** `7642fdb5-bb61-4759-b53f-f9d5fac24986`
 > - **Operador ID:** `12c654f5-46a0-4ca2-821f-7df1993d6427` (perfil: `admin`)
 > - **Operadores App ID:** `6` (perfil: `admin`)
-> - **Validação Criptográfica do Hash:** Testado e aprovado com retorno `password_matches = true` para a senha `Ak@123456`.
+> - **Validação Criptográfica do Hash:** Testado e aprovado com retorno `password_matches = true` para a senha `[SENHA_PROVISORIA_REDACTED]`.
 > - **Acesso:** Liberado e 100% funcional em produção.
 
 ---

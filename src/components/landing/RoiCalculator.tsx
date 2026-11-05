@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { formatCurrency } from "@/lib/utils";
 import { 
   Calculator, 
@@ -65,14 +65,16 @@ export function getPlatformPrice(operators: number): {
 // Hook de animação numérica suave (requestAnimationFrame) estilo Nubank/Apple
 function useAnimatedNumber(targetValue: number, durationMs: number = 250): number {
   const [displayValue, setDisplayValue] = useState(targetValue);
+  const currentValRef = useRef(displayValue);
 
   useEffect(() => {
     let startTime: number | null = null;
-    const startValue = displayValue;
+    const startValue = currentValRef.current;
     const diff = targetValue - startValue;
 
     if (Math.abs(diff) < 1) {
       setDisplayValue(targetValue);
+      currentValRef.current = targetValue;
       return;
     }
 
@@ -82,7 +84,9 @@ function useAnimatedNumber(targetValue: number, durationMs: number = 250): numbe
       const progress = Math.min((timestamp - startTime) / durationMs, 1);
       // Easing out cubic: 1 - pow(1 - progress, 3)
       const easeProgress = 1 - Math.pow(1 - progress, 3);
-      setDisplayValue(Math.round(startValue + diff * easeProgress));
+      const nextVal = Math.round(startValue + diff * easeProgress);
+      setDisplayValue(nextVal);
+      currentValRef.current = nextVal;
 
       if (progress < 1) {
         frameId = requestAnimationFrame(step);

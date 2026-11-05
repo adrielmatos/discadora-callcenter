@@ -41,6 +41,15 @@ interface AuditLogItem {
   metadata?: any;
 }
 
+function generateRandomTempPassword(): string {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%";
+  let pass = "";
+  for (let i = 0; i < 10; i++) {
+    pass += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return pass;
+}
+
 export default function SuperAdminPage() {
   const [tenants, setTenants] = useState<TenantItem[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLogItem[]>([]);
@@ -59,7 +68,7 @@ export default function SuperAdminPage() {
   const [newFantasia, setNewFantasia] = useState("");
   const [newCnpj, setNewCnpj] = useState("");
   const [newEmail, setNewEmail] = useState("");
-  const [newSenha, setNewSenha] = useState("Ak@123456");
+  const [newSenha, setNewSenha] = useState(() => generateRandomTempPassword());
   const [newLimit, setNewLimit] = useState(10);
   const [creating, setCreating] = useState(false);
 
@@ -208,7 +217,7 @@ export default function SuperAdminPage() {
           nome_fantasia: newFantasia.trim() || newRazao.trim(),
           cnpj: newCnpj.trim() || null,
           email_gestor: newEmail.trim().toLowerCase(),
-          senha_gestor: newSenha.trim() || "Ak@123456",
+          senha_gestor: newSenha.trim() || generateRandomTempPassword(),
           status: "ativa",
           limite_operadores: newLimit,
           interna: false
@@ -217,6 +226,7 @@ export default function SuperAdminPage() {
 
       const result = await res.json();
       if (res.ok && result.success && result.empresa) {
+        const generatedPass = newSenha.trim() || generateRandomTempPassword();
         setTenants(prev => [result.empresa as TenantItem, ...prev]);
         logAuditEvent({
           action: "TENANT_CREATE",
@@ -229,8 +239,8 @@ export default function SuperAdminPage() {
         setNewFantasia("");
         setNewCnpj("");
         setNewEmail("");
-        setNewSenha("Ak@123456");
-        alert(`Empresa "${result.empresa.razao_social}" cadastrada com sucesso!\nLogin do Gestor: ${result.usuario.email}\nSenha: ${newSenha.trim() || "Ak@123456"}`);
+        setNewSenha(generateRandomTempPassword());
+        alert(`Empresa "${result.empresa.razao_social}" cadastrada com sucesso!\nLogin do Gestor: ${result.usuario.email}\nSenha Provisória: ${generatedPass}`);
       } else {
         alert("Erro ao cadastrar empresa: " + (result.error || "Tente novamente"));
       }
@@ -558,13 +568,22 @@ export default function SuperAdminPage() {
 
                 <div>
                   <label className="text-xs font-semibold text-slate-300 block mb-1">Senha Inicial de Acesso</label>
-                  <input
-                    type="text"
-                    placeholder="Ak@123456"
-                    value={newSenha}
-                    onChange={(e) => setNewSenha(e.target.value)}
-                    className="w-full bg-slate-950/80 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-white placeholder-slate-500 outline-none focus:border-emerald-500"
-                  />
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      placeholder="Senha provisória"
+                      value={newSenha}
+                      onChange={(e) => setNewSenha(e.target.value)}
+                      className="w-full bg-slate-950/80 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-white placeholder-slate-500 outline-none focus:border-emerald-500 font-mono"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setNewSenha(generateRandomTempPassword())}
+                      className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-bold border border-slate-700 shrink-0"
+                    >
+                      Gerar
+                    </button>
+                  </div>
                 </div>
 
                 <div className="pt-2 flex items-center justify-end space-x-2">

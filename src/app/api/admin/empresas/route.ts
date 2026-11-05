@@ -147,14 +147,16 @@ export async function POST(req: NextRequest) {
         providers: ["email"],
         empresa_id: createdEmpresaId,
         perfil: "admin",
-        role: "admin"
+        role: "admin",
+        needs_password_change: true
       },
       user_metadata: {
         nome: cleanNome,
         email: cleanEmail,
         empresa_id: createdEmpresaId,
         perfil: "admin",
-        role: "admin"
+        role: "admin",
+        needs_password_change: true
       }
     });
 

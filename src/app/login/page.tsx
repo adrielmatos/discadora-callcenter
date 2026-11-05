@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ShieldCheck, Lock, Mail, ArrowRight, AlertCircle, CheckCircle2, ArrowLeft, KeyRound } from "lucide-react";
+import { ShieldCheck, Lock, Mail, ArrowRight, AlertCircle, CheckCircle2, ArrowLeft, KeyRound, Key } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
 export default function LoginPage() {
@@ -11,17 +11,28 @@ export default function LoginPage() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
-  const [mode, setMode] = useState<"login" | "forgot">("login");
+  const [mode, setMode] = useState<"login" | "forgot" | "force_change_password">("login");
   const [resetEmailSent, setResetEmailSent] = useState(false);
 
-  // Se já estiver logado, redireciona
+  // Se já estiver logado, redireciona caso não precise alterar senha
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) {
-        router.push("/dialer");
+      if (session?.user) {
+        const needsChange = Boolean(
+          session.user.user_metadata?.needs_password_change ||
+          session.user.app_metadata?.needs_password_change
+        );
+        if (needsChange) {
+          setMode("force_change_password");
+          setSuccessMsg("Primeiro acesso: Por segurança, defina uma nova senha pessoal.");
+        } else {
+          router.push("/dialer");
+        }
       }
     });
   }, [router]);
@@ -42,12 +53,9 @@ export default function LoginPage() {
       if (error) {
         if (error.message.includes("Email not confirmed")) {
           setErrorMsg("Seu e-mail ainda não foi confirmado. Verifique sua caixa de entrada e pasta de spam.");
-        } else if (error.message.includes("Invalid login credentials")) {
-          setErrorMsg("E-mail ou senha incorretos. Verifique se o e-mail foi digitado corretamente e tente novamente.");
-        } else if (error.message.includes("User not found")) {
-          setErrorMsg("Usuário não encontrado. Solicite o cadastro ao administrador da sua empresa.");
         } else {
-          setErrorMsg(error.message || "Erro ao realizar login no sistema.");
+          // Mensagem genérica estrita para evitar enumeração de contas existentes
+          setErrorMsg("E-mail ou senha incorretos.");
         }
         return;
       }
@@ -96,13 +104,63 @@ export default function LoginPage() {
           console.warn("Aviso na verificação de status:", checkErr);
         }
 
+        // Força troca de senha no primeiro acesso se a flag estiver ativa
+        const needsChange = Boolean(
+          data.user.user_metadata?.needs_password_change ||
+          data.user.app_metadata?.needs_password_change
+        );
+
+        if (needsChange) {
+          setMode("force_change_password");
+          setSuccessMsg("Primeiro acesso: Por segurança, defina uma nova senha pessoal antes de continuar.");
+          return;
+        }
+
         setSuccessMsg("Autenticado com sucesso! Entrando no sistema...");
         setTimeout(() => {
           router.push("/dialer");
         }, 500);
       }
     } catch (err: any) {
-      setErrorMsg(err.message || "Erro inesperado ao conectar ao servidor.");
+      setErrorMsg("E-mail ou senha incorretos.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleForceChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMsg(null);
+    setSuccessMsg(null);
+
+    if (newPassword.length < 8) {
+      setErrorMsg("A nova senha deve ter no mínimo 8 caracteres.");
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      setErrorMsg("A confirmação de senha não confere.");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const { error: updateErr } = await supabase.auth.updateUser({
+        password: newPassword,
+        data: { needs_password_change: false }
+      });
+
+      if (updateErr) {
+        setErrorMsg("Erro ao atualizar senha: " + updateErr.message);
+        return;
+      }
+
+      setSuccessMsg("Senha atualizada com sucesso! Acessando a plataforma...");
+      setTimeout(() => {
+        router.push("/dialer");
+      }, 700);
+    } catch (err: any) {
+      setErrorMsg("Erro ao trocar senha: " + (err.message || "Tente novamente."));
     } finally {
       setLoading(false);
     }
@@ -127,7 +185,9 @@ export default function LoginPage() {
       });
 
       if (error) {
-        setErrorMsg("Erro ao enviar e-mail de recuperação: " + error.message);
+        // Mensagem uniforme para não confirmar existência
+        setResetEmailSent(true);
+        setSuccessMsg("Se o e-mail estiver cadastrado, as instruções de redefinição foram enviadas.");
       } else {
         setResetEmailSent(true);
         setSuccessMsg("E-mail de redefinição enviado com sucesso! Verifique sua caixa de entrada e pasta de spam.");
@@ -158,7 +218,11 @@ export default function LoginPage() {
             <span>Voltar ao site</span>
           </Link>
           <span className="text-[10px] text-slate-500 uppercase tracking-widest font-mono">
-            {mode === "login" ? "Acesso Operacional" : "Recuperação de Acesso"}
+            {mode === "login" 
+              ? "Acesso Operacional" 
+              : mode === "forgot" 
+              ? "Recuperação de Acesso" 
+              : "Troca de Senha"}
           </span>
         </div>
 
@@ -169,7 +233,11 @@ export default function LoginPage() {
           </div>
           <h1 className="text-2xl font-extrabold text-white tracking-tight">A&K Soluções Financeiras</h1>
           <p className="text-xs text-slate-400 mt-1.5">
-            {mode === "login" ? "Plataforma Segura de Call Center & CRM" : "Redefinição Segura de Senha"}
+            {mode === "login" 
+              ? "Plataforma Segura de Call Center & CRM" 
+              : mode === "forgot" 
+              ? "Redefinição Segura de Senha" 
+              : "Defina sua Nova Senha Pessoal"}
           </p>
         </div>
 
@@ -188,7 +256,7 @@ export default function LoginPage() {
           </div>
         )}
 
-        {mode === "login" ? (
+        {mode === "login" && (
           /* Login Form */
           <form onSubmit={handleLogin} className="space-y-4">
             <div>
@@ -200,7 +268,7 @@ export default function LoginPage() {
                 <input
                   type="email"
                   required
-                  placeholder="exemplo@aksolucoes.com.br"
+                  placeholder="exemplo@empresa.com.br"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="w-full bg-slate-950/60 border border-slate-800 rounded-xl pl-10 pr-4 py-2.5 text-xs text-white placeholder-slate-500 outline-none focus:border-blue-500 transition"
@@ -247,7 +315,66 @@ export default function LoginPage() {
               <ArrowRight size={15} />
             </button>
           </form>
-        ) : (
+        )}
+
+        {mode === "force_change_password" && (
+          /* Force Password Change Form */
+          <form onSubmit={handleForceChangePassword} className="space-y-4">
+            <div className="bg-amber-950/30 border border-amber-800/60 rounded-xl p-3 text-xs text-amber-200 flex items-start gap-2 mb-2">
+              <Key size={16} className="text-amber-400 shrink-0 mt-0.5" />
+              <span>
+                Para sua segurança, defina uma nova senha pessoal antes de acessar os módulos operacionais.
+              </span>
+            </div>
+
+            <div>
+              <label className="text-xs font-semibold text-slate-300 block mb-1.5">
+                Nova Senha (Mínimo 8 caracteres)
+              </label>
+              <div className="relative">
+                <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500" size={15} />
+                <input
+                  type="password"
+                  required
+                  minLength={8}
+                  placeholder="••••••••"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  className="w-full bg-slate-950/60 border border-slate-800 rounded-xl pl-10 pr-4 py-2.5 text-xs text-white placeholder-slate-500 outline-none focus:border-amber-500 transition font-mono"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="text-xs font-semibold text-slate-300 block mb-1.5">
+                Confirme a Nova Senha
+              </label>
+              <div className="relative">
+                <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500" size={15} />
+                <input
+                  type="password"
+                  required
+                  minLength={8}
+                  placeholder="••••••••"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className="w-full bg-slate-950/60 border border-slate-800 rounded-xl pl-10 pr-4 py-2.5 text-xs text-white placeholder-slate-500 outline-none focus:border-amber-500 transition font-mono"
+                />
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-amber-600 hover:bg-amber-700 active:scale-98 text-white py-3 rounded-xl font-bold text-sm flex items-center justify-center space-x-2 transition shadow-lg shadow-amber-600/20 disabled:opacity-60 cursor-pointer mt-2"
+            >
+              <span>{loading ? "Salvando..." : "Salvar Nova Senha e Entrar"}</span>
+              <ArrowRight size={15} />
+            </button>
+          </form>
+        )}
+
+        {mode === "forgot" && (
           /* Forgot Password Form */
           <form onSubmit={handleForgotPassword} className="space-y-4">
             <p className="text-xs text-slate-300 leading-relaxed mb-2">
@@ -263,7 +390,7 @@ export default function LoginPage() {
                 <input
                   type="email"
                   required
-                  placeholder="exemplo@aksolucoes.com.br"
+                  placeholder="exemplo@empresa.com.br"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="w-full bg-slate-950/60 border border-slate-800 rounded-xl pl-10 pr-4 py-2.5 text-xs text-white placeholder-slate-500 outline-none focus:border-blue-500 transition"
