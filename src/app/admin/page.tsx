@@ -59,6 +59,7 @@ export default function SuperAdminPage() {
   const [newFantasia, setNewFantasia] = useState("");
   const [newCnpj, setNewCnpj] = useState("");
   const [newEmail, setNewEmail] = useState("");
+  const [newSenha, setNewSenha] = useState("Ak@123456");
   const [newLimit, setNewLimit] = useState(10);
   const [creating, setCreating] = useState(false);
 
@@ -188,39 +189,56 @@ export default function SuperAdminPage() {
   const handleCreateTenant = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newRazao.trim()) return;
+    if (!newEmail.trim()) {
+      alert("Informe o e-mail do gestor da empresa.");
+      return;
+    }
 
     setCreating(true);
-    const { data, error } = await supabase
-      .from("empresas")
-      .insert({
-        razao_social: newRazao.trim(),
-        nome_fantasia: newFantasia.trim() || newRazao.trim(),
-        cnpj: newCnpj.trim() || null,
-        email_gestor: newEmail.trim() || null,
-        status: "ativa",
-        limite_operadores: newLimit,
-        interna: false
-      })
-      .select()
-      .single();
-
-    if (!error && data) {
-      setTenants(prev => [data as TenantItem, ...prev]);
-      logAuditEvent({
-        action: "TENANT_CREATE",
-        resource: "empresas",
-        resourceId: data.id,
-        metadata: { empresa: data.razao_social }
+    try {
+      const session = (await supabase.auth.getSession()).data.session;
+      const res = await fetch("/api/admin/empresas", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session?.access_token || ""}`
+        },
+        body: JSON.stringify({
+          razao_social: newRazao.trim(),
+          nome_fantasia: newFantasia.trim() || newRazao.trim(),
+          cnpj: newCnpj.trim() || null,
+          email_gestor: newEmail.trim().toLowerCase(),
+          senha_gestor: newSenha.trim() || "Ak@123456",
+          status: "ativa",
+          limite_operadores: newLimit,
+          interna: false
+        })
       });
-      setIsModalOpen(false);
-      setNewRazao("");
-      setNewFantasia("");
-      setNewCnpj("");
-      setNewEmail("");
-    } else {
-      alert("Erro ao cadastrar empresa: " + (error?.message || "Tente novamente"));
+
+      const result = await res.json();
+      if (res.ok && result.success && result.empresa) {
+        setTenants(prev => [result.empresa as TenantItem, ...prev]);
+        logAuditEvent({
+          action: "TENANT_CREATE",
+          resource: "empresas",
+          resourceId: result.empresa.id,
+          metadata: { empresa: result.empresa.razao_social }
+        });
+        setIsModalOpen(false);
+        setNewRazao("");
+        setNewFantasia("");
+        setNewCnpj("");
+        setNewEmail("");
+        setNewSenha("Ak@123456");
+        alert(`Empresa "${result.empresa.razao_social}" cadastrada com sucesso!\nLogin do Gestor: ${result.usuario.email}\nSenha: ${newSenha.trim() || "Ak@123456"}`);
+      } else {
+        alert("Erro ao cadastrar empresa: " + (result.error || "Tente novamente"));
+      }
+    } catch (err: any) {
+      alert("Falha de conexão ao cadastrar empresa: " + err.message);
+    } finally {
+      setCreating(false);
     }
-    setCreating(false);
   };
 
   return (
@@ -534,6 +552,17 @@ export default function SuperAdminPage() {
                     placeholder="gestor@alfacredito.com.br"
                     value={newEmail}
                     onChange={(e) => setNewEmail(e.target.value)}
+                    className="w-full bg-slate-950/80 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-white placeholder-slate-500 outline-none focus:border-emerald-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-slate-300 block mb-1">Senha Inicial de Acesso</label>
+                  <input
+                    type="text"
+                    placeholder="Ak@123456"
+                    value={newSenha}
+                    onChange={(e) => setNewSenha(e.target.value)}
                     className="w-full bg-slate-950/80 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-white placeholder-slate-500 outline-none focus:border-emerald-500"
                   />
                 </div>

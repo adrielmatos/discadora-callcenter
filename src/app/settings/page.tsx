@@ -335,59 +335,32 @@ export default function SettingsPage() {
     }
 
     try {
-      const trialExpira = new Date();
-      trialExpira.setDate(trialExpira.getDate() + (novoStatusEmpresa === "trial" ? novoDiasTeste : 7));
+      const session = (await supabase.auth.getSession()).data.session;
+      const res = await fetch("/api/admin/empresas", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session?.access_token || ""}`
+        },
+        body: JSON.stringify({
+          razao_social: novaRazao.trim(),
+          nome_fantasia: novoFantasia.trim() || novaRazao.trim(),
+          cnpj: novoCnpj.trim() || null,
+          email_gestor: novoEmailGestor.trim().toLowerCase(),
+          senha_gestor: novaSenhaGestor.trim(),
+          status: novoStatusEmpresa,
+          plano_id: novoPlanoId || null,
+          limite_operadores: parseInt(novoLimiteOperadores) || 5,
+          limite_ramais: parseInt(novoLimiteOperadores) || 5,
+          modulos_liberados: modulosSelecionados,
+          dias_teste: novoStatusEmpresa === "trial" ? novoDiasTeste : 7
+        })
+      });
 
-      const payload: any = {
-        razao_social: novaRazao.trim(),
-        nome_fantasia: novoFantasia.trim() || novaRazao.trim(),
-        cnpj: novoCnpj.trim() || null,
-        email_gestor: novoEmailGestor.trim().toLowerCase(),
-        status: novoStatusEmpresa,
-        plano_id: novoPlanoId || null,
-        limite_operadores: parseInt(novoLimiteOperadores) || 5,
-        limite_ramais: parseInt(novoLimiteOperadores) || 5,
-        interna: false,
-        modulos_liberados: modulosSelecionados,
-        dias_teste: novoStatusEmpresa === "trial" ? novoDiasTeste : 7,
-        trial_expira_em: novoStatusEmpresa === "trial" ? trialExpira.toISOString() : null
-      };
-
-      let { data, error } = await supabase.from("empresas").insert(payload).select().single();
-
-      if (error && error.message?.includes("modulos_liberados")) {
-        // Fallback gracioso se a coluna ainda não foi aplicada no schema
-        delete payload.modulos_liberados;
-        delete payload.dias_teste;
-        const retry = await supabase.from("empresas").insert(payload).select().single();
-        data = retry.data;
-        error = retry.error;
-      }
-
-      if (error) {
-        alert(`Erro ao cadastrar empresa contratante: ${error.message}`);
+      const result = await res.json();
+      if (!res.ok || !result.success) {
+        alert(`Erro ao cadastrar empresa contratante: ${result.error || "Falha ao processar cadastro no servidor."}`);
         return;
-      }
-
-      // Cria automaticamente o usuário gestor com a senha escolhida
-      if (data?.id && novoEmailGestor.trim() && novaSenhaGestor.trim()) {
-        try {
-          await supabase.rpc("admin_criar_usuario_completo", {
-            p_nome: novoFantasia.trim() || novaRazao.trim(),
-            p_email: novoEmailGestor.trim().toLowerCase(),
-            p_password: novaSenhaGestor.trim(),
-            p_empresa_id: data.id,
-            p_perfil: "proprietario",
-            p_can_crm: true,
-            p_can_export: false,
-            p_can_reports: true,
-            p_can_scripts: true,
-            p_can_campanhas: true,
-            p_can_dnd: true
-          });
-        } catch (uErr: any) {
-          console.warn("Aviso ao criar login do gestor:", uErr);
-        }
       }
 
       alert(
