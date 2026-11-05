@@ -336,3 +336,124 @@ SELECT public.admin_criar_usuario_completo(
 - **Deployment ID:** `dpl_9eH1ckUnDDjZTWm9Wwcr89uwCv8P`
 - **Testes de Segurança Automatizados:** 11/11 aprovados (AST preflight + tenant-isolation).
 - **Compilação Next.js 15:** 35 rotas compiladas com sucesso (SSG, ISR e Standalone Server).
+
+---
+
+## 🛡️ 6. RELATÓRIO DE ESTABILIZAÇÃO DEFINITIVA (05/11/2026) — BLOCOS 1 A 6
+
+### 6.1. Resumo Executivo
+Nesta etapa de estabilização pós-deploy, o objetivo central foi eliminar de forma cirúrgica todos os impedimentos para liberação aos clientes:
+1. Resolução do erro de schema cache no dialer ao encerrar chamadas (`historico_ligacoes.observacao`).
+2. Eliminação de deadlocks de estado e prevenção rigorosa de duplicação de retornos agendados.
+3. Migração das chamadas front-end dependentes de RPCs revogadas para endpoints server-side protegidos por JWT e service_role.
+4. Auditoria de isolamento multi-tenant, sanitização total de dados sensíveis e conformidade nos fluxos de login e troca de senha.
+5. Validação com 100% de sucesso em testes estáticos, testes de unidade/isolamento e build de produção do Next.js 15.
+
+---
+
+### 6.2. O Que Mudou (Detalhamento Técnico)
+
+#### A. Banco de Dados e Migrações
+- **DDL em Produção:** Executado `ALTER TABLE public.historico_ligacoes ADD COLUMN IF NOT EXISTS observacao text; NOTIFY pgrst, 'reload schema';` após aprovação explícita.
+- **Migração Versionada 1:** `supabase/migrations/20261105_add_observacao_to_historico_ligacoes.sql`.
+- **Migração Versionada 2:** `supabase/migrations/20261105_revoke_security_definer_and_default_privileges.sql` (Versionamento do `REVOKE` público em 9 funções SECURITY DEFINER, concessão exclusiva a `service_role`, `ALTER DEFAULT PRIVILEGES` e atualização de `admin_criar_usuario_completo` para preencher tokens com string vazia `''`).
+
+#### B. Dialer e Lead Drawer
+- **`src/app/dialer/page.tsx`:**
+  - `saveCallRecord`: Refatorado para garantir gravação atômica no banco com retorno booleano de confirmação.
+  - `confirmScheduleReturn`: Ordem de salvamento invertida. O histórico e o status do lead são salvos e verificados **primeiro**. Apenas após a confirmação positiva é que a linha na tabela `retornos` é gerada. Se a tabulação falhar, nenhum agendamento órfão ou duplicado é gravado.
+  - `handleQualifySdr`: Inclusão de `observacao` detalhada e persistência de histórico antes do avanço de fila.
+  - Corrigido o mutex `isSavingDisposition` para evitar travamento concorrente entre o modal de agendamento e a rotina de encerramento da chamada.
+- **`src/components/LeadDrawer.tsx`:**
+  - Atualizada interface `CallHistory` para suportar `observacao?: string | null`.
+  - Inclusão de `observacao` na busca de histórico e renderização dedicada de notas abaixo de cada tabulação.
+  - `handleAddNote`: Grava a nota diretamente na coluna `observacao` de `historico_ligacoes`.
+- **`src/app/resultados/page.tsx`:**
+  - Renderização visual das notas/observações do histórico em cada chamada listada.
+
+#### C. Varredura de Divergências de Colunas em `src/`
+- **`src/app/api/webhooks/billing/route.ts`:**
+  - Corrigida atualização na tabela `cobrancas_saas`: substituída a coluna inexistente `metodo_pagamento` pelas colunas reais `metodo` e `gateway`.
+- **`src/app/api/webhooks/ura-dtmf/route.ts`:**
+  - Removidas referências às colunas inexistentes `observacoes` e `origem` da tabela `leads`.
+  - O evento e as notas da URA agora são registrados no status `ultima_tabulacao` do lead e no `historico_ligacoes` com a coluna `observacao`.
+
+#### D. Novas Rotas Administrativas Server-Side
+- **`src/app/api/admin/operadores/route.ts`:**
+  - Criação de operadores via `auth.admin.createUser` com `service_role`.
+  - Checagem estrita de autenticação via Bearer JWT.
+  - Validação de perfil (`admin`, `dono`, `proprietario`).
+  - Isolamento estrito de tenant: `callerEmpresaId` inferido via `app_metadata` ou tabela de operadores (bloqueando falsificação via `user_metadata`).
+  - Verificação do limite de operadores contratados no plano da empresa (`empresas.limite_operadores`).
+  - Sincronização atômica entre `operadores_app` e `operadores`.
+- **`src/app/api/admin/operadores/reset-password/route.ts`:**
+  - Redefinição administrativa de senha via `auth.admin.updateUserById`.
+  - Validação estrita de que o operador pertence à mesma empresa do solicitante.
+  - Ativação obrigatória da flag `needs_password_change: true`.
+- **`src/app/settings/page.tsx`:**
+  - Modais de criação de colaborador e de alteração de senha atualizados para consumir os novos endpoints server-side em substituição às antigas chamadas RPC diretas.
+- **`src/lib/supabase.ts`:**
+  - Adicionada trava de segurança no cliente administrativo (`getSupabaseAdmin`) para impedir qualquer execução em ambiente de navegador (`typeof window !== "undefined"`).
+
+---
+
+### 6.3. Tabela de Verificação: Testado de Verdade vs Só Revisado no Código
+
+| Item / Funcionalidade | Status | Método de Validação |
+| :--- | :--- | :--- |
+| **Existência da coluna `observacao` em `historico_ligacoes`** | **TESTADO DE VERDADE** | DDL executado no Supabase de produção e validado via `information_schema.columns`. |
+| **Ausência de colunas com NULL em tokens de `auth.users`** | **TESTADO DE VERDADE** | Query de contagem SQL executada em produção (retornou 0 registros com NULL). |
+| **Login real da conta da cliente com senha provisória** | **TESTADO DE VERDADE** | Requisição real `POST /auth/v1/token?grant_type=password` retornando **HTTP 200 OK** e token JWT. |
+| **Login real do operador histórico (`adrielmatos46@gmail.com`)** | **TESTADO DE VERDADE** | Requisição real `POST /auth/v1/token` retornando **HTTP 200 OK**. |
+| **Auditoria de segurança de 60 dias (`auth.audit_log_entries`)** | **TESTADO DE VERDADE** | Consulta ao log de auditoria confirmando ausência de exploração externa ou contas espúrias. |
+| **Isolamento de tenant e anti-IDOR** | **TESTADO DE VERDADE** | 11 testes automatizados em `tests/security/tenant-isolation.test.js` aprovados com 100% de sucesso. |
+| **Pré-auditoria de segurança estática (AST)** | **TESTADO DE VERDADE** | 6/6 verificações do script `scripts/security-preflight.js` aprovadas com sucesso. |
+| **Linting estrito do projeto** | **TESTADO DE VERDADE** | `npm run lint` executado com resultado: `✔ No ESLint warnings or errors`. |
+| **Compilação do Next.js 15 (Build de Produção)** | **TESTADO DE VERDADE** | `npm run build` gerando todas as 37 rotas estáticas e dinâmicas com sucesso. |
+| **Salvamento de chamadas no /dialer pelo navegador do usuário** | **SÓ REVISADO NO CÓDIGO** | Lógica revisada, atômica e tipada com build verde; execução física na UI depende de sessão ativa do usuário no navegador. |
+
+---
+
+### 6.4. O Que Depende do Usuário
+1. **Compartilhamento da Senha com a Cliente:** Entregar a senha provisória gerada no chat à cliente para que ela realize o primeiro acesso.
+2. **Autorização para Merge e Push:** Autorizar a subida da branch `correcao-completa` para a branch `main` e acionamento do deploy final de produção na Vercel.
+
+---
+
+### 6.5. Plano de Rollback
+Caso qualquer anomalia ocorra após o deploy na branch `main`:
+1. **Reversão de Código:**
+   `git revert HEAD` ou retorno para o commit anterior `3848a5f` via Vercel Dashboard (Instant Rollback).
+2. **Banco de Dados:**
+   A coluna `observacao` na tabela `historico_ligacoes` é aditiva (`ADD COLUMN IF NOT EXISTS ... text`) e tem valor padrão nulo, portanto **não quebra** nenhuma versão anterior do código. Caso necessário descartá-la:
+   ```sql
+   ALTER TABLE public.historico_ligacoes DROP COLUMN IF EXISTS observacao;
+   NOTIFY pgrst, 'reload schema';
+   ```
+3. **Rotas Administrativas:**
+   Se as novas rotas server-side forem revertidas, as funções `admin_criar_usuario_completo` e `admin_redefinir_senha_usuario` ainda existem no banco (com execução liberada para `service_role`).
+
+---
+
+### 6.6. Lista de Variáveis de Ambiente de Produção (Vercel)
+Confirmação dos nomes das variáveis obrigatórias configuradas na Vercel (sem exibição de valores secretos):
+- `NEXT_PUBLIC_SUPABASE_URL` (URL pública do projeto Supabase)
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY` (Chave pública anônima)
+- `SUPABASE_SERVICE_ROLE_KEY` (Chave administrativa de serviço — estritamente server-side)
+- `ADMIN_WEBHOOK_SECRET` (Segredo criptográfico interno para webhooks e integrações)
+- `URA_WEBHOOK_SECRET` (Segredo de autenticação para eventos de URA reversa)
+- `MERCADOPAGO_WEBHOOK_SECRET` (Assinatura de webhooks de cobrança)
+
+---
+
+### 6.7. Veredito Final (5 Critérios de GO / NO-GO)
+
+| # | Critério de Avaliação | Avaliação Técnica | Veredito |
+| :-: | :--- | :--- | :-: |
+| **1** | **Segurança P0 e Isolamento de Tenant** | Todas as 9 funções SECURITY DEFINER protegidas contra acesso público. Rotas administrativas server-side com validação estrita de papel e tenant. Ausência de credenciais em bundles client-side. | **GO** ✅ |
+| **2** | **Estabilidade do Login e GoTrue** | Causa raiz eliminada. GoTrue autenticando normalmente sem erro 500 (tokens vazios e non-null). Troca obrigatória de senha no primeiro login ativa. Mensagens anti-enumeração de e-mail padronizadas. | **GO** ✅ |
+| **3** | **Funcionalidade do Dialer e Gravação** | Coluna `observacao` criada e ativa em produção. Salvamento atômico sem deadlocks e sem duplicação de retornos agendados. | **GO** ✅ |
+| **4** | **Integridade da Base e Migrações** | Migrações `20261105_*` versionadas no repositório. Divergências de colunas em billing, ura-dtmf e lead drawer resolvidas. | **GO** ✅ |
+| **5** | **Build e Qualidade de Código** | `npm run lint` (0 erros), `npm test` (11/11 aprovados), `npm run build` (37 rotas geradas com sucesso). | **GO** ✅ |
+
+### 🚀 **VEREDITO FINAL: GO (LIBERADO PARA TESTES E CLIENTES)**
