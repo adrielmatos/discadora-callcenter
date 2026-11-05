@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Sofia AI - Piloto Automático WhatsApp & CRM",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Atendente virtual de crédito Sofia para WhatsApp Web oficial. Responde clientes de acordo com a legislação e sincroniza automaticamente com o CRM da Discadora.",
   "icons": {
     "16": "icon16.png",
@@ -14,11 +14,8 @@
   ],
   "host_permissions": [
     "https://web.whatsapp.com/*",
-    "https://*.vercel.app/*",
-    "https://*.supabase.co/*",
-    "http://localhost:3000/*",
-    "http://127.0.0.1:3000/*",
-    "<all_urls>"
+    "https://discadora-callcenter.vercel.app/*",
+    "https://arcaaeehnxluginzncfs.supabase.co/*"
   ],
   "action": {
     "default_popup": "popup.html",

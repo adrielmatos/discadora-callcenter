@@ -52,7 +52,7 @@ export const options = {
 };
 
 const BASE_URL = __ENV.BASE_URL || 'http://localhost:3000';
-const ADMIN_SECRET = __ENV.ADMIN_WEBHOOK_SECRET || 'adriel_strix_k6_audit_secret_2026';
+const ADMIN_SECRET = __ENV.ADMIN_WEBHOOK_SECRET || '';
 
 // ─── 1. Teste de Landing Page e Captação de Leads ──────────────────────────
 export function testLandingAndLeads() {

@@ -47,40 +47,55 @@ export default function TelefoniaPage() {
 
   const fetchConfig = async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from("app_configuracoes")
-      .select("sip_host, sip_port, sip_user, sip_password, sip_protocol")
-      .eq("id", 1)
-      .single();
-
-    if (data && !error) {
-      setSipHost(data.sip_host || "");
-      setSipPort(data.sip_port || "5060");
-      setSipUser(data.sip_user || "");
-      setSipPassword(data.sip_password || "");
-      setProtocol(data.sip_protocol || "WSS");
+    try {
+      const session = (await supabase.auth.getSession()).data.session;
+      const res = await fetch("/api/config/telefonia", {
+        headers: {
+          Authorization: `Bearer ${session?.access_token || ""}`
+        }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setSipHost(data.sip_host || "");
+        setSipPort(data.sip_port || "5060");
+        setSipUser(data.sip_user || "");
+        setSipPassword(data.has_sip_password ? "••••••••" : "");
+        setProtocol(data.sip_protocol || "WSS");
+      }
+    } catch (err) {
+      console.warn("Erro ao carregar configurações de telefonia:", err);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const handleSave = async () => {
-    const { error } = await supabase
-      .from("app_configuracoes")
-      .update({
-        sip_host: sipHost.trim(),
-        sip_port: sipPort.trim(),
-        sip_user: sipUser.trim(),
-        sip_password: sipPassword.trim(),
-        sip_protocol: protocol,
-        updated_at: new Date().toISOString()
-      })
-      .eq("id", 1);
+    try {
+      const session = (await supabase.auth.getSession()).data.session;
+      const res = await fetch("/api/config/telefonia", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session?.access_token || ""}`
+        },
+        body: JSON.stringify({
+          sip_host: sipHost.trim(),
+          sip_port: sipPort.trim(),
+          sip_user: sipUser.trim(),
+          sip_password: sipPassword.trim(),
+          sip_protocol: protocol
+        })
+      });
 
-    if (!error) {
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2500);
-    } else {
-      alert("Erro ao salvar configurações de telefonia: " + error.message);
+      if (res.ok) {
+        setSaved(true);
+        setTimeout(() => setSaved(false), 2500);
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        alert("Erro ao salvar configurações de telefonia: " + (errData.error || "Acesso negado."));
+      }
+    } catch (err: any) {
+      alert("Falha de rede ao salvar telefonia: " + err.message);
     }
   };
 

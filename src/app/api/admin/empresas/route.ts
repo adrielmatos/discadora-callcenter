@@ -231,14 +231,14 @@ export async function POST(req: NextRequest) {
     const admin = supabaseAdmin || getSupabaseAdmin();
     if (admin) {
       if (createdOperadorId) {
-        await admin.from("operadores").delete().eq("id", createdOperadorId).catch(() => {});
+        try { await admin.from("operadores").delete().eq("id", createdOperadorId); } catch {}
       }
       if (createdAuthUserId) {
-        await admin.auth.admin.deleteUser(createdAuthUserId).catch(() => {});
+        try { await admin.auth.admin.deleteUser(createdAuthUserId); } catch {}
       }
       if (createdEmpresaId) {
-        await admin.from("operadores_app").delete().eq("empresa_id", createdEmpresaId).catch(() => {});
-        await admin.from("empresas").delete().eq("id", createdEmpresaId).catch(() => {});
+        try { await admin.from("operadores_app").delete().eq("empresa_id", createdEmpresaId); } catch {}
+        try { await admin.from("empresas").delete().eq("id", createdEmpresaId); } catch {}
       }
     }
 
