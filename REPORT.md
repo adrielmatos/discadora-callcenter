@@ -446,14 +446,15 @@ Confirmação dos nomes das variáveis obrigatórias configuradas na Vercel (sem
 
 ---
 
-### 6.7. Veredito Final (5 Critérios de GO / NO-GO)
+### 6.7. Veredito Técnico Atual (Matriz de 5 Critérios)
 
-| # | Critério de Avaliação | Avaliação Técnica | Veredito |
+| # | Critério de Avaliação | Avaliação Técnica Atual | Veredito |
 | :-: | :--- | :--- | :-: |
-| **1** | **Segurança P0 e Isolamento de Tenant** | Todas as 9 funções SECURITY DEFINER protegidas contra acesso público. Rotas administrativas server-side com validação estrita de papel e tenant. Ausência de credenciais em bundles client-side. | **GO** ✅ |
-| **2** | **Estabilidade do Login e GoTrue** | Causa raiz eliminada. GoTrue autenticando normalmente sem erro 500 (tokens vazios e non-null). Troca obrigatória de senha no primeiro login ativa. Mensagens anti-enumeração de e-mail padronizadas. | **GO** ✅ |
-| **3** | **Funcionalidade do Dialer e Gravação** | Coluna `observacao` criada e ativa em produção. Salvamento atômico sem deadlocks e sem duplicação de retornos agendados. | **GO** ✅ |
-| **4** | **Integridade da Base e Migrações** | Migrações `20261105_*` versionadas no repositório. Divergências de colunas em billing, ura-dtmf e lead drawer resolvidas. | **GO** ✅ |
-| **5** | **Build e Qualidade de Código** | `npm run lint` (0 erros), `npm test` (11/11 aprovados), `npm run build` (37 rotas geradas com sucesso). | **GO** ✅ |
+| **1** | **Segurança P0 e Isolamento de Tenant** | Funções sensíveis protegidas contra anon/public. Testes estáticos de código passando. **Teste real multi-tenant com 2 empresas e 2 JWTs contra banco isolado pendente de execução na branch.** | ⚠️ **PENDENTE** |
+| **2** | **Estabilidade do Login e GoTrue** | Causa raiz sanada no banco. Login da cliente e do dono testados com 200 OK. Remoção da conta redteam pendente de autorização. | **GO** ✅ |
+| **3** | **Funcionalidade do Dialer e Gravação** | Coluna `observacao` criada em produção. Salvamento atômico revisado no código. **Execução ponta a ponta dos 4 desfechos no /dialer pendente.** | ⚠️ **PENDENTE** |
+| **4** | **Integridade da Base e Migrações** | Migrações de RLS versionadas localmente, mas não aplicadas em produção sem homologação prévia. | ⚠️ **PENDENTE** |
+| **5** | **Build e Qualidade de Código** | `npm run lint` (0 erros), `npm test` (11/11 aprovados), `npm run build` (37 rotas compiladas com sucesso). | **GO** ✅ |
 
-### 🚀 **VEREDITO FINAL: GO (LIBERADO PARA TESTES E CLIENTES)**
+### ⛔ **VEREDITO ATUAL: NO-GO (PENDENTE DE HOMOLOGAÇÃO DO BLOCO 5 E TESTE REAL DE ISOLAMENTO RLS)**
+O sistema NÃO está liberado para deploy na `main` nem para clientes até que o teste real de isolamento multi-tenant (2 empresas, 2 operadores, 2 JWTs) e o fluxo E2E do dialer sejam executados com evidências completas de log na branch do Supabase.
