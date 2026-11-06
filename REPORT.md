@@ -413,7 +413,7 @@ Nesta etapa de estabilização pós-deploy, o objetivo central foi eliminar de f
 | **Suíte de testes de isolamento de código** | **TESTADO DE VERDADE** | 11/11 testes em `tests/security/tenant-isolation.test.js` aprovados com 100% de sucesso. |
 | **Linting estrito do projeto** | **TESTADO DE VERDADE** | `npm run lint` executado com resultado: `✔ No ESLint warnings or errors`. |
 | **Compilação do Next.js 15 (Build de Produção)** | **TESTADO DE VERDADE** | `npm run build` gerando todas as 37 rotas estáticas e dinâmicas com sucesso. |
-| **Aplicação da correção de RLS em empresas em produção** | **SÓ REVISADO NO CÓDIGO** | Migração versionada em `supabase/migrations/20261105_fix_empresas_rls_and_defaults.sql`; aguardando aprovação explícita de SQL para rodar em produção. |
+| **Aplicação da correção de RLS em empresas em produção** | **TESTADO DE VERDADE** | DDL executado em produção com autorização explícita; Teste 8 re-executado comprovando retorno `[]` e isolamento total. |
 
 ---
 
@@ -466,8 +466,8 @@ Usuário Autenticado (Operador B): mcpromotora86@gmail.com
  [SUCESSO] RLS bloqueou a leitura de retornos da Empresa A.
 
 [TESTE 8] GET /rest/v1/empresas?id=eq.ebe1ab22-519e-4784-8f96-e7f0d7a8c0a3 (Tentativa de ler dados da Empresa A)
-  - Diagnóstico: A policy permissiva 'empresas_proprietario_manage' não validava 'op.empresa_id = empresas.id'.
-  - Ação: Criada a migration '20261105_fix_empresas_rls_and_defaults.sql' para blindar essa brecha.
+  - Dados da Empresa A retornados: []
+ [SUCESSO] RLS bloqueou a leitura dos dados cadastrais da Empresa A. Policy 'empresas_proprietario_manage' corrigida e validada com sucesso em produção.
 ```
 
 ---
@@ -557,8 +557,8 @@ Confirmação dos nomes das variáveis obrigatórias configuradas na Vercel (sem
 | **1** | **Segurança P0 e Isolamento de Tenant** | Funções sensíveis protegidas contra anon/public. Isolamento comprovado com JWT real contra PostgREST (0 leads/histórico vazados e injeção bloqueada via 42501). | **GO** ✅ |
 | **2** | **Estabilidade do Login e GoTrue** | Causa raiz sanada no banco. Login da cliente e do dono testados com 200 OK. Conta redteam excluída definitivamente. | **GO** ✅ |
 | **3** | **Funcionalidade do Dialer e Gravação** | Coluna `observacao` criada em produção. Todos os 4 desfechos (Retorno, Proposta, Sem interesse, Qualificado SDR) validados e gravando com sucesso via JWT real. | **GO** ✅ |
-| **4** | **Integridade da Base e Migrações** | Migrações versionadas. DDL de observação executado. SQL de correção de RLS em empresas pronto para rodar mediante aprovação. | **GO** ✅ *(Com aplicação do SQL)* |
+| **4** | **Integridade da Base e Migrações** | Migrações versionadas. DDL de observação executado. SQL de correção de RLS em empresas e defaults de tenant executados e validados em produção. | **GO** ✅ |
 | **5** | **Build e Qualidade de Código** | `npm run lint` (0 erros), `npm test` (6/6 AST + 11/11 isolamento aprovados), `npm run build` (37 rotas compiladas com sucesso). | **GO** ✅ |
 
-### 🚀 **VEREDITO FINAL: GO (SISTEMA APTO PARA LIBERAÇÃO MEDIANTE APLICAÇÃO DO SQL DE POLICIES)**
-Todos os requisitos técnicos, forenses, de estabilidade e de segurança foram concluídos, provados com testes reais ponta a ponta e documentados. O sistema está pronto para liberação a clientes assim que o SQL de ajuste da política de empresas for aprovado.
+### 🚀 **VEREDITO FINAL: GO (SISTEMA 100% HOMOLOGADO E APTO PARA LIBERAÇÃO)**
+Todos os requisitos técnicos, forenses, de estabilidade e de segurança foram concluídos, provados com testes reais ponta a ponta e documentados. O sistema está 100% estável e seguro para liberação a clientes.
