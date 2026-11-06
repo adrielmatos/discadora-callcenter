@@ -695,6 +695,7 @@ export default function DialerWorkspace() {
       // 1. Grava no histórico de chamadas com verificação de erro
       const { error: historyError } = await supabase.from("historico_ligacoes").insert({
         lead_id: activeLead.id,
+        empresa_id: (activeLead as any).empresa_id || undefined,
         tabulacao: notes ? `${status} — ${notes}` : status,
         duracao_segundos: duracaoFinal,
         observacao: notes || null
@@ -710,6 +711,7 @@ export default function DialerWorkspace() {
       if (options?.scheduleInfo) {
         const { error: retornoError } = await supabase.from("retornos").insert({
           lead_id: activeLead.id,
+          empresa_id: (activeLead as any).empresa_id || undefined,
           data_hora: options.scheduleInfo.data_hora,
           observacao: options.scheduleInfo.observacao || "Retorno agendado pelo operador",
           concluido: false
@@ -799,6 +801,7 @@ export default function DialerWorkspace() {
     try {
       const { error: historyError } = await supabase.from("historico_ligacoes").insert({
         lead_id: activeLead.id,
+        empresa_id: (activeLead as any).empresa_id || undefined,
         tabulacao: "Qualificado SDR",
         duracao_segundos: callDurationRef.current,
         observacao: "Qualificado SDR para esteira de documentos"

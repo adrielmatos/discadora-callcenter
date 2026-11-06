@@ -74,6 +74,7 @@ export default function LeadDrawer({ isOpen, onClose, lead, onUpdateLead }: Lead
 
     const { error } = await supabase.from("historico_ligacoes").insert({
       lead_id: lead.id,
+      empresa_id: (lead as any).empresa_id || undefined,
       tabulacao: "Nota do Operador",
       duracao_segundos: 0,
       observacao: newNote.trim()
